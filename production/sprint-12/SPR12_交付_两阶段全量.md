@@ -44,7 +44,7 @@
 | D 每日确定性 | 双 run 同 seed 打印一致 ✓ |
 | E 灾祸 | floor-2 scarce_ammo 触发 ✓ 0 报错（_clear 路径修复后无 Invalid assignment） |
 | 全量组合回归（八探针 4000 帧） | **0 报错** |
-| 冻结清单 | 重定 **32/32 OK**（30 脚本 + boss2/ally .uid 计入） |
+| 冻结清单 | 重定 **32/32 OK**（纯 .gd 清单 32 条、无 .uid——本行表述订正，见 §七） |
 
 ## 踩坑记录（如实）
 
@@ -57,7 +57,7 @@
 
 - 全部非阻塞遗留清零（哑弹钳制 ✓ 环盾 HUD ✅（E6 计时+显示随 Sprint 11 落地）✓ E1 基线 ✓ 随本批重定）
 - 规划侧下一批发散（Sprint 13）；「回响」镜像时长/击败增益数值可调（data 驱动）
-- git 提交待授权（已建库，阶段一/二各自成提交 d2807b8/d70b6c5，后续每批一个 commit）
+- git：已建库、每批成提交惯例确立（基线/阶段一/阶段二/修复批/二轮/交付文档/收官批代码/收官批文档/核验附二——「待授权」状态作废，见 §七）
 
 ## 修复批：主理人核验 7 项 → 编程侧修复（全部闭环）
 
@@ -84,6 +84,28 @@
 1. **#2**：`_clear_calamity_effects` 改 **match _calamity 条件还原**——frail 还原 max_hp、scarce_ammo 还原 mag_cap_mult、scarce_ore 还原 diamond_mult、`_calamity == ""` 完全不碰倍率（swarm 局跨层 1.5 保持）；三 saved 值 clear 时一并重置
 2. **#3**：frail 改**差值增量还原**——apply 保存 `_calamity_frail_cut`（= round(max_hp × 0.2) ≥ 1），clear `max_hp += cut`（与层内成长解耦：灾祸 10→8、成长 +1 → 还原后 11）
 3. **单测时序修正**：成长移到 apply 之后（先灾祸削减、后层内成长、再换层还原），三断言分别验证「削减生效/成长保留/倍率还原」
-4. **#6**：`stable_hash` 每步 `& 0xFFFFFFFF`（标准 FNV-1a 32 位，跨语言/跨版本可复现）
+4. **#6**：~~本轮已改~~ **订正：0c7f94f 实际未含 `game_state.gd`，本条为假声明（主理人终审查出）**——原实现已是 FNV-1a 但仅末尾 31 位掩码；每步 `& 0xFFFFFFFF` 补于收官批（§七）
 
-**回归**：全量十二探针（SMOKE+V8+REBIND+RELIC+SUFFIX+PERSIST+COV+CALAMITY+DAILY+FORCE+JUMP+BOSS+ECHO）6000 帧 → **0 报错**；冻结重定 32/32。二轮待主理人复核。
+**回归**：全量十二探针（SMOKE 基座 + V8/REBIND/RELIC/SUFFIX/PERSIST/COV/CALAMITY/DAILY/FORCE/JUMP/BOSS 十二钩子；ECHO 非独立环境变量，由 FORCE_SQUAD=echo_pack 钉死覆盖）6000 帧 → **0 报错**；冻结重定 32/32。二轮经主理人终审：#1–#5 功能门 **final PASS**；#6 假声明、层流程断言缺失、frail 钳制边界 → 收官批闭环（§七）。
+
+## 七、收官批（终审 final PASS 后的整改闭环，代码 commit `b262fd8`）
+
+主理人终审：#1–#5 功能门 **final PASS，Sprint 12 正式收官**；同时查出三件事 + 文档订正，本批一次清完：
+
+1. **#6 假声明 → 补真代码**（终审：0c7f94f 不含 `game_state.gd`，二轮第 4 条失实）。选择实装而非文档降级：`stable_hash` 每步 `& 0xFFFFFFFF`。这不只是规范化——无每步掩码时 8 字节日期键连乘溢入 64 位回绕区，跨版本行为不保证。掩码后哈希值变更：当日起每日 seed 换新（预期内，无任何持久化种子；同日期双 run 确定性实测 `1410307864`×2 保持）
+2. **frail 钳制边界**（终审新发现，非阻塞）：max_hp 已在下限 2 时 cut 计算值 1、实际削 0，clear 仍补 1 → 凭空 +1 血上限（约 0.75%/层正收益）。改为 apply 存**实际**削减量 `old - new`（钳制时为 0）
+3. **层流程断言补入**（终审指出前两轮「9 断言全绿却漏缺陷」的根因：只验成对 apply→clear、不验跨层流程）：SMOKE_SIGIL_COVERAGE 新增 6 断言——①无灾祸层 clear 完全不碰倍率 ②swarm 1.5 跨 3 层恒为 1.5（无灾祸层 / scarce_ore 层 / frail 层各一）③钳制层 cut 存实际值 + clear 无凭空 +1
+4. **文档订正四处**：阶段二冻结行（.uid 表述）、git 状态行（「待授权」作废）、§六第 4 条（#6 假声明）、§六回归行（复核结论 + 探针列表口径）
+
+**验证（全部实跑）**：
+
+| 项 | 结果 |
+|-|-|
+| SMOKE_SIGIL_COVERAGE 定向 1500 帧 | 9 印记断言 + 4 单测 + 新增 6 断言全过、0 [ERR]。首跑即抓出 `var old_hp :=` 对 player.max_hp（Variant）推断失败 → 解析错，探针门控当场拦截，改显式 `: int` 后过 |
+| SMOKE_DAILY 双 run | key=20261107 seed=**1410307864**×2 一致 ✓（掩码后新值；普通局 seed 仍随机互异） |
+| 全量十二探针 6000 帧（跳 11 层 + FORCE_SOVEREIGN + FORCE_SQUAD=echo_pack） | **0 报错**；[SMOKE-BOSS2] floor=11 ✓／[SMOKE-SQUAD] echo_pack + [SMOKE-ECHO] 击败增益实战 ✓／[SMOKE-CALAMITY] floor=12 scarce_ore ✓ |
+| 冻结重定 | `md5sum -c` **32/32 OK**（game_state/game_main/player 三条目重算） |
+
+流程注：首轮全量回归参数误传（`SMOKE_JUMP_FLOOR=1`＝跳第 1 层空转、`SMOKE_FORCE_SQUAD=1` 非编队 ID 且 <3 层门控拦截）——参数误用非代码缺陷，二轮按正确口径重跑补齐主权/编队/回响证据。
+
+**Sprint 12 至此正式收官。** 非阻塞在册移交 Sprint 13：设计侧 dash option b（保持 196–210px 手感 or 纯传送语义）、「回响」数值调优（data 驱动）、地窖背景板（art 预留）。
