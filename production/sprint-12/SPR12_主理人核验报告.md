@@ -93,3 +93,67 @@
 3. 修完重跑四门控 + 冻结重定（改了脚本必然重定），修 #4 时**保持 `_smoke_fingerprint` 在 `_roll_calamity` 之前**的时序。
 4. 交付文档 `SPR12_交付_两阶段全量.md` 当前为**未跟踪状态**（`git status ??`），与修复批一并单独提交；底账 `706a8c3` 已在，之后每批一个 commit。
 5. 主理人侧在修复批落地后再做一次读码复核，届时给 final PASS / CONCERNS 判定。
+
+---
+
+# 附：修复批 `266651a` 主理人复核（2026-11-07 19:50）
+
+> 复核对象：编程侧修复批提交 `266651a`（声称 7 项全闭环 + 逐枚覆盖断言 + 十探针 0 报错 + 冻结 32/32）。
+> 方法：实读修复后源码 + `git show --stat` + `md5sum -c` 实校；**不采信交付文档自述结论**。
+> **判定：CONCERNS（不予 final PASS、不予收官）** —— 7 项中 **#1 / #4 / #5 / #6 闭环，#7 部分**；**#2 仍为 🔴 必现缺陷、#3 语义不成立**。
+
+## A. 逐项复核
+
+| # | 编程侧声明 | 主理人判定 | 依据 |
+|---|---|---|---|
+| 1 | bulwark 补分支 | ✅ **PASS** | `game_main.gd:761–763` `relic_shield_t = maxf(cur, 2.5)`；覆盖探针 `player.gd:689–690` 断言 `>=2.5`；`_tick_relic_shield()`（`:534–536`）在 orbit 空时自动 `_ensure_relic_shield()`，无需手动建 |
+| 2 | 保存值还原倍率 | 🔴 **未闭环（原缺陷仍在）** | 见 §B |
+| 3 | `maxi` 保层内成长 | 🟠 **语义不成立** | 见 §C |
+| 4 | 摘除 `_smoke` 强制 | ✅ **PASS** | `:380` 改 `if not _calamity_forced and rolled > 0.15: return`；`:186–187` 仅显式 `SMOKE_CALAMITY` 才置 `_calamity_forced`；`:389` 仅打印。**序保住**：`_smoke_fingerprint`（`:349` / `:1267`）仍在 `_roll_calamity`（`:353` / `:1269`）之前 |
+| 5 | boss2 身份补齐 | ✅ **PASS（并附带修好隐藏缺陷）** | `boss2.gd:12–13` 设 `boss_name` + `variant="boss"`；`boss.gd:335` 死亡走 `on_slug_killed(self)` → `game_main.gd:1701 variant in ["elite","boss"]` → Boss 必掉词缀。原 `variant="warden"` 只享 6% 普通掉率，改 `"boss"` 使掉落归位，理由成立 |
+| 6 | `stable_hash()` FNV-1a | ✅ **达标，建议规范化** | `game_state.gd:296–300` + `daily_seed_for :304` 已切换，跨版本确定性达成。但每步未 mask 32 位，Godot int64 下 8 字符会溢出 wrap → 非标准 FNV-1a，跨语言复现 seed 不一致。建议 `h = ((h ^ b) * 16777619) & 0xFFFFFFFF` |
+| 7 | 文档两处口径 | 🟡 **部分** | 交付文档 `:47` 原文仍为「30 脚本 + boss2/ally .uid 计入」（实测 0 条 `.uid`），仅 `:78` 追加勘误；`## 还剩什么` 仍写「git 提交待授权」，与已提交 `266651a` 矛盾。草案 §6.1 规划侧已自纠 ✓ |
+
+**其它实校**：`git status` 干净、`266651a` 在册；`md5sum -c` 实跑 **32/32 全 OK**，清单 32 条全 `.gd`、脚本 32 个；该提交已含主理人核验报告与草案修订（工作树无遗留）。
+**十探针 0 报错与本次判定不矛盾**：#2 / #3 是语义缺陷，现有断言未覆盖，不会触发 `[ERR]`。
+
+## B. 🔴 #2 原缺陷仍在（换了个初值为 1.0 的常量）
+
+`_clear_calamity_effects()` `game_main.gd:426–436` 中 `:433` **无条件** `Game.main.diamond_mult = _calamity_saved_diamond_mult`。而：
+- `_calamity_saved_diamond_mult` 初值 `:113 = 1.0`，**只在** `_apply_calamity :405` 更新；
+- 第 1 层保底无灾祸（`:382–383` 在 apply 之前 return）→ 开局 saved 恒为 1.0；
+- `next_floor :1261` **每层无条件**调 clear；
+- `_roll_modifier :443–449` 整局只在 `start_run` 设一次 `diamond_mult`（swarm=1.5 / barren=0.7）。
+
+**必现推演（swarm 局）**：第 1 层 1.5 且 saved=1.0 → 进入第 2 层 clear → `diamond_mult = 1.0` → **1.5 永久丢失**。与原报告 #2 完全同构，仅把字面 `1.0` 换成了初值同为 `1.0` 的变量。另 `:436` 只重置 `_calamity_saved_max_hp`，不重置两个 saved 倍率 → 历史值还会跨层串味。
+
+**修复方向**：clear 时**按灾祸类型条件还原** —— `diamond_mult` 仅在 `_calamity == "scarce_ore"` 分支还原，`mag_cap_mult` 仅在 `"scarce_ammo"` 分支还原，`frail` 单独处理；`_calamity == ""`（无灾祸层）**不触碰任何倍率**。或引入 dirty 标志，clear 只还原本层实际改过的项。
+
+## C. 🟠 #3 `maxi` 不等于「保成长」+ 单测时序反了
+
+`maxi(player.max_hp, saved)`（`:428`）语义是「至少回到灾祸前」，**不是**「补回灾祸削减量」。
+
+| 步骤 | saved=10 的实际值 |
+|---|---|
+| 进入灾祸层 | saved=10，`cut=round(10×0.2)=2` → `max_hp=8` |
+| 层内升级 +1（`upgrades.gd:121` / `relics.gd:92`） | `max_hp=9` |
+| 换层 clear `maxi(9, 10)` | **10**（正确应为 **11**，丢 +1） |
+
+**为何单测全过**：`player.gd:708` 把「模拟层内成长」写在 `_apply_calamity()`（`:710`）**之前**，导致 saved 已含成长（=hp_before+1），`:713` 的断言恒过。真实时序是「先灾祸 → 后成长 → 再 clear」，单测把顺序倒过来，恰好绕开缺陷。
+
+**修复方向**：改**差值增量还原** —— `_apply_calamity` 额外保存 `cut`，clear 时 `player.max_hp += cut`（或 `+= saved - reduced`），与层内成长完全解耦。
+
+## D. 单测口径修正要求（根因）
+
+本次 7 项里有 2 项「断言全绿但缺陷仍在」，根因是覆盖探针只验了「成对 apply→clear」的直驱路径，未验真实层流程。下一批必须补：
+1. 把「模拟层内成长」移到 `_apply_calamity()` **之后**再断言还原；
+2. 补「**无灾祸层也调 clear，不得改动 `diamond_mult` / `mag_cap_mult`**」断言；
+3. 补「**swarm 局跨 3 层 `diamond_mult` 恒为 1.5**」的层流程断言（真正覆盖 #2 的必现场景）；
+4. #6 加 mask；#7 直接改 `:47` 原文与「还剩什么」状态行，不用追加勘误。
+
+## E. 收尾状态
+
+- **冻结清单 / git / E6 / E1 / 数据表 / 探针框架**：全部 PASS，无需重做。
+- **待修**：#2（🔴）、#3（🟠）+ 四条断言口径；#6 规范化、#7 原文修正为低优先。
+- 修完再走：四门控 → 冻结重定 → 交付文档 → 单独提交 → 主理人复核给 final PASS。
+- 主理人本轮**未改任何 `.gd`**（规划侧只读铁律），仅追加本复核章节。

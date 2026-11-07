@@ -109,7 +109,7 @@ var _scholar_floor_done := -1  # 博学印记：本层已发过首次清场奖�
 # E 灾祸层（Sprint 12 §6.3）：每层 15% 触发一个负面灾祸，本层生效、换层清除
 var _calamity := ""
 var _calamity_floor := -1
-var _calamity_saved_max_hp := 0
+var _calamity_frail_cut := 0
 var _calamity_saved_diamond_mult := 1.0
 var _calamity_saved_mag_cap_mult := 1.0
 var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
@@ -400,15 +400,14 @@ func _calamity_name(id: String) -> String:
 
 
 func _apply_calamity() -> void:
-	# 保存进入灾祸前的倍率/上限（换层还原用——核验 #2/#3：不抹 modifier 全局倍率、
-	# 不吞层内 max_hp 成长；maxi 还原策略见 _clear_calamity_effects）
+	# 保存进入灾祸前的倍率（换层还原用——核验 #2：不抹 modifier 全局倍率）
 	_calamity_saved_diamond_mult = Game.main.diamond_mult
 	_calamity_saved_mag_cap_mult = player.mag_cap_mult
-	_calamity_saved_max_hp = player.max_hp
 	match _calamity:
 		"frail":
-			var cut := maxi(1, int(round(player.max_hp * 0.2)))
-			player.max_hp = maxi(2, player.max_hp - cut)
+			# 核验 #3：cut 差值增量还原（与层内成长解耦，避免绝对值还原吞成长）
+			_calamity_frail_cut = maxi(1, int(round(player.max_hp * 0.2)))
+			player.max_hp = maxi(2, player.max_hp - _calamity_frail_cut)
 			player.hp = mini(player.hp, player.max_hp)
 			player.hp_changed.emit(player.hp, player.max_hp)
 		"frenzy":
@@ -421,19 +420,24 @@ func _apply_calamity() -> void:
 				Game.main.diamond_mult = minf(Game.main.diamond_mult, 0.7)
 
 
-## 换层清除：恢复灾祸改动的起始状态。
-## frail 用 maxi 还原（保留层内升级/遗物的 +1 成长）；倍率用保存值还原（不抹 modifier 的全局倍率——核验 #2）
+## 换层清除：按灾祸类型条件还原（_calamity == "" 时完全不碰倍率——核验 #2 层流程断言①）
 func _clear_calamity_effects() -> void:
-	if _calamity == "frail" and is_instance_valid(player):
-		player.max_hp = maxi(player.max_hp, _calamity_saved_max_hp)
-		player.hp = mini(player.hp, player.max_hp)
-		player.hp_changed.emit(player.hp, player.max_hp)
-	Game.calamity_speed_mult = 1.0
-	if Game.main != null and is_instance_valid(Game.main):
-		Game.main.diamond_mult = _calamity_saved_diamond_mult
-	if is_instance_valid(player):
-		player.mag_cap_mult = _calamity_saved_mag_cap_mult
-	_calamity_saved_max_hp = 0
+	match _calamity:
+		"frail":
+			if is_instance_valid(player):
+				player.max_hp += _calamity_frail_cut   # 差值增量还原（含层内成长）
+				player.hp = mini(player.hp, player.max_hp)
+				player.hp_changed.emit(player.hp, player.max_hp)
+		"scarce_ammo":
+			if is_instance_valid(player):
+				player.mag_cap_mult = _calamity_saved_mag_cap_mult
+				player.mag_changed.emit(player.mag(), player.mag_cap())
+		"scarce_ore":
+			if Game.main != null and is_instance_valid(Game.main):
+				Game.main.diamond_mult = _calamity_saved_diamond_mult
+	_calamity_frail_cut = 0
+	_calamity_saved_diamond_mult = 1.0
+	_calamity_saved_mag_cap_mult = 1.0
 
 
 func _roll_modifier() -> void:

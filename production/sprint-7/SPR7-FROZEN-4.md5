@@ -1,4 +1,5 @@
 090c20ad293969d4f6086dc33c82de3e *scripts/hud.gd
+0f90af830530ee581764cef087e9a805 *scripts/player.gd
 0fbd19f0a24627a02ac46ae456a0105c *scripts/validate.gd
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
 2d967d92ad7d8b7cb6a776b12688da63 *scripts/boss.gd
@@ -16,16 +17,15 @@
 8a6e78d8e4ea3e6bca8af97124ef288b *scripts/turret.gd
 92242d0669a7eadbf2aec2376928e6a3 *scripts/merchant.gd
 9248ff72854c353576134c1979b844ab *scripts/explosion.gd
+94051d8873e0212d46090e3ef2898c69 *scripts/game_main.gd
 b4083f0b64d70f789a1f409a3001126a *scripts/dev_overlay.gd
 b798daef7d96385e3a3fe8e392c3cc62 *scripts/dungeon.gd
 b8499a95324fa66a90a7d698979a29b5 *scripts/dev_log.gd
 c26d847b0052674c615d616310a2a93e *scripts/weapons.gd
 c29161dba5fef897a5a69d11935090c6 *scripts/prop.gd
-c31825eac0a0bff0b66a7a9341bb14a6 *scripts/game_main.gd
 dae73db19770c0a8fb3c53fe8bed8cd3 *scripts/relics.gd
 daf2935f4945f29fa163e0fbd1796ecb *scripts/upgrade_panel.gd
 dd4d872610243243f50b5b638581866f *scripts/crate.gd
-df0be7ba3ba16ff6b9f5b5bb71123bef *scripts/player.gd
 ea6be9abbcb78dded9ea084084137956 *scripts/slug.gd
 f1ea5536bbd550e09e9d5e89d64f57fb *scripts/meta.gd
 fa7acbc36e849a88aad52b2b084a6986 *scripts/bomb.gd

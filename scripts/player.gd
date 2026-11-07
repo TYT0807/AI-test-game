@@ -702,20 +702,20 @@ func _sigil_coverage_probe() -> void:
 				ok = scholar_active
 				detail = "flag=%s" % str(scholar_active)
 		Dev.check(ok, "sigil_cov", "%s %s" % [id, detail])
-	# 核验 #2/#3 单测：灾祸倍率保存还原 + frail maxi 保成长（直接驱动，不经层流程）
-	var dm0: float = Game.main.diamond_mult
-	var hp_before := max_hp
-	max_hp = hp_before + 1   # 模拟层内升级成长
+	# 核验 #2/#3 单测（时序：先灾祸、后层内成长、再换层还原）
+	var pre := max_hp
 	Game.main._calamity = "frail"
 	Game.main._apply_calamity()
-	Dev.check(max_hp < hp_before + 1, "sigil_cov", "frail 削减生效 max_hp=%d" % max_hp)
+	Dev.check(max_hp < pre, "sigil_cov", "frail 削减: %d→%d" % [pre, max_hp])
+	max_hp += 1   # 层内成长
 	Game.main._clear_calamity_effects()
-	Dev.check(max_hp == hp_before + 1, "sigil_cov", "frail 还原保成长 max_hp=%d" % max_hp)
+	Dev.check(max_hp == pre + 1, "sigil_cov", "frail 还原保成长: max_hp=%d" % max_hp)
+	var dm: float = Game.main.diamond_mult
 	Game.main._calamity = "scarce_ore"
 	Game.main._apply_calamity()
-	Dev.check(Game.main.diamond_mult < dm0, "sigil_cov", "scarce_ore 削减生效")
+	Dev.check(Game.main.diamond_mult < dm, "sigil_cov", "scarce_ore 削减")
 	Game.main._clear_calamity_effects()
-	Dev.check(Game.main.diamond_mult == dm0, "sigil_cov", "diamond 还原保存值")
+	Dev.check(Game.main.diamond_mult == dm, "sigil_cov", "scarce_ore 还原")
 	Game.main._calamity = ""
 	print("[SMOKE-SIGIL-COV] done")
 	# 恢复印记存档现场（测试不污染玩家进度）
