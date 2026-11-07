@@ -268,6 +268,12 @@ func settle_shards(cleared_floors: int) -> int:
 	return n
 
 
+## 运行期直接加 shards（博学印记层清奖励等），纯确定性
+func add_shards(n: int) -> void:
+	sigils["shards"] = int(sigils["shards"]) + maxi(n, 0)
+	save_sigils()
+
+
 ## 解锁印记：余额足够则扣 shards 并永久解锁
 func unlock_sigil(id: String) -> bool:
 	if not Data.SIGILS.has(id) or sigils["unlocked"].has(id):

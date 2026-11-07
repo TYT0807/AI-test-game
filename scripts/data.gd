@@ -82,6 +82,8 @@ const ENEMIES := {
 		"hp": 300.0, "speed": 30.0, "dmg": 4, "xp": 24, "score": 1400, "scale": 2.1},
 	"dragon": {"name": "黑龙", "tex": "dragon", "ai": "boss", "summon": "goblin",
 		"hp": 380.0, "speed": 28.0, "dmg": 5, "xp": 28, "score": 1800, "scale": 2.3},
+	"echo": {"name": "回响", "tex": "shadow", "ai": "echo",
+		"hp": 8.0, "speed": 90.0, "dmg": 1, "xp": 6, "score": 80, "scale": 1.0},
 }
 
 ## 每层刷怪池（权重）
@@ -160,6 +162,19 @@ const SQUADS := {
 		{"id": "goblin", "count": 3, "front": true},
 		{"id": "imp", "count": 3, "front": false},
 	]},
+	"hunt": {"name": "围猎", "min_floor": 5, "weight": 9, "members": [
+		{"id": "wolf", "count": 2, "front": true},
+		{"id": "flameskull", "count": 1, "front": false},
+	]},
+	"alchemy": {"name": "炼金", "min_floor": 6, "weight": 8, "members": [
+		{"id": "mush", "count": 1, "front": false},
+		{"id": "imp", "count": 2, "front": true},
+		{"id": "flameskull", "count": 1, "front": false},
+	]},
+	"echo_pack": {"name": "回响编队", "min_floor": 7, "weight": 7, "members": [
+		{"id": "echo", "count": 1, "front": true},
+		{"id": "rusher", "count": 2, "front": true},
+	]},
 }
 
 ## 反应式遗物词缀（F2/Sprint 11 §三）：附着到对应主动遗物，触发点命中时附加二次效果。
@@ -200,6 +215,12 @@ const SIGILS := {
 	"vigor": {"name": "刚韧印记", "desc": "开局生命上限 +1", "cost": 30},
 	"arsenal": {"name": "武备印记", "desc": "开局副手预装霰弹枪", "cost": 40},
 	"purse": {"name": "钱囊印记", "desc": "开局携带 15 源石", "cost": 25},
+	"kindred": {"name": "协战印记", "desc": "开局召唤 1 个协战水晶（30 秒）", "cost": 50},
+	"bulwark": {"name": "壁垒印记", "desc": "开局获得 1 层环盾护盾（2.5 秒）", "cost": 35},
+	"sprinter": {"name": "疾行印记", "desc": "冲刺距离与无敌帧 +30%", "cost": 40},
+	"harvester": {"name": "丰收印记", "desc": "击杀额外掉落 1 源石", "cost": 45},
+	"ward": {"name": "守护印记", "desc": "Boss 房受到伤害 -20%", "cost": 60},
+	"scholar": {"name": "博学印记", "desc": "每层首次清场额外 +2 地窖碎片", "cost": 40},
 }
 
 ## 主动遗物（F2/Sprint 10 §十一）：开局可用、各带独立按键与冷却，不进三抽卡。

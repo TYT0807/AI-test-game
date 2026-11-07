@@ -2,7 +2,7 @@ extends Node
 ## 启动自检：把「数据写错、贴图缺失、房间类型没接」这类问题在开局就吼出来。
 ## 所有检查项都进 Dev 日志，F3 面板可回看。
 
-const KNOWN_AI := ["chase", "spitter", "bomber", "boss", "leap", "summon", "erratic", "turret"]
+const KNOWN_AI := ["chase", "spitter", "bomber", "boss", "leap", "summon", "erratic", "turret", "echo"]
 const KNOWN_ATLAS := ["slug", "enemy2"]
 const KNOWN_ROOM_KINDS := ["start", "combat", "elite", "treasure", "shop", "boss", "secret", "super_secret", "challenge", "cursed"]
 ## HUD 状态图标 key：与 Upgrades 里 guard/chain/venom 对应

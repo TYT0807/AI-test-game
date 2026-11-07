@@ -33,6 +33,7 @@ var _slow_t := 0.0
 var _phase := 0.0
 var _bob := 0.0
 var _face := Vector2.RIGHT
+var _echo_t := 0.0   # F3/B 回响：镜像/突进周期计时（E6 固定步）
 var _poison_t := 0.0
 var _poison_dps := 0.0
 var _poison_acc := 0.0
@@ -190,6 +191,8 @@ func _physics_process(delta: float) -> void:
 			_ai_boss(dist, dir, delta)
 		"erratic":
 			_ai_erratic(dist, dir, delta)
+		"echo":
+			_ai_echo(dist, dir, delta)
 		_:
 			_ai_chase(dist, dir, delta)
 
@@ -273,6 +276,24 @@ func _fire_burst(dir: Vector2, n: int, spread: float, color := Color(0.85, 0.85,
 
 func _ai_chase(_dist: float, dir: Vector2, _delta: float) -> void:
 	_move_with(dir, 1.0)
+
+
+## F3/B 回响（Sprint 12）：前 2.5 秒沿玩家轨迹缓冲倒放镜像玩家走位，
+## 之后 3 秒周期游走、末 0.5 秒突进。全部计时走 Game.FIXED_DT（E6）。
+func _ai_echo(dist: float, dir: Vector2, _delta: float) -> void:
+	_echo_t += Game.FIXED_DT
+	var pl: Node2D = Game.main.player
+	if _echo_t < 2.5 and is_instance_valid(pl) and not pl.trail.is_empty():
+		var trail: Array[Vector2] = pl.trail
+		var idx := clampi(int((_echo_t / 2.5) * float(trail.size())), 0, trail.size() - 1)
+		var target: Vector2 = trail[trail.size() - 1 - idx]
+		var to_target := target - global_position
+		velocity = to_target.limit_length(speed * 1.5 * Game.enemy_speed_mult * _slow_mult) + _knock
+		return
+	# 镜像结束：游走 + 周期突进（压制玩家走位节奏）
+	var cycle := fmod(_echo_t, 3.0)
+	var mult := 1.8 if cycle > 2.5 else 0.5
+	velocity = dir * speed * mult * Game.enemy_speed_mult * _slow_mult + _knock
 
 
 func _ai_erratic(_dist: float, dir: Vector2, _delta: float) -> void:

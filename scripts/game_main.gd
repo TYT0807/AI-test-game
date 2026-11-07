@@ -19,6 +19,9 @@ const HudScript := preload("res://scripts/hud.gd")
 const DevOverlayScript := preload("res://scripts/dev_overlay.gd")
 const UpgradePanelScript := preload("res://scripts/upgrade_panel.gd")
 const PrismWardenScript := preload("res://scripts/boss.gd")
+const AllyScript := preload("res://scripts/ally.gd")
+
+var _ally: Node2D = null  # kindred 印记的协战水晶（每局重生成）
 const PCamHost := preload("res://addons/phantom_camera/scripts/phantom_camera_host/phantom_camera_host.gd")
 const PCam2D := preload("res://addons/phantom_camera/scripts/phantom_camera/phantom_camera_2d.gd")
 const Upgrades := preload("res://scripts/upgrades.gd")
@@ -101,6 +104,7 @@ var _shot_frames: Array = []
 var _shot_idx := 0
 var _stall_last_kills := 0
 var _stall_t := 0.0
+var _scholar_floor_done := -1  # 博学印记：本层已发过首次清场奖励
 
 
 func _ready() -> void:
@@ -650,6 +654,21 @@ func _apply_sigil_contract() -> void:
 		"purse":
 			Game.diamonds = 15
 			Game.diamonds_changed.emit(Game.diamonds)
+		"kindred":
+			# Sprint 12 A：临时协战水晶（30s，追击最近敌人）。确定性生成（玩家旁固定偏移，零 rng）
+			if is_instance_valid(_ally):
+				_ally.queue_free()
+			_ally = AllyScript.new()
+			_ally.position = clamp_to_arena(player.global_position + Vector2(-40, -30))
+			entities.add_child(_ally)
+		"sprinter":
+			player.dash_boost_mult = 1.3
+		"harvester":
+			player.harvester_active = true
+		"ward":
+			player.sigil_ward = true
+		"scholar":
+			player.scholar_active = true
 	if _smoke:
 		print("[SMOKE-SIGIL] applied contract: %s (before any rng draw)" % eq)
 
@@ -852,6 +871,11 @@ func _room_cleared() -> void:
 	dungeon.rooms[dungeon.current]["cleared"] = true
 	Game.wave += 1
 	Game.add_score(30 + Game.floor_num * 10)
+	# 博学印记：每层首次清场额外 +2 地窖碎片
+	if is_instance_valid(player) and player.scholar_active and _scholar_floor_done != Game.floor_num:
+		_scholar_floor_done = Game.floor_num
+		Game.add_shards(2)
+		hud.flash_toast("博学印记 +2 地窖碎片")
 	for d in _doors:
 		d.set_locked(false)
 	match kind:
@@ -1552,6 +1576,14 @@ func on_slug_killed(slug) -> void:
 	var drops := mini(xp, 8)
 	for i in drops:
 		drop_pickup(slug.global_position, "diamond", int(ceil(xp / float(drops))))
+	# 丰收印记：击杀额外 +1 源石
+	if is_instance_valid(player) and player.harvester_active:
+		drop_pickup(slug.global_position, "diamond", 1)
+	# 回响击败增益：2s 攻速提升（规划 §5.2）
+	if slug.variant == "echo":
+		player.buff("echo_rate", 1.35, 2.0)
+		if _smoke:
+			print("[SMOKE-ECHO] echo slain → echo_rate buff 2s")
 	# F2/A 反应词缀掉落：精英/Boss 必掉，普通怪 6%（抽取走 Game.rng 掉落循环——
 	# 绘制顺序变化为规划草案 §3.4 明示的预期代价，E1 基线随本批重定）
 	var suffix_chance := 0.06

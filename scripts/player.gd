@@ -61,6 +61,15 @@ var poison_chance := 0.0    # 淬毒弹头
 var shield_charges := 0     # 护盾层数（挡一次伤害）
 # F2 主动遗物：开局可用、独立按键、E6 固定步冷却（定义见 Data.ACTIVE_RELICS）
 var active_relic_cds := {}
+# Sprint 12 A：印记注入字段（_apply_sigil_contract 绝对置位，幂等）
+var harvester_active := false  # 丰收：击杀额外 +1 源石
+var sigil_ward := false        # 守护：Boss 房受伤 -20%
+var scholar_active := false    # 博学：每层首次清场 +2 地窖碎片
+var dash_boost_mult := 1.0     # 疾行：冲刺距离/无敌帧倍率
+var rate_buff_mult := 1.0      # 回响击败增益：攻速临时倍率（_tick_buffs 每帧复位）
+# 回响镜像源：玩家轨迹缓冲（echo AI 读取；0.1s 采样 × 30 = 3 秒）
+var trail: Array[Vector2] = []
+var _trail_t := 0.0
 var relic_shield_t := 0.0
 var _dash_t := 0.0
 var _dash_dir := Vector2.ZERO
@@ -232,6 +241,13 @@ func _physics_process(delta: float) -> void:
 	_tick_buffs(delta)
 	_tick_timers(delta)
 	_tick_relic_timers()
+	# 回响镜像源：轨迹缓冲采样（0.1s × 30 = 3 秒；echo AI 读取）
+	_trail_t += Game.FIXED_DT
+	if _trail_t >= 0.1:
+		_trail_t = 0.0
+		trail.append(global_position)
+		if trail.size() > 30:
+			trail.pop_front()
 
 	# 安全钳：只在真正穿墙 8px 以上时硬拉，避免和物理去重叠打架
 	if Game.main:
@@ -346,7 +362,7 @@ func _interval() -> float:
 	var base: float = cur_def()["interval"]
 	if skill_active():
 		base *= 0.35
-	return base / fire_rate_mult
+	return base / (fire_rate_mult * rate_buff_mult)
 
 
 func _fire() -> void:
@@ -457,7 +473,7 @@ func _activate_relic(id: String) -> Dictionary:
 			ev = {"shield": true}
 		"dash":
 			_dash_dir = _aim if _aim != Vector2.ZERO else Vector2.DOWN
-			_dash_t = float(def["duration"])
+			_dash_t = float(def["duration"]) * dash_boost_mult
 			grant_invuln(_dash_t + 0.05)
 			# F2/A 反应词缀触发点：冲刺开始（ON_DASH_START）
 			_fire_relic_suffixes("dash_dodge", "ON_DASH_START", global_position)
@@ -728,6 +744,11 @@ func take_damage(dmg: int, from_pos: Vector2, _from_node: Node = null) -> void:
 		return
 	if _immortal:
 		return
+	# 守护印记：Boss 房受伤 -20%（round 取整：3→2 实际生效；保底 1）
+	if sigil_ward and Game.main and is_instance_valid(Game.main) \
+			and Game.main.dungeon.room(Game.main.dungeon.current).get("kind", "") == "boss":
+		dmg = maxi(1, int(round(dmg * 0.8)))
+		return
 	# 护盾：优先消耗一层抵挡本次伤害
 	if shield_charges > 0:
 		shield_charges -= 1
@@ -795,6 +816,7 @@ func buff(id: String, mult: float, dur: float) -> void:
 func _tick_buffs(delta: float) -> void:
 	speed_mult = speed_base
 	damage_mult = 1.0
+	rate_buff_mult = 1.0
 	if skill_active():
 		speed_mult *= 1.2
 	var expired: Array[String] = []
@@ -808,6 +830,8 @@ func _tick_buffs(delta: float) -> void:
 					speed_mult *= _buffs[id].mult
 				"book":
 					damage_mult *= _buffs[id].mult
+				"echo_rate":
+					rate_buff_mult *= _buffs[id].mult
 	for id in expired:
 		_buffs.erase(id)
 
