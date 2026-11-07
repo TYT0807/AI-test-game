@@ -146,7 +146,7 @@ func _cost_text(o: Dictionary) -> String:
 			return "代价：生命上限 -%d" % int(o["cost"])
 		"score":
 			return "代价：积分 -%d" % int(o["cost"])
-	return "代价：×1.5 结算加成作废"
+	return "代价：×1.5 加成或失效"
 
 
 ## 置灰：代价不足的卡不可选（主侧 _on_shrine_chosen 再校验，双保险）
@@ -173,5 +173,7 @@ func _pick(i: int) -> void:
 		return
 	_offers = []
 	_root.visible = false
-	chosen.emit(i)
+	# 核验 #2：先解除自身暂停再 emit——ore_upgrade 链会在 emit 内打开升级面板
+	# （paused=true），emit 之后再解暂停会把它覆盖成 false，游戏在面板底下继续跑
 	get_tree().paused = false
+	chosen.emit(i)

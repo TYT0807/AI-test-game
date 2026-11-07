@@ -46,3 +46,19 @@
 - **阶段二（C 地窖图鉴 / 局末复盘）**：`codex.cfg` 双档 + `mark_codex` 记录点（spawn_slug / drop_pickup / _apply_floor_theme / on_slug_killed / _settle_meta）+ 主菜单图鉴页（只读，不碰 UNLOCKS）+ 本局复盘 + SMOKE_CODEX + codex sfx 别名
 - 备选未接：B 武器淬炼 / D 每日深化（草案 §七口径）
 - E1 指纹重定已登记（房型 kind 变化；同 seed 自洽已验）
+
+## 八、修复批（主理人核验 CONCERNS → 编程侧整改）
+
+| # | 修复 |
+|---|---|
+| 1 🔴 | **purify 顺序反转**：改为先 `_clear_calamity_effects()`（match 需要 type 在场）再 `_calamity=""`——原顺序走空分支，debuff 被永久固化（max_hp/弹匣/掉率），且 ×1.5 补偿同被剔除 |
+| 补 | **frenzy 跨层固化（自查新发现，早于核验清单）**：Sprint 12 二轮把 clear 重写为条件还原时，丢了 round-1 的 `calamity_speed_mult=1.0` 无条件还原（git `266651a` 对照确认）→ clear 补 `"frenzy"` 分支——frenzy 自二轮起曾跨层固化整局 |
+| 2 🟠 | `_pick` 先解自身暂停再 emit——ore_upgrade 链打开的升级面板暂停不再被覆盖（游戏曾在面板底下继续跑） |
+| 3 🟡 | 空池：不发选项/不播音效/不点里程碑，直接置 cleared——防「有横幅无面板」死房 |
+| 4 🟡 | 源石代价改 `Game.spend()`——`add_diamonds` 负数会倒扣共鸣计数与 earned 统计 |
+| 5 🟡 | next_floor clear 后显式 `_calamity=""`——消除 purify 过滤读过期状态的时序不对称 |
+| 文案 | purify desc / 面板代价文案改「若为唯一灾祸层」（settle ×1.5 是整局判定，原「本层作废」不成立） |
+
+**探针补强**（对「根因第四次同构」的正面回应）：purify 断言从标志位升级为**四灾祸逐一数值还原**（max_hp / 弹匣 / 掉率 / 敌速全回基线 + 当层剔除）；ore_upgrade 全链**暂停交接双断言**（升级面板打开期间 paused=true、收尾后 false）。
+
+**回归**：SMOKE_SHRINE 定向 0 报错（新断言全过、autopick 实选 relic_suffix + ore_upgrade 两次全链）；全量 6000 帧 **0 报错**（BOSS2 / echo_pack+回响增益 / DAILY seed 1410307864 全证据）；冻结重定 `md5sum -c` **33/33 OK**。

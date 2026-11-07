@@ -313,7 +313,7 @@ const ROOM_META := {
 const SHRINE_OFFERS := {
 	"blood_relic": {"name": "血祭", "desc": "生命上限 -1，掉落 1 件遗物", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
 	"ore_upgrade": {"name": "源石淬炼", "desc": "源石 -8，触发一次升级三选一", "cost_kind": "diamonds", "cost": 8, "min_floor": 3},
-	"purify": {"name": "净化", "desc": "解除本层灾祸（代价：×1.5 结算加成作废）", "cost_kind": "", "cost": 0, "min_floor": 3},
+	"purify": {"name": "净化", "desc": "解除本层灾祸（若为唯一灾祸层，×1.5 结算作废）", "cost_kind": "", "cost": 0, "min_floor": 3},
 	"ward_boon": {"name": "护盾祝福", "desc": "源石 -5，获得 1 层护盾", "cost_kind": "diamonds", "cost": 5, "min_floor": 3},
 	"heal": {"name": "修复", "desc": "积分 -60，回复 2 点生命", "cost_kind": "score", "cost": 60, "min_floor": 3},
 	"relic_suffix": {"name": "铭刻", "desc": "生命上限 -1，为主动遗物附 1 条词缀", "cost_kind": "max_hp", "cost": 1, "min_floor": 5},

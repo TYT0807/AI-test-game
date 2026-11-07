@@ -444,6 +444,8 @@ func _clear_calamity_effects() -> void:
 		"scarce_ore":
 			if Game.main != null and is_instance_valid(Game.main):
 				Game.main.diamond_mult = _calamity_saved_diamond_mult
+		"frenzy":
+			Game.calamity_speed_mult = 1.0   # 二轮重写丢失的无条件还原（本轮核验补回——frenzy 曾跨层固化整局）
 	_calamity_frail_cut = 0
 	_calamity_saved_diamond_mult = 1.0
 	_calamity_saved_mag_cap_mult = 1.0
@@ -1278,6 +1280,7 @@ func next_floor() -> void:
 		Game.floor_num = nf
 		Game.max_floor = maxi(Game.max_floor, nf)
 		_clear_calamity_effects()
+		_calamity = ""   # 核验 #5：消除换层瞬间 _calamity 残留（圣所 purify 过滤读过期状态的时序不对称）
 		_apply_floor_theme()
 		if nf >= 3:
 			_milestone("floor3")
@@ -1955,6 +1958,10 @@ func _shrine_affordable(offer: Dictionary) -> bool:
 func _open_shrine(coord: Vector2i) -> void:
 	_shrine_coord = coord
 	_shrine_offers = _shrine_offers_for(coord)
+	if _shrine_offers.is_empty():
+		# 核验 #3：空池不发选项不播音效不点里程碑，直接置已清——防「有横幅无面板」死房
+		dungeon.rooms[coord]["cleared"] = true
+		return
 	_milestone("first_shrine")
 	Game.sfx("shrine")
 	shrine_panel.autopilot = _smoke
@@ -1974,10 +1981,11 @@ func _shrine_execute(offer: Dictionary) -> void:
 		"ore_upgrade":
 			upgrade_panel.show_choices(Upgrades.roll(3))
 		"purify":
-			# 代价即「×1.5 结算加成作废」：剔除当层后灾祸状态条件还原（§4.1）
-			Game.calamity_floors.erase(Game.floor_num)
-			_calamity = ""
+			# 核验 #1 修复：先条件还原再清空——clear 的 match 需要 _calamity 还在，
+			# 先清空会走空分支把 debuff 永久固化（max_hp/弹匣/掉率/敌速）
 			_clear_calamity_effects()
+			_calamity = ""
+			Game.calamity_floors.erase(Game.floor_num)   # 代价：若为唯一灾祸层，×1.5 结算作废
 		"ward_boon":
 			player.shield_charges += 1
 		"heal":
@@ -1986,7 +1994,8 @@ func _shrine_execute(offer: Dictionary) -> void:
 			player.attach_suffix(_shrine_suffix_pick())
 	match String(offer.get("cost_kind", "")):
 		"diamonds":
-			Game.add_diamonds(-int(offer["cost"]))
+			# 核验 #4：spend 只动余额——add_diamonds 负数会倒扣共鸣计数与 earned 统计
+			Game.spend(int(offer["cost"]))
 		"max_hp":
 			player.max_hp = maxi(1, player.max_hp - int(offer["cost"]))
 			player.hp = mini(player.hp, player.max_hp)

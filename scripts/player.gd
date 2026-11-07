@@ -783,12 +783,21 @@ func _shrine_probe() -> void:
 	gm._shrine_execute(gm._shrine_entry("ore_upgrade"))
 	Dev.check(Game.diamonds == 12, "shrine", "ore_upgrade 代价源石 20→12：%d" % Game.diamonds)
 	await get_tree().create_timer(1.2, true).timeout   # 升级面板 autopick 收尾（暂停期照走）
-	gm._calamity = "scarce_ore"
-	gm._apply_calamity()
-	Game.calamity_floors.append(Game.floor_num)
-	gm._shrine_execute(gm._shrine_entry("purify"))
-	Dev.check(String(gm._calamity) == "" and not Game.calamity_floors.has(Game.floor_num),
-		"shrine", "purify 灾祸清除 + 当层 ×1.5 名额剔除")
+	# 核验 #1 补断言：四种灾祸逐一验「净化后数值还原」——只验标志位是 Sprint 12 两轮同款根因
+	for cid in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		max_hp = 6
+		mag_cap_mult = 1.0
+		Game.main.diamond_mult = 1.0
+		Game.calamity_speed_mult = 1.0
+		Game.calamity_floors.append(Game.floor_num)
+		gm._calamity = cid
+		gm._apply_calamity()
+		gm._shrine_execute(gm._shrine_entry("purify"))
+		Dev.check(max_hp == 6 and is_equal_approx(mag_cap_mult, 1.0) \
+			and is_equal_approx(Game.main.diamond_mult, 1.0) \
+			and is_equal_approx(Game.calamity_speed_mult, 1.0) \
+			and String(gm._calamity) == "" and not Game.calamity_floors.has(Game.floor_num),
+			"shrine", "purify %s 数值全还原 + 当层剔除" % cid)
 	shield_charges = 0
 	gm._shrine_execute(gm._shrine_entry("ward_boon"))
 	Dev.check(shield_charges == 1, "shrine", "ward_boon 护盾 +1：%d" % shield_charges)
@@ -824,6 +833,15 @@ func _shrine_probe() -> void:
 		await get_tree().create_timer(1.4, true).timeout   # autopick 0.5s + 执行收尾
 		Dev.check(not gm.shrine_panel._root.visible, "shrine", "选择后面板关闭")
 		Dev.check(bool(gm.dungeon.rooms[cur]["cleared"]), "shrine", "选择后 cleared 回写（重进不再扣/发）")
+		# 核验 #2 补断言：ore_upgrade 全链（圣所面板 autopick → _pick → 升级面板）暂停交接不丢失
+		Game.diamonds = 20
+		gm._shrine_offers = [gm._shrine_entry("ore_upgrade")]
+		gm._shrine_coord = cur
+		gm.shrine_panel.open(gm._shrine_offers)
+		await get_tree().create_timer(0.8, true).timeout   # 圣所 autopick 已发、升级面板 autopick 未到
+		Dev.check(get_tree().paused, "shrine", "ore_upgrade 链：升级面板打开期间保持暂停")
+		await get_tree().create_timer(0.9, true).timeout   # 升级面板 autopick 收尾
+		Dev.check(not get_tree().paused, "shrine", "升级链收尾后恢复运行")
 	else:
 		Dev.warn("shrine", "无未清房可做实开面板断言（跳过④，不影响①②③）")
 	# ⑤ 空池护栏：floor 1 无三卡（房型门槛 min_floor>=3）
