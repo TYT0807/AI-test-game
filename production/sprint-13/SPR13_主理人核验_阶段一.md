@@ -101,3 +101,73 @@ _calamity = ""
 - **功能门 CONCERNS**，阶段一不予 PASS；修 #1 / #2 + 补断言后再走四门控 → 冻结重定 → 交付文档 → 单独提交 → 主理人复核。
 - 阶段二（C 地窖图鉴）与阶段一**零耦合**，若编程侧愿意可并行开工，但**建议 #1 先修**（purify 与 C 的 `mark_codex` 记录点会共用 `_apply_floor_theme` / 灾祸路径）。
 - 主理人本轮**未改任何 `.gd`**，仅新建本核验报告 + 更新工作日志与长期记忆。
+
+---
+
+## 附：修复批 `89edfc8` 复核终审（2026-11-07，阶段一 **PASS**）
+
+> 复核对象：`89edfc8`（代码 + 交付文档 + 冻结清单，6 文件）／`2c84a24`（本核验报告入库）。
+> 方法：逐行实读落点 + git 历史对照 + 冻结 `md5sum -c` + 断言有效性反查；**不采信交付文档自述**。
+> 主理人本轮**未改任何 `.gd`**。
+
+### 一、结论
+
+**功能门 PASS → Sprint 13 阶段一（A 抉择圣所 + E 打磨批）正式收官。**
+#1–#5 全部真闭环；编程侧自查新发现的 `frenzy` 跨层固化一并修复且修复到位；四门控复核通过；三条非阻塞前瞻登记在册（§六）。阶段二 C 与本批零耦合，**准予开工**。
+
+### 二、五项修复逐条实读判定
+
+| # | 落点 | 实读结果 | 判定 |
+|---|---|---|---|
+| 1 🔴 purify 顺序 | `game_main.gd:1983–1988` | 先 `_clear_calamity_effects()`（`_calamity` 仍在，match 命中）→ `_calamity = ""` → `calamity_floors.erase(本层)`；`:433–451` clear 末尾重置 cut/saved 不再有害（后续 `next_floor` 再 clear 走空分支） | **PASS** |
+| 2 🟠 暂停交接 | `shrine_panel.gd:171–179` | `_offers=[]` → `_root.visible=false` → `paused=false` → `chosen.emit(i)`；`upgrade_panel.show_choices` 在 emit 内设 `paused=true` 不再被覆盖 | **PASS** |
+| 3 🟡 空池护栏 | `game_main.gd:1958–1968` | `is_empty()` 分支直接写 `cleared=true` 并 return；`_milestone` / `Game.sfx("shrine")` / `panel.open` 全在其后 | **PASS** |
+| 4 🟡 源石代价 | `game_main.gd:1995–1998` + `game_state.gd:157–163` | 改走 `Game.spend(cost)`，只动 `diamonds` / `meta_spent`，不触 `run_diamonds_earned` / `_reso_pickups`；主侧 `_on_shrine_chosen:2020` 与面板 `open:113–118` 双保险（实读：`can_afford` 由 `Game.main._shrine_affordable` **内部计算**，非外部传参，置灰确实生效） | **PASS** |
+| 5 🟡 换层残留 | `game_main.gd:1282–1283` | `_clear_calamity_effects()` 后显式 `_calamity = ""`，早于 `_enter_room` / `_roll_calamity` | **PASS** |
+| 文案 | `data.gd:316` / `shrine_panel.gd:149` | desc「若为唯一灾祸层，×1.5 结算作废」、代价「×1.5 加成或失效」，与 `settle_shards` 整局 `size()>0` 判定一致 | **PASS** |
+
+### 三、主理人事实错误认领与更正（重要）
+
+上一轮本报告 §二表格 `:42` 写：
+
+> `frenzy` | `calamity_speed_mult` 恢复 ✓（`:431` 无条件） | 恢复 ✓
+
+**这句是错的，我认领。** 它引的是 round-1 `266651a` 的旧码（该版 clear 确有无条件 `Game.calamity_speed_mult = 1.0`），不是 `bf2010b` 当时磁盘上的现状：`bf2010b` 的 `_clear_calamity_effects()` 只有 frail / scarce_ammo / scarce_ore 三分支，`:431` 是空行；全仓 `calamity_speed_mult` 写入仅 `_apply_calamity:423`（设 1.25）与 `game_state.gd:135 reset()`（整局归零），**换层没有任何还原路径** → frenzy 自 Sprint 12 二轮 `0c7f94f` 起就跨层固化整局，且四轮探针都没测过 frenzy 分支。
+
+git 历史对照（实查）：`266651a` 有 speed reset → `0c7f94f` / `bf2010b` 无 → `89edfc8` 在 clear 补 `"frenzy": Game.calamity_speed_mult = 1.0`（`game_main.gd:447–448`）。消费者 `slug.gd:232` 实读确认该系数直接进入敌人移速，是有实害的数值缺陷，不是注释或口味问题。
+
+**更正后的表格行**：`frenzy` | ❌ 未还原（`bf2010b` 现状，跨层固化整局） | 应在 clear 补分支。
+
+**教训**：核验报告里打 ✓ 的每一项都必须绑定到**当前 commit 的行号**，不能沿用上一轮的行号印象。这与我连续三轮批评编程侧的「断言只验标志、不验数值」是同一类错误 —— **核验侧自己也犯了「凭旧码下结论」**。已列入下批复核纪律：凡标 ✓，必须附本轮实读行号。
+
+### 四、断言有效性反查（防第五次「全绿却漏」）
+
+| 检查 | 实读 | 判定 |
+|---|---|---|
+| frenzy 断言是否有真实差值 | `_apply_calamity:422–423` 设 `1.25`；探针 `player.gd:787–800` 逐灾祸先归零再 apply 后 purify，验 `is_equal_approx(speed_mult, 1.0)` | 若 clear 无 frenzy 分支断言必失败 → **真断言，非恒过** |
+| 四灾祸是否全部入循环 | `for cid in ["frail","frenzy","scarce_ammo","scarce_ore"]`，逐项验 `max_hp` / `mag_cap_mult` / `diamond_mult` / `calamity_speed_mult` + `_calamity == ""` + 当层剔除 | PASS |
+| append / erase 是否净平衡 | `_roll_calamity:390` 才 append；`_apply_calamity:408–429` 不 append；循环 4 次 append/erase 各 4 次 → `has()` 为 false 可达成 | PASS |
+| 暂停交接双断言 | `player.gd:836–844`：圣所 autopick 后 0.8s 验 `paused == true`（升级面板期间）、再 0.9s 验 `paused == false`（autopick 收尾后） | PASS |
+| 置灰是否真生效 | `shrine_panel.open:109–118` 内部调 `_shrine_affordable` 构造 `can_afford` → `_set_state` 置灰 → `_pick:172` 再拦 | PASS |
+
+### 五、四门控复核（本轮实校，不复用编程侧结论）
+
+| 门 | 结果 |
+|---|---|
+| 冻结 | `md5sum -c production/sprint-7/SPR7-FROZEN-4.md5` → **exit 0 / 33 OK / 0 FAILED**；清单 33 行、`scripts/*.gd` 33 个 |
+| git | `git status --short` 空（工作树干净）；`89edfc8` 6 文件（交付文档 + 冻结清单 + `data.gd`/`game_main.gd`/`player.gd`/`shrine_panel.gd`）、`2c84a24` 仅新增本报告 103 行 |
+| E1 | `shrine_panel.gd` 全文件零 `Game.rng` / `randi` / `randf` / `delta`；`game_main.gd` 圣所区段 `:1909–2026` 无 rng 调用（Grep 最高命中 `:1913` 为注释）；三卡 / 铭刻仍 `stable_hash` 纯派生；`ACTION_DEFS` 零新增 |
+| E6 | 本批改动无计时逻辑，`shrine_panel.gd` 无 `_process` / raw delta |
+| 探针 | 编程侧 `SMOKE_SHRINE` 定向 + 全量 6000 帧 0 报错；本轮以「差值可观察性」反查确认新增断言不是恒过假断言 |
+
+### 六、非阻塞前瞻（不要求本批返工，登记在册）
+
+1. **换层 roll 时序**：`next_floor:1288–1291` 是 `_enter_room` → `_roll_calamity`，进入新层起点房瞬间 `_calamity` 仍为 `""`。当前 `dungeon.gd` 保证 shrine 不落在 `Vector2i.ZERO`，故 `_shrine_offers_for:1929` 的 purify 过滤不受影响；若未来允许圣所落在起点房、或把三卡派生提前到 `_enter_room`，purify 会被误过滤。
+2. **`Array.erase` 只删首个匹配**：真实流程每层仅 `:390` append 一次，无重复；若未来同层重复 roll，`erase` 后 `calamity_floors` 会残留同层项。
+3. **clear 末尾三 saved 值无条件重置**（`:449–451`）：`_calamity == ""` 时也执行，目前空分支不碰倍率 / max_hp 故无害；若 saved 未来承担更多信息需复核。
+
+### 七、收尾状态与放行
+
+- **阶段一 PASS，正式收官**。阶段二 C（地窖图鉴 / 局末复盘）与本批零耦合，**准予开工**；规格以 `SPR13_规划草案.md` §C 为准：`user://codex.cfg` 双档 / 只读 `Game.mark_codex(kind,id)` / 主菜单只读图鉴页 / 本局复盘 / `SMOKE_CODEX` 表外探针 / **不碰 `meta.gd UNLOCKS`**（冻结规格 v2.10）。
+- 本附章为报告文档追加，**尚未提交**；按批次流程待授权后单独提交（不涉及任何 `.gd`）。
+- 主理人本轮**未改任何 `.gd`**，仅追加本附章 + 更新工作日志与长期记忆。
