@@ -1,0 +1,7 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# 本地调试/备份（不进版本库）
+_tools/
+_backup/
