@@ -330,6 +330,17 @@ const ECHO_TUNING := {"mirror_time": 2.5, "cycle": 3.0, "chase_mult": 1.5,
 ## 白名单（game_state._codex_id_valid）/ UI 分母（codex_bosses_total）/ 显示名都从这里派生
 const CODEX_BOSS_NAMES := {"prism_warden": "棱镜守望者", "pyrothalassian": "熔潮主宰"}
 
+## Sprint 14 C：图鉴发现度 → 开局被动（data 驱动阈值与数值，调优只改这里）。
+## 载体硬约束（草案 §5.4）：只允许一次性起始状态——shield/diamonds/max_hp/suffix；
+## 禁用 diamond_mult/mag_cap_mult/calamity_speed_mult 等全局倍率载体
+## （_roll_modifier/_roll_calamity/换层 clear 会重置——Sprint 12 #2 实害教训）
+const CODEX_BOONS := {
+	"enemies_5": {"kind": "enemies", "need": 5, "effect": "shield", "value": 1},
+	"relics_4": {"kind": "relics", "need": 4, "effect": "diamonds", "value": 3},
+	"themes_3": {"kind": "themes", "need": 3, "effect": "max_hp", "value": 1},
+	"bosses_2": {"kind": "bosses", "need": 2, "effect": "suffix", "value": 1},
+}
+
 
 ## 图鉴 bosses 分母：ENEMIES 内真 Boss 数 + 主题 Boss 专用 id 数（菜单与探针同源，防 6/4 错位）
 func codex_bosses_total() -> int:

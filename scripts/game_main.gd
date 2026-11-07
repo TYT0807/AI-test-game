@@ -345,6 +345,9 @@ func start_run() -> void:
 	# C 契约（Sprint 11 §四）：印记注入——必须在任何 Game.rng 绘制之前调用。
 	# 只改起始状态，不改 rng 消耗顺序：同 seed + 同印记 = 整局可复现（E1 零漂移）。
 	_apply_sigil_contract()
+	# Sprint 14 C：图鉴发现度被动——开局一次性起始状态（复用既有接口，载体硬约束草案 §5.4）。
+	# 注入在契约同段之后、rng 首抽之前：只改起始状态不改 rng 消耗顺序（E1 零漂移，同上口径）
+	_apply_codex_boons()
 	# 每层地图用「由 (run_seed, 层号) 派生」的独立 rng：第 N 层地图只由 (run_seed, N)
 	# 决定，与帧数 / 战斗节奏 / 解锁内容完全无关（解锁档与默认档地图逐字一致）
 	Game.run_seed = Game.rng.seed
@@ -2039,6 +2042,42 @@ func _on_shrine_chosen(index: int) -> void:
 	Game.sfx("powerup", 1.1)
 	if _smoke:
 		print("[SMOKE-SHRINE] chose=%s coord=%s" % [String(offer["id"]), _shrine_coord])
+
+
+## ---------------- Sprint 14 C：图鉴发现度被动（开局一次性起始状态） ----------------
+
+## 落地 boons：shield/diamonds/max_hp/suffix 四类一次性增量。
+## 载体硬约束（§5.4）：禁用 diamond_mult 等全局倍率——_roll_modifier/_roll_calamity/
+## 换层 clear 会重置它们（Sprint 12 #2 实害教训）；本函数零 rng、零计时
+func _apply_codex_boons() -> void:
+	var boons: Dictionary = Game.codex_boons()
+	if boons.is_empty():
+		return
+	for id in boons:
+		var b: Dictionary = boons[id]
+		match String(b["effect"]):
+			"shield":
+				player.shield_charges += int(b["value"])
+			"diamonds":
+				Game.add_diamonds(int(b["value"]))
+			"max_hp":
+				player.max_hp += int(b["value"])
+				player.hp = mini(player.hp + int(b["value"]), player.max_hp)
+				player.hp_changed.emit(player.hp, player.max_hp)
+			"suffix":
+				player.attach_suffix(_codex_boon_suffix())
+	if _smoke:
+		print("[SMOKE-CODEX-BOON] applied: %s" % str(boons.keys()))
+
+
+## 铭刻词缀稳定派生：由图鉴发现集拼 key 走 stable_hash（同档同词缀，零 rng）
+func _codex_boon_suffix() -> String:
+	var sids: Array = Data.RELIC_SUFFIXES.keys()
+	sids.sort()
+	var key := ""
+	for k in Game.CODEX_KINDS:
+		key += "%s=%s|" % [String(k), ",".join(Game.codex[k])]
+	return String(sids[Game.stable_hash(key) % sids.size()])
 
 
 func give_player_weapon(id: String) -> void:

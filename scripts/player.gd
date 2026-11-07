@@ -156,6 +156,8 @@ func _ready() -> void:
 		_shrine_probe.call_deferred()
 	if OS.get_environment("SMOKE_CODEX") != "":
 		_codex_probe.call_deferred()
+	if OS.get_environment("SMOKE_CODEX_BOON") != "":
+		_codex_boon_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -662,6 +664,7 @@ func _suffix_probe() -> void:
 	Dev.check(ev2.get("cooldown", false) == true, "suffix", "冷却期内二次触发被拦截：%s" % str(ev2))
 	var wrong := _fire_relic_suffixes("orb_shield", "ON_DASH_START", global_position)
 	Dev.check(wrong.is_empty(), "suffix", "trigger 不匹配时不出效果：%s" % str(wrong))
+	shield_charges = 0   # 基线清零：开局图鉴 boon 可能已给护盾（Sprint 14 C），断言只验词缀自身效果
 	attach_suffix("s_bulwark")
 	_fire_relic_suffixes("dash_dodge", "ON_DASH_START", global_position)
 	Dev.check(shield_charges == 1, "suffix", "小壁垒给予 1 层护盾：%d" % shield_charges)
@@ -952,6 +955,53 @@ func _codex_probe() -> void:
 	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
 		and int(Game.codex["last_run"].get("time", -1)) == 0, "codex", "B2: 读档负数钳制 → 0")
 	print("[SMOKE-CODEX] done")
+
+
+## SMOKE_CODEX_BOON=1：图鉴发现度被动断言——阈值边界 / 派生确定性 / 起始状态落地 / 载体零命中（Sprint 14 C）
+func _codex_boon_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	# 阈值边界：need-1 不生效 / need 生效（enemies 分类构造 4→5）
+	(Game.codex["enemies"] as Array).clear()
+	var eids := ["goblin", "rusher", "skeleton", "zombie", "orc"]
+	for i in 4:
+		Game.mark_codex("enemies", eids[i])
+	Dev.check(not Game.codex_boons().has("enemies_5"), "codex_boon", "阈值边界: 4/5 不生效")
+	Game.mark_codex("enemies", eids[4])
+	Dev.check(Game.codex_boons().has("enemies_5"), "codex_boon", "阈值边界: 5/5 生效")
+	# 构造其余三档生效
+	(Game.codex["bosses"] as Array).clear()
+	Game.mark_codex("bosses", "skeleton_king")
+	Game.mark_codex("bosses", "dragon")
+	(Game.codex["relics"] as Array).clear()
+	for rid in ["fang", "thorn", "bounce", "frost"]:
+		Game.mark_codex("relics", rid)
+	(Game.codex["themes"] as Array).clear()
+	for tid in ["vein", "toxic", "pressure"]:
+		Game.mark_codex("themes", tid)
+	var boons: Dictionary = Game.codex_boons()
+	Dev.check(boons.size() == 4, "codex_boon", "全四档生效: %s" % str(boons.keys()))
+	Dev.check(Game.codex_boons() == Game.codex_boons(), "codex_boon", "派生确定性（同档两次逐字一致）")
+	# 起始状态实际落地（验数值，不只验返回字典——「只验标志」根因防线）
+	shield_charges = 0
+	Game.diamonds = 0
+	max_hp = Player.BASE_MAX_HP
+	hp = max_hp
+	relic_suffixes.clear()
+	var dm0: float = gm.diamond_mult
+	var mc0: float = mag_cap_mult
+	var sp0: float = Game.calamity_speed_mult
+	gm._apply_codex_boons()
+	Dev.check(shield_charges == 1, "codex_boon", "shield 落地: %d" % shield_charges)
+	Dev.check(Game.diamonds == 3, "codex_boon", "diamonds 落地: %d" % Game.diamonds)
+	Dev.check(max_hp == Player.BASE_MAX_HP + 1 and hp == max_hp, "codex_boon",
+		"max_hp 落地: %d/%d" % [hp, max_hp])
+	Dev.check(relic_suffixes.size() == 1, "codex_boon", "suffix 落地: %s" % str(relic_suffixes))
+	# §5.4 载体零命中：apply 前后三个全局倍率不动（防回归）
+	Dev.check(is_equal_approx(gm.diamond_mult, dm0) and is_equal_approx(mag_cap_mult, mc0)
+		and is_equal_approx(Game.calamity_speed_mult, sp0), "codex_boon",
+		"§5.4: 全局倍率载体零命中（apply 前后不变）")
+	print("[SMOKE-CODEX-BOON] done")
 
 
 func _nearest_enemy() -> Node2D:

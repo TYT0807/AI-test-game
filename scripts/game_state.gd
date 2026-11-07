@@ -368,6 +368,17 @@ func save_codex() -> void:
 	cfg.save(codex_path())
 
 
+## Sprint 14 C：图鉴发现度 → 开局加成派生（纯只读零 rng——遍历 CODEX_BOONS 按阈值判定）。
+## 图鉴档是局外输入：档不同 → 起始状态不同；同档 + 同 seed 双跑仍逐字一致（交付文档登记口径）
+func codex_boons() -> Dictionary:
+	var out := {}
+	for id in Data.CODEX_BOONS:
+		var b: Dictionary = Data.CODEX_BOONS[id]
+		if (codex.get(String(b["kind"]), []) as Array).size() >= int(b["need"]):
+			out[String(id)] = b
+	return out
+
+
 ## 局末结算：shards += floor(cleared × META_RATE)，纯确定性（无 rng）；
 ## 本局触发过灾祸 → ×1.5 风险回报（Sprint 12 §6.3）
 func settle_shards(cleared_floors: int) -> int:
