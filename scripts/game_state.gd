@@ -24,10 +24,16 @@ const FIXED_DT := 1.0 / 60.0
 const Upgrades := preload("res://scripts/upgrades.gd")
 ## 局外 meta 层（解锁树表 + 经济换算 + 规则函数）；autoload 里看不到全局类名，必须 preload
 const Meta := preload("res://scripts/meta.gd")
+## 遗物池（图鉴 relics 分类校验用）
+const RelicsRef := preload("res://scripts/relics.gd")
 
 ## 局外存档路径：与 settings.cfg 分文件，回滚代码不会动玩家设置
 const META_PATH := "user://meta.cfg"
 const META_SMOKE_PATH := "user://_smoke_meta.cfg"
+
+## 图鉴存档路径（Sprint 13 C：codex.cfg 双档，SMOKE_CODEX_PATH 可自定义隔离档）
+const CODEX_PATH := "user://codex.cfg"
+const CODEX_SMOKE_PATH := "user://_smoke_codex.cfg"
 
 var main: Node2D = null
 var rng := RandomNumberGenerator.new()
@@ -88,6 +94,7 @@ func _ready() -> void:
 	apply_settings()
 	load_meta()
 	load_sigils()
+	load_codex()
 	if OS.get_environment("SMOKE_META_PERSIST") != "":
 		_sigil_persist_selftest.call_deferred()
 	for i in 8:
@@ -261,6 +268,96 @@ func save_sigils() -> void:
 	cfg.set_value("sigils", "unlocked", sigils["unlocked"])
 	cfg.set_value("sigils", "equipped", String(sigils["equipped"]))
 	cfg.save(sigil_path())
+
+
+## ---------------- Sprint 13 C：地窖图鉴（局外只读沉淀，codex.cfg 双档） ----------------
+## 记录已遇敌人 / 遗物 / 词缀 / 主题 / 已击败 Boss + 上局复盘摘要；纯登记零 rng（E1 零影响）。
+## 不碰 meta.gd UNLOCKS（冻结规格 v2.10）——平行只读数据，只增不减。
+const CODEX_KINDS := ["enemies", "relics", "suffixes", "themes", "bosses"]
+var codex := {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "last_run": {}}
+
+
+func codex_path() -> String:
+	var custom := OS.get_environment("SMOKE_CODEX_PATH")
+	if custom != "":
+		return custom
+	if OS.get_environment("SMOKE") != "":
+		return CODEX_SMOKE_PATH
+	return CODEX_PATH
+
+
+## 图鉴 id 合法性（登记与读档同一张校验——未知 id 两头都忽略）
+func _codex_id_valid(kind: String, id: String) -> bool:
+	match kind:
+		"enemies", "bosses":
+			return Data.ENEMIES.has(id)
+		"relics":
+			for r in RelicsRef.POOL:
+				if String(r["id"]) == id:
+					return true
+			return false
+		"suffixes":
+			return Data.RELIC_SUFFIXES.has(id)
+		"themes":
+			for k in Data.FLOOR_THEMES:
+				if String(Data.FLOOR_THEMES[k]["rule"]) == id:
+					return true
+			return false
+	return false
+
+
+## 发现登记：未知 kind/id 忽略、重复幂等；新增即落盘（发现不因中途退出丢失）
+func mark_codex(kind: String, id: String) -> void:
+	if not codex.has(kind) or kind == "last_run" or id == "":
+		return
+	if not _codex_id_valid(kind, id):
+		return
+	var arr: Array = codex[kind]
+	if arr.has(id):
+		return
+	arr.append(id)
+	save_codex()
+
+
+## 上局复盘摘要（_settle_meta 结算时快照 _run_stats——STATS_KEYS 内五项，不新增统计源；负数钳制）
+func set_codex_last_run(stats: Dictionary) -> void:
+	var clean := {}
+	for k in stats:
+		var v = stats[k]
+		clean[String(k)] = maxi(int(v), 0) if (v is int or v is float) else v
+	codex["last_run"] = clean
+	save_codex()
+
+
+func load_codex() -> void:
+	codex = {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "last_run": {}}
+	var cfg := ConfigFile.new()
+	if cfg.load(codex_path()) != OK:
+		return
+	for kind in CODEX_KINDS:
+		var arr = cfg.get_value("codex", kind, [])
+		if arr is Array:
+			# 未知 id 过滤（参照 load_sigils 防穿透写法）
+			var clean: Array = []
+			for id in arr:
+				if _codex_id_valid(kind, String(id)):
+					clean.append(String(id))
+			codex[kind] = clean
+	var lr = cfg.get_value("codex", "last_run", {})
+	if lr is Dictionary:
+		var clean_d := {}
+		for k in lr:
+			var v = lr[k]
+			clean_d[String(k)] = maxi(int(v), 0) if (v is int or v is float) else v
+		codex["last_run"] = clean_d
+
+
+func save_codex() -> void:
+	var cfg := ConfigFile.new()
+	for kind in CODEX_KINDS:
+		cfg.set_value("codex", kind, codex[kind])
+	cfg.set_value("codex", "last_run", codex["last_run"])
+	cfg.save(codex_path())
 
 
 ## 局末结算：shards += floor(cleared × META_RATE)，纯确定性（无 rng）；

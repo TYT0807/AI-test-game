@@ -51,6 +51,7 @@ func run() -> Array:
 	_check_active_relics()
 	_check_suffixes()
 	_check_shrine()
+	_check_codex()
 	_check_scripts_compile()
 	if OS.get_environment("SMOKE_V8") != "":
 		_v8_probe()
@@ -213,6 +214,25 @@ func _check_shrine() -> void:
 			problems.append("floor %d 不应有圣所（实得 %d 间）" % [fn, n])
 		if fn >= 3 and n != 1:
 			problems.append("floor %d 应恰 1 间圣所（实得 %d 间）" % [fn, n])
+
+
+## Sprint 13 C：图鉴结构自洽（kinds 分类齐 / last_run 存在 / 校验器与数据表对齐）
+func _check_codex() -> void:
+	for k in Game.CODEX_KINDS:
+		if not Game.codex.has(k):
+			problems.append("codex 缺少分类：%s" % k)
+	if not Game.codex.has("last_run"):
+		problems.append("codex 缺少 last_run")
+	if not Game._codex_id_valid("enemies", "goblin"):
+		problems.append("codex 校验器误拒合法敌人 id：goblin")
+	if Game._codex_id_valid("enemies", "no_such_enemy"):
+		problems.append("codex 校验器接受了未知敌人 id")
+	if not Game._codex_id_valid("themes", "toxic"):
+		problems.append("codex 校验器误拒合法主题 rule：toxic")
+	if not Data.RELIC_SUFFIXES.is_empty():
+		var some_sid: String = String(Data.RELIC_SUFFIXES.keys()[0])
+		if not Game._codex_id_valid("suffixes", some_sid):
+			problems.append("codex 校验器误拒合法词缀 id：%s" % some_sid)
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。

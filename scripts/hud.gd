@@ -774,8 +774,8 @@ func _refresh_counters() -> void:
 func game_over(extra: String = "") -> void:
 	_game_over = true
 	_boss_box.visible = false
-	_stats_label.text = "存活 %s   ·   击杀 %d   ·   第 %d 层\n最终得分 %d" % [
-		Game.fmt_time(), Game.kills, Game.floor_num, Game.score]
+	_stats_label.text = "存活 %s   ·   击杀 %d   ·   第 %d 层\n最终得分 %d\n本局复盘 · 最深 %d 层 · 源石 %d" % [
+		Game.fmt_time(), Game.kills, Game.floor_num, Game.score, Game.max_floor, int(Game.run_diamonds_earned)]
 	# 结算文案由 game_main 提供（串本身冻结不动），这里只取两个数用于 5 行排版
 	var pay := 0
 	var balance := Game.meta_crystals()

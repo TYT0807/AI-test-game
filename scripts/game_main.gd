@@ -707,6 +707,7 @@ func _apply_floor_theme() -> void:
 			hud.set_minimap_hidden(false)
 		return
 	_theme_rule = String(th.get("rule", ""))
+	Game.mark_codex("themes", _theme_rule)   # Sprint 13 C：已历主题登记（图鉴）
 	# 地形系数先复位，再按主题覆写（冰面/毒沼作用于 player 物理）
 	if is_instance_valid(player):
 		player.terrain_accel_mult = 1.0
@@ -1680,6 +1681,7 @@ func spawn_slug(variant: String, pos: Vector2, affix := "", defuser := false) ->
 	entities.add_child(slug)
 	slug.setup(variant, 0, Game.floor_num, affix)
 	slug.defuser = defuser
+	Game.mark_codex("enemies", variant)   # Sprint 13 C：已遇敌人登记（图鉴）
 	if _smoke and (String(Data.enemy(variant).get("ai", "")) == "boss" or affix != "" or slug.scale.x > 1.4):
 		print("[SMOKE] spawned %s%s%s scale=%.2f" % [variant,
 			(" [" + affix + "]") if affix != "" else "",
@@ -1695,11 +1697,15 @@ func drop_pickup(pos: Vector2, kind: String, value := 1, payload := "") -> void:
 	pk.payload = payload
 	pk.position = clamp_to_arena(pos + Vector2(Game.rng.randf_range(-8, 8), Game.rng.randf_range(-8, 8)))
 	entities.add_child(pk)
+	if kind == "relic" and payload != "":
+		Game.mark_codex("relics", payload)   # Sprint 13 C：已发现遗物登记（图鉴）
 
 
 func on_slug_killed(slug) -> void:
 	Game.sfx("die", Game.fx_rng.randf_range(0.9, 1.15), -6.0)
 	Game.register_kill(slug.score_value)
+	if String(Data.enemy(slug.variant).get("ai", "")) == "boss":
+		Game.mark_codex("bosses", slug.variant)   # Sprint 13 C：已击败 Boss 登记（PrismWarden/boss2 非 slug 实体，按规格 §C 只挂本记录点）
 	if Game.combo >= 20:
 		_milestone("combo20")
 	# 楼层主题「源石矿脉」：每次击杀额外掉 1 源石
@@ -2191,6 +2197,7 @@ func _settle_meta() -> String:
 	if _smoke:
 		print("[SMOKE-SIGIL] shards +%d balance=%d" % [shard_gain, int(Game.sigils["shards"])])
 	var stats := _run_stats()
+	Game.set_codex_last_run(stats)   # Sprint 13 C：上局复盘快照（codex.cfg 持久化）
 	var r := Game.meta_settle_run(stats)
 	_boost_ticked = true   # meta_settle_run 内部已递减一次引导加成
 	var pay := int(r.get("payout", 0))

@@ -154,6 +154,8 @@ func _ready() -> void:
 		_sigil_coverage_probe.call_deferred()
 	if OS.get_environment("SMOKE_SHRINE") != "":
 		_shrine_probe.call_deferred()
+	if OS.get_environment("SMOKE_CODEX") != "":
+		_codex_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -601,6 +603,7 @@ func attach_suffix(sid: String) -> Dictionary:
 		return {"attached": false}
 	var relic: String = String(def["relic"])
 	relic_suffixes[relic] = sid
+	Game.mark_codex("suffixes", sid)   # Sprint 13 C：已获词缀登记（图鉴）
 	if OS.get_environment("SMOKE_SUFFIX") != "":
 		print("[SMOKE-SUFFIX] attached %s to %s" % [sid, relic])
 	if Game.main and is_instance_valid(Game.main.hud):
@@ -856,6 +859,44 @@ func _shrine_ids(offers: Array) -> Array:
 	for o in offers:
 		out.append(String(o["id"]))
 	return out
+
+
+## SMOKE_CODEX=1：图鉴断言——隔离档 / 未知 id 忽略 / 读写往返 / 负数钳制（Sprint 13 C）
+func _codex_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	# ① 隔离档：SMOKE 下路径必须是 _smoke_codex.cfg（主档不被污染）
+	Dev.check(String(Game.codex_path()).contains("_smoke_codex"), "codex",
+		"SMOKE 隔离档：%s" % Game.codex_path())
+	# ② 未知 id 两次登记均被忽略（登记与读档同一张校验）
+	var before: int = (Game.codex["enemies"] as Array).size()
+	Game.mark_codex("enemies", "no_such_enemy")
+	Game.mark_codex("enemies", "no_such_enemy")
+	Dev.check((Game.codex["enemies"] as Array).size() == before, "codex", "未知 id 登记被忽略")
+	# ③ 记录 → 存盘 → 清内存 → 读回一致
+	Game.mark_codex("enemies", "goblin")
+	Game.mark_codex("themes", "toxic")
+	Game.mark_codex("bosses", "skeleton_king")
+	Game.set_codex_last_run({"diamonds": 12, "kills": 34, "max_floor": 5, "time": 83.0, "score": 900})
+	var snap: Dictionary = Game.codex.duplicate(true)
+	for k in Game.CODEX_KINDS:
+		(Game.codex[k] as Array).clear()
+	Game.codex["last_run"] = {}
+	Game.load_codex()
+	Dev.check((Game.codex["enemies"] as Array).has("goblin")
+		and (Game.codex["themes"] as Array).has("toxic")
+		and (Game.codex["bosses"] as Array).has("skeleton_king"), "codex", "记录→存盘→读回一致")
+	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 5
+		and int(Game.codex["last_run"].get("kills", -1)) == 34, "codex", "上局复盘快照读回一致")
+	var same := true
+	for k in Game.CODEX_KINDS:
+		if (Game.codex[k] as Array) != (snap[k] as Array):
+			same = false
+	Dev.check(same, "codex", "读回与快照逐分类一致")
+	# ④ 负数钳制：负值读回为 0（防穿透）
+	Game.set_codex_last_run({"max_floor": -3, "kills": -7})
+	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
+		and int(Game.codex["last_run"].get("kills", -1)) == 0, "codex", "负数钳制 → 0")
+	print("[SMOKE-CODEX] done")
 
 
 func _nearest_enemy() -> Node2D:
