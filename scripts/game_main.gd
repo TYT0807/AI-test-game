@@ -19,6 +19,7 @@ const HudScript := preload("res://scripts/hud.gd")
 const DevOverlayScript := preload("res://scripts/dev_overlay.gd")
 const UpgradePanelScript := preload("res://scripts/upgrade_panel.gd")
 const PrismWardenScript := preload("res://scripts/boss.gd")
+const Boss2Script := preload("res://scripts/boss2.gd")
 const AllyScript := preload("res://scripts/ally.gd")
 
 var _ally: Node2D = null  # kindred 印记的协战水晶（每局重生成）
@@ -105,6 +106,11 @@ var _shot_idx := 0
 var _stall_last_kills := 0
 var _stall_t := 0.0
 var _scholar_floor_done := -1  # 博学印记：本层已发过首次清场奖励
+# E 灾祸层（Sprint 12 §6.3）：每层 15% 触发一个负面灾祸，本层生效、换层清除
+var _calamity := ""
+var _calamity_floor := -1
+var _calamity_saved_max_hp := 0
+var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
 
 
 func _ready() -> void:
@@ -172,6 +178,11 @@ func _ready() -> void:
 	add_child(menu)
 	apply_ui_settings()
 
+	# 验证钩（须在 start_run 之前：daily_mode 影响种子覆盖、calamity_forced 影响层数灾祸）
+	if _smoke and OS.get_environment("SMOKE_DAILY") != "":
+		Game.daily_mode = true
+	if _smoke and OS.get_environment("SMOKE_CALAMITY") != "":
+		_calamity_forced = true
 	start_run()
 
 	if _smoke:
@@ -317,6 +328,13 @@ func start_run() -> void:
 	_run_settled = false
 	_boost_ticked = false
 	Game.floor_num = 1
+	# D 每日挑战（Sprint 12 §6.2）：daily 模式在 rng 首抽前覆盖 seed（E1 零漂移——
+	# 同日期派生同 seed，整局可复现；run_seed 随之等于 daily_seed，指纹自然一致）
+	if Game.daily_mode:
+		Game.daily_seed = Game.daily_seed_for(Game.daily_key())
+		Game.rng.seed = Game.daily_seed
+		if OS.get_environment("SMOKE_DAILY") != "":
+			print("[SMOKE-DAILY] key=%s seed=%d" % [Game.daily_key(), Game.daily_seed])
 	# C 契约（Sprint 11 §四）：印记注入——必须在任何 Game.rng 绘制之前调用。
 	# 只改起始状态，不改 rng 消耗顺序：同 seed + 同印记 = 整局可复现（E1 零漂移）。
 	_apply_sigil_contract()
@@ -328,6 +346,9 @@ func start_run() -> void:
 	dungeon = DungeonClass.generate(1, frng, 7 + frng.randi_range(0, 2))
 	_smoke_fingerprint(1)
 	_roll_modifier()
+	# E 灾祸层（Sprint 12 §6.3）：在 modifier 之后滚（scarce_ore 的 diamond_mult
+	# 不会被 challenge factor 的重置抹掉）
+	_roll_calamity()
 	if OS.get_environment("SMOKE_RUN_START") != "":
 		print("[SMOKE-META] run start diamonds=%d taken=%d modifier=%s" % [
 			Game.diamonds, Upgrades.taken.size(), modifier])
@@ -347,6 +368,64 @@ func start_run() -> void:
 
 
 ## 每局开局抽 1 个挑战因子并应用（一利一弊）
+## E 灾祸层（Sprint 12 §6.3）：每层首次进入时 15% 触发一个负面灾祸（走既有 Game.rng 流），
+## 本层生效、换层清除；触发过灾祸的局，shards 结算 ×1.5（风险回报，game_state.settle_shards）
+func _roll_calamity() -> void:
+	_calamity = ""
+	var rolled := Game.rng.randf()
+	if not _smoke and not _calamity_forced and rolled > 0.15:
+		return
+	if Game.floor_num < 2:
+		return  # 第 1 层保底无灾祸（新手保护）
+	_calamity = ["frail", "frenzy", "scarce_ammo", "scarce_ore"][Game.rng.randi_range(0, 3)]
+	Game.calamity_floors.append(Game.floor_num)
+	_apply_calamity()
+	hud.flash_toast("灾祸降临：" + _calamity_name(_calamity))
+	hud.banner("灾祸 · " + _calamity_name(_calamity))
+	if _smoke or _calamity_forced:
+		print("[SMOKE-CALAMITY] floor=%d calamity=%s" % [Game.floor_num, _calamity])
+
+
+func _calamity_name(id: String) -> String:
+	match id:
+		"frail": return "虚弱（生命上限 -20%）"
+		"frenzy": return "狂乱（敌人加速 25%）"
+		"scarce_ammo": return "弹药荒（弹匣减半）"
+		"scarce_ore": return "贫矿（源石掉落 -30%）"
+	return id
+
+
+func _apply_calamity() -> void:
+	match _calamity:
+		"frail":
+			_calamity_saved_max_hp = player.max_hp
+			player.max_hp = maxi(2, int(player.max_hp * 0.8))
+			player.hp = mini(player.hp, player.max_hp)
+			player.hp_changed.emit(player.hp, player.max_hp)
+		"frenzy":
+			Game.calamity_speed_mult = 1.25
+		"scarce_ammo":
+			player.mag_cap_mult = 0.5
+			player.mag_changed.emit(player.mag(), player.mag_cap())
+		"scarce_ore":
+			if Game.main != null and is_instance_valid(Game.main):
+				Game.main.diamond_mult = minf(Game.main.diamond_mult, 0.7)
+
+
+## 换层清除：恢复灾祸改动的起始状态（frail 的 max_hp 用保存值精确还原）
+func _clear_calamity_effects() -> void:
+	if _calamity == "frail" and _calamity_saved_max_hp > 0 and is_instance_valid(player):
+		player.max_hp = _calamity_saved_max_hp
+		player.hp = mini(player.hp, player.max_hp)
+		player.hp_changed.emit(player.hp, player.max_hp)
+	Game.calamity_speed_mult = 1.0
+	if Game.main != null and is_instance_valid(Game.main):
+		Game.main.diamond_mult = 1.0
+	if is_instance_valid(player):
+		player.mag_cap_mult = 1.0
+	_calamity_saved_max_hp = 0
+
+
 func _roll_modifier() -> void:
 	modifier = Data.roll_modifier()
 	enemy_hp_mult = 1.0
@@ -856,6 +935,11 @@ func _is_warden_floor(n: int) -> bool:
 	return n > 4 and (n - 4) % 8 == 7
 
 
+## 主权层判定（Sprint 12 C）：每 16 层一次，与守望者（每 8 层）错开；命中时 Boss 房生成熔潮主宰
+func _is_sovereign_floor(n: int) -> bool:
+	return n > 4 and (n - 4) % 16 == 15
+
+
 func _pick_spawn_pos() -> Vector2:
 	for i in 10:
 		var p := player.global_position + Vector2.from_angle(Game.rng.randf() * TAU) * Game.rng.randf_range(230, 320)
@@ -968,7 +1052,19 @@ func _enter_room(coord: Vector2i, arrive_dir: Vector2i) -> void:
 					d.set_locked(false)
 			elif kind == "boss":
 				room_state = "combat"
-				if _is_warden_floor(Game.floor_num):
+				# 表外测试钩：SMOKE_FORCE_SOVEREIGN=1 强制当前 Boss 房出熔潮主宰（低层即可验证）
+				var sovereign := _is_sovereign_floor(Game.floor_num) \
+					or OS.get_environment("SMOKE_FORCE_SOVEREIGN") != ""
+				if sovereign:
+					# 主权层（每 16 层）：熔潮主宰优先（与守望者错开，Sprint 12 C）
+					_room_budget = 1
+					var boss2 := Boss2Script.new()
+					boss2.position = _arena_center() - Vector2(0, 120)
+					entities.add_child(boss2)
+					boss2.setup(Game.floor_num)
+					if _smoke:
+						print("[SMOKE-BOSS2] sovereign floor boss replaced: floor=%d" % Game.floor_num)
+				elif _is_warden_floor(Game.floor_num):
 					# 首领层（每 8 主题周期收尾）：棱镜守望者取代常规 Boss，
 					# 常规 SQUADS 抽取暂停（增援由 Boss 状态机独立控制，避免双重召唤）
 					_room_budget = 1
@@ -1149,6 +1245,7 @@ func next_floor() -> void:
 	_fade_to(func() -> void:
 		Game.floor_num = nf
 		Game.max_floor = maxi(Game.max_floor, nf)
+		_clear_calamity_effects()
 		_apply_floor_theme()
 		if nf >= 3:
 			_milestone("floor3")
@@ -1156,6 +1253,7 @@ func next_floor() -> void:
 		dungeon = DungeonClass.generate(nf, frng, 7 + nf)
 		_smoke_fingerprint(nf)
 		_enter_room(dungeon.current, Vector2i.ZERO)
+		_roll_calamity()
 		drop_pickup(_arena_center() + Vector2(0, 40), "heal")
 		if _smoke:
 			print("[SMOKE] === entered floor ", nf, " ===")
@@ -1930,6 +2028,9 @@ func _settle_meta() -> String:
 		return ""
 	# 地窖印记 shards 结算（Sprint 11 C）：floor(cleared × META_RATE)，纯确定性无 rng
 	var shard_gain := Game.settle_shards(Game.max_floor)
+	# D 每日挑战：记录当日最佳（层数优先，同层比时间）
+	if Game.daily_mode:
+		Game.record_daily_best(Game.max_floor, Game.time)
 	if _smoke:
 		print("[SMOKE-SIGIL] shards +%d balance=%d" % [shard_gain, int(Game.sigils["shards"])])
 	var stats := _run_stats()

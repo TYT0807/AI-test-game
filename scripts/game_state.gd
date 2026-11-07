@@ -131,6 +131,8 @@ func reset() -> void:
 	run_diamonds_earned = 0
 	meta_spent = 0
 	_reso_pickups = 0
+	calamity_speed_mult = 1.0
+	calamity_floors.clear()
 	# 注意：这里绝不能碰 meta —— 局外进度跨局保留
 	diamonds_changed.emit(diamonds)
 	reset_fx_rng()
@@ -260,9 +262,12 @@ func save_sigils() -> void:
 	cfg.save(sigil_path())
 
 
-## 局末结算：shards += floor(cleared × META_RATE)，纯确定性（无 rng）
+## 局末结算：shards += floor(cleared × META_RATE)，纯确定性（无 rng）；
+## 本局触发过灾祸 → ×1.5 风险回报（Sprint 12 §6.3）
 func settle_shards(cleared_floors: int) -> int:
 	var n := int(maxi(cleared_floors, 0) * META_RATE)
+	if calamity_floors.size() > 0:
+		n = int(n * 1.5)
 	sigils["shards"] = int(sigils["shards"]) + n
 	save_sigils()
 	return n
@@ -272,6 +277,52 @@ func settle_shards(cleared_floors: int) -> int:
 func add_shards(n: int) -> void:
 	sigils["shards"] = int(sigils["shards"]) + maxi(n, 0)
 	save_sigils()
+
+
+# ---------------- D 每日挑战（Sprint 12 §6.2）----------------
+## daily_seed = hash(YYYYMMDD) 派生，run 启动时在 rng 首抽前覆盖 seed（E1 零漂移）；
+## 本地榜 user://daily.cfg 独立持久（同 sigils 范式）。
+var daily_mode := false
+var daily_seed := 0
+const DAILY_PATH := "user://daily.cfg"
+
+
+func daily_key() -> String:
+	var d := Time.get_date_dict_from_system()
+	return "%04d%02d%02d" % [d.year, d.month, d.day]
+
+
+func daily_seed_for(key: String) -> int:
+	return absi(int(hash(key))) % 2147483647
+
+
+## 击败/通关时记录当日最佳（层数优先，同层比时间）
+func record_daily_best(layers: int, time_sec: float) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(DAILY_PATH)
+	var k := daily_key()
+	var prev_layers := int(cfg.get_value("daily", k + "_layers", 0))
+	var prev_time := float(cfg.get_value("daily", k + "_time", 0.0))
+	var better := layers > prev_layers or (layers == prev_layers and (prev_time <= 0.0 or time_sec < prev_time))
+	if better:
+		cfg.set_value("daily", k + "_layers", layers)
+		cfg.set_value("daily", k + "_time", time_sec)
+		cfg.save(DAILY_PATH)
+
+
+func daily_best_today() -> Dictionary:
+	var cfg := ConfigFile.new()
+	cfg.load(DAILY_PATH)
+	var k := daily_key()
+	return {"layers": int(cfg.get_value("daily", k + "_layers", 0)),
+		"time": float(cfg.get_value("daily", k + "_time", 0.0))}
+
+
+# ---------------- E 灾祸层（Sprint 12 §6.3）----------------
+## 每层 15% 触发一个负面灾祸（走既有 Game.rng 流），换取 shards 结算 ×1.5。
+## 效果以全局系数/标志落地（calamity_speed_mult 等），本层生效、换层清除。
+var calamity_speed_mult := 1.0   # frenzy：敌人移速 ×1.25
+var calamity_floors: Array = []  # 触发过灾祸的层号（结算 ×1.5 判定）
 
 
 ## 解锁印记：余额足够则扣 shards 并永久解锁

@@ -12,6 +12,9 @@ const INTRO_DUR := 1.6
 const SHIELD_RADIUS := 64.0
 const DYING_DUR := 1.2
 const ToxicCloudScript := preload("res://scripts/toxic_cloud.gd")
+## 脉冲间隔参数化（C/boss2 覆写为更密节奏）；名字供 DUMP/结算区分
+var skill_interval := 3.0
+var boss_name := "棱镜守望者"
 
 enum St { INTRO, ACTIVE, PHASE_2, PHASE_3, DYING }
 
@@ -148,9 +151,9 @@ func _tick_combat(dt: float) -> void:
 		_strafe_dir = Vector2.from_angle(Game.rng.randf() * TAU)
 	velocity = (dir + _strafe_dir * 0.45).normalized() * speed
 
-	# 签名脉冲：每 BOSS_SKILL_INTERVAL 按当前阶段主题从 Boss 位置扩环（复用 F4 机制）
+	# 签名脉冲：每 skill_interval 按当前阶段主题从 Boss 位置扩环（复用 F4 机制）
 	boss_cd_accum += dt
-	if boss_cd_accum >= BOSS_SKILL_INTERVAL:
+	if boss_cd_accum >= skill_interval:
 		boss_cd_accum = 0.0
 		var idx := 0 if st == St.ACTIVE else (1 if st == St.PHASE_2 else 2)
 		_pulse_theme(String(_phase_rules[idx]), idx)

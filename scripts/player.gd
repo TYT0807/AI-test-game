@@ -66,6 +66,7 @@ var harvester_active := false  # 丰收：击杀额外 +1 源石
 var sigil_ward := false        # 守护：Boss 房受伤 -20%
 var scholar_active := false    # 博学：每层首次清场 +2 地窖碎片
 var dash_boost_mult := 1.0     # 疾行：冲刺距离/无敌帧倍率
+var mag_cap_mult := 1.0        # 灾祸·弹药荒：弹匣容量系数（0.5，换层恢复）
 var rate_buff_mult := 1.0      # 回响击败增益：攻速临时倍率（_tick_buffs 每帧复位）
 # 回响镜像源：玩家轨迹缓冲（echo AI 读取；0.1s 采样 × 30 = 3 秒）
 var trail: Array[Vector2] = []
@@ -162,7 +163,7 @@ func cur_def() -> Dictionary:
 
 
 func mag_cap() -> int:
-	return int(cur_def()["mag"]) + mag_bonus
+	return maxi(1, int((int(cur_def()["mag"]) + mag_bonus) * mag_cap_mult))
 
 
 func mag() -> int:

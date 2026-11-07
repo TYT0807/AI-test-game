@@ -116,13 +116,27 @@ func _build_main_page() -> void:
 	tag.add_theme_font_size_override("font_size", 15)
 	tag.add_theme_color_override("font_color", Color(0.58, 0.56, 0.63))
 	left.add_child(tag)
+	# D 每日挑战：当日最佳（有记录才显示）
+	var best: Dictionary = Game.daily_best_today()
+	if int(best.get("layers", 0)) > 0:
+		var best_label := Label.new()
+		var bt := int(best.get("time", 0.0))
+		best_label.text = "今日最佳：第 %d 层 · %02d:%02d" % [int(best["layers"]), int(bt / 60.0), bt % 60]
+		best_label.add_theme_font_size_override("font_size", 13)
+		best_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.95))
+		left.add_child(best_label)
 
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 14)
 	right.custom_minimum_size = Vector2(268, 0)
 	right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hbox.add_child(right)
-	_add_main_button(right, "开始游戏", "diamond", func() -> void: start_game(), true)
+	_add_main_button(right, "开始游戏", "diamond", func() -> void:
+		Game.daily_mode = false
+		start_game(), true)
+	_add_main_button(right, "每日挑战", "icon_suffix", func() -> void:
+		Game.daily_mode = true
+		start_game(), false)
 	_add_main_button(right, "印记", "icon_suffix", func() -> void: show_page("sigils", "main"), false)
 	_add_main_button(right, "解锁", "icon_pierce", func() -> void: show_page("unlocks", "main"), false)
 	_add_main_button(right, "设置", "icon_guard", func() -> void: show_page("settings", "main"), false)

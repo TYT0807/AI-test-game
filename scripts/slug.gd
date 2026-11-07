@@ -229,7 +229,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _move_with(dir: Vector2, mult: float) -> void:
-	velocity = dir * speed * Game.enemy_speed_mult * _slow_mult * mult + _knock
+	velocity = dir * speed * Game.enemy_speed_mult * Game.calamity_speed_mult * _slow_mult * mult + _knock
 
 
 ## F3 拆弹：范围内最近的玩家炸弹
