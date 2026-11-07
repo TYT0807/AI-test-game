@@ -233,6 +233,9 @@ func _check_codex() -> void:
 		var some_sid: String = String(Data.RELIC_SUFFIXES.keys()[0])
 		if not Game._codex_id_valid("suffixes", some_sid):
 			problems.append("codex 校验器误拒合法词缀 id：%s" % some_sid)
+	# 图标登记断言：PNG 已生成但 GEN_NAMES 漏登记 = Assets.g() 返回 null → 静默白框（核验 🟡 修复）
+	if Assets.g("icon_codex") == null:
+		problems.append("icon_codex 已生成但未登记 GEN_NAMES（Assets.g 返回 null → 主菜单图鉴按钮静默白框）")
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。

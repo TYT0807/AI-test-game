@@ -125,6 +125,8 @@ const GEN_NAMES := [
 	"icon_pierce", "icon_crit", "wpn_swarm", "wpn_arc",
 	# Sprint 11：反应词缀拾取标记（F2/A）
 	"icon_suffix",
+	# Sprint 13 C：地窖图鉴按钮图标（生成与登记必须成对——见上「静默白框」注释）
+	"icon_codex",
 	# Sprint 11 B：棱镜守望者（核心墨黑 + 绕转碎片 + 死亡碎裂，碎片色运行期按主题 tint）
 	"boss_prism_core", "boss_prism_shard", "boss_prism_death_shard",
 ]

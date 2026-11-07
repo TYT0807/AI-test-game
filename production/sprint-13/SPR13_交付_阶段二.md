@@ -27,6 +27,13 @@
 ## UI
 
 - 主菜单 +「图鉴」按钮（icon_codex 新像素图标，gen_assets 确定性生成）+ `codex` 页：**上局复盘**行（最深/击杀/源石/用时/得分）+ 五个分区（已遇敌人/已击败 Boss/已发现遗物/已获词缀/已历主题，X/Y 计数 + 发现名单、空态灰字）——**只读平行页，不读不写 `meta.gd UNLOCKS`**（冻结规格 v2.10）
+
+## 核验修复批（主理人 🟡：图标未登记 → 按钮静默白框）
+
+- **根因**：`icon_codex.png` 已生成入库，但 `assets.gd GEN_NAMES` 漏登记 → `Assets.g("icon_codex")` 返回 null → `meta_icon()` 兜底落空 → 主菜单图鉴按钮退化为纯文字（`assets.gd:124` 既有注释正是此坑；Sprint 12 #6 同款「生成了没登记」）
+- **修复**：`GEN_NAMES` 追加 `"icon_codex"`（仅此一行，`ACTION_DEFS` 未动）；`validate._check_codex` 补启动期断言 `Assets.g("icon_codex") != null`——「生成与登记必须成对」从此当场报错不靠人眼
+- **回归**：启动自检 0 problems（断言绿）、SMOKE_CODEX 探针 done、冻结重定 `md5sum -c` **33/33 OK**（assets.gd/validate.gd 两条目重算，无新脚本）
+- 四条低优先观察在册不返工（bosses 校验器未收窄 / load_codex 钳制断言未覆盖 / relics 口径待产品确认 / last_run 无键白名单）；Boss 覆盖范围注记已裁定接受
 - 结算覆盖层（hud.game_over）：_stats_label 追加「本局复盘 · 最深 N 层 · 源石 X」行（STATS_KEYS 内数据）
 
 ## 验证（全部实跑）

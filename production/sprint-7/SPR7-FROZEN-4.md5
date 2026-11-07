@@ -5,12 +5,12 @@
 558c85f4c8630830a36bf71b9ef2ecb1 *scripts/upgrades.gd
 5aa28e9bc4c9592d07bc00bd693d1259 *scripts/toxic_cloud.gd
 63b716c5fd064f93bcd7bb5b3391d2f1 *scripts/shop_stand.gd
+6606641119a0bfb58121ebd8c28146d4 *scripts/validate.gd
 6a17cd2898825541876254240b392381 *scripts/pickup.gd
 7eeafed26f5f0478aaef5025bb2a7057 *scripts/secret_wall.gd
 84d93d4bdd3403d83cc5583e7b7a4e8d *scripts/bullet.gd
 86c9466a751c0b932db142ae2626c891 *scripts/ally.gd
 8a6e78d8e4ea3e6bca8af97124ef288b *scripts/turret.gd
-8c14c1629197c18ed1f5c04893683998 *scripts/validate.gd
 91528d62275ebf5eb9f9ea9e1db7e4d0 *scripts/hud.gd
 92242d0669a7eadbf2aec2376928e6a3 *scripts/merchant.gd
 9248ff72854c353576134c1979b844ab *scripts/explosion.gd
@@ -23,7 +23,6 @@ d2075ce497923e9d871dc9cd2b18900b *scripts/data.gd
 dae73db19770c0a8fb3c53fe8bed8cd3 *scripts/relics.gd
 daf2935f4945f29fa163e0fbd1796ecb *scripts/upgrade_panel.gd
 dd4d872610243243f50b5b638581866f *scripts/crate.gd
-dfb1de9620c3118c9312292004abbbcf *scripts/assets.gd
 e02b98d5b9710cea2dffa014c637a3fe *scripts/slug.gd
 e08a82062bf73d305d5bd8f2c1008f8a *scripts/dungeon.gd
 e2a5c4514c9072b0ad2a64b22c514155 *scripts/menu.gd
@@ -31,3 +30,4 @@ e8267ccbe785ee3b701b47d79ace28fb *scripts/player.gd
 f02ab801070a1bf16efdf5c22bc0773c *scripts/game_state.gd
 f1ea5536bbd550e09e9d5e89d64f57fb *scripts/meta.gd
 fa7acbc36e849a88aad52b2b084a6986 *scripts/bomb.gd
+fc39f9622db5ce44971f713b53891aaa *scripts/assets.gd
