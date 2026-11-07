@@ -25,6 +25,9 @@ const SFX := {
 	"boss_intro": preload("res://resources/audio/Cowboy_Secret.wav"),
 	"boss_phase": preload("res://resources/audio/cowboy_powerup.wav"),
 	"boss_skill": preload("res://resources/audio/cowboy_gunload.wav"),
+	# Sprint 13 E：圣所 / 灾祸事件别名（同口径复用既有 wav）
+	"shrine": preload("res://resources/audio/Cowboy_Secret.wav"),
+	"calamity": preload("res://resources/audio/cowboy_explosion.wav"),
 }
 
 const MUSIC := [

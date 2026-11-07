@@ -18,6 +18,7 @@ const ShopStandScript := preload("res://scripts/shop_stand.gd")
 const HudScript := preload("res://scripts/hud.gd")
 const DevOverlayScript := preload("res://scripts/dev_overlay.gd")
 const UpgradePanelScript := preload("res://scripts/upgrade_panel.gd")
+const ShrinePanelScript := preload("res://scripts/shrine_panel.gd")
 const PrismWardenScript := preload("res://scripts/boss.gd")
 const Boss2Script := preload("res://scripts/boss2.gd")
 const AllyScript := preload("res://scripts/ally.gd")
@@ -52,6 +53,7 @@ var turret: Node2D
 var entities: Node2D
 var hud: CanvasLayer
 var upgrade_panel: CanvasLayer
+var shrine_panel: CanvasLayer
 var camera: Camera2D
 var world_mod: CanvasModulate = null  # 弃用：兼容渲染器下会把世界压暗，改用 fx_rect
 var _pcam: Node2D
@@ -154,6 +156,9 @@ func _ready() -> void:
 	upgrade_panel = UpgradePanelScript.new()
 	add_child(upgrade_panel)
 	upgrade_panel.chosen.connect(_on_upgrade_chosen)
+	shrine_panel = ShrinePanelScript.new()
+	add_child(shrine_panel)
+	shrine_panel.chosen.connect(_on_shrine_chosen)
 
 	Game.level_reached.connect(_on_level_up)
 
@@ -386,6 +391,7 @@ func _roll_calamity() -> void:
 	_apply_calamity()
 	hud.flash_toast("灾祸降临：" + _calamity_name(_calamity))
 	hud.banner("灾祸 · " + _calamity_name(_calamity))
+	Game.sfx("calamity", 0.9, -6.0)   # Sprint 13 E：灾祸事件音（assets.gd 别名，复用既有 wav）
 	if _smoke or _calamity_forced:
 		print("[SMOKE-CALAMITY] floor=%d calamity=%s" % [Game.floor_num, _calamity])
 
@@ -1053,7 +1059,7 @@ func _enter_room(coord: Vector2i, arrive_dir: Vector2i) -> void:
 	_spawn_decor()
 
 	match kind:
-		"start", "treasure", "shop", "secret", "super_secret":
+		"start", "treasure", "shop", "secret", "super_secret", "shrine":
 			room_state = "cleared"
 			for d in _doors:
 				d.set_locked(false)
@@ -1128,6 +1134,12 @@ func _enter_room(coord: Vector2i, arrive_dir: Vector2i) -> void:
 				m.position = _arena_center() + Vector2(0, -58)
 				entities.add_child(m)
 			hud.banner("商店 · 按 E 购买")
+		"shrine":
+			# 选定后 cleared=true → 重进置 skip_loot 不再出面板（宝箱/商店同范式）；
+			# 未选可自由离开，重进重开面板（门不锁的非战斗房语义）
+			if not info.get("skip_loot", false):
+				hud.banner("抉择圣所 —— 三选其一")
+				_open_shrine(coord)
 		"secret":
 			if not info.get("skip_loot", false):
 				drop_pickup(_arena_center(), "chest_big")
@@ -1697,9 +1709,9 @@ func on_slug_killed(slug) -> void:
 	# 丰收印记：击杀额外 +1 源石
 	if is_instance_valid(player) and player.harvester_active:
 		drop_pickup(slug.global_position, "diamond", 1)
-	# 回响击败增益：2s 攻速提升（规划 §5.2）
+	# 回响击败增益：2s 攻速提升（规划 §5.2；数值 Sprint 13 E 提为 Data.ECHO_TUNING）
 	if slug.variant == "echo":
-		player.buff("echo_rate", 1.35, 2.0)
+		player.buff("echo_rate", float(Data.ECHO_TUNING["buff_mult"]), float(Data.ECHO_TUNING["buff_time"]))
 		if _smoke:
 			print("[SMOKE-ECHO] echo slain → echo_rate buff 2s")
 	# F2/A 反应词缀掉落：精英/Boss 必掉，普通怪 6%（抽取走 Game.rng 掉落循环——
@@ -1887,6 +1899,122 @@ func _on_upgrade_chosen(id: String) -> void:
 	if _smoke:
 		print("[SMOKE] upgrade picked: ", id)
 	Game.sfx("powerup", 1.1)
+
+
+## ---------------- Sprint 13 A 抉择圣所 ----------------
+
+var _shrine_coord := Vector2i.ZERO   # 当前圣所房坐标（选择回写 cleared 用）
+var _shrine_offers: Array = []       # 本圣所房的三卡（stable_hash 派生，见 §4.5）
+
+
+## 三卡选项集：stable_hash 纯派生（同 seed+同层+同坐标 = 同三选一），零 Game.rng 消费。
+## 奖励执行复用既有接口（Relics.roll / Upgrades.roll 属玩家驱动的既有 rng 路径，
+## 不新建 rng 流，已登记交付文档 §4.5 口径）
+## 表按 id 键存（同 RELIC_SUFFIXES 范式）；流动中的 offer 一律带 id 字段（面板/执行/探针统一）
+func _shrine_entry(id: String) -> Dictionary:
+	var e: Dictionary = (Data.SHRINE_OFFERS[id] as Dictionary).duplicate()
+	e["id"] = id
+	return e
+
+
+func _shrine_offers_for(coord: Vector2i) -> Array:
+	var pool: Array = []
+	for id in Data.SHRINE_OFFERS:
+		var o: Dictionary = Data.SHRINE_OFFERS[id]
+		if Game.floor_num < int(o.get("min_floor", 3)):
+			continue
+		if String(id) == "purify" and _calamity == "":
+			continue   # 无灾祸层不出现净化（§4.6）
+		pool.append(_shrine_entry(String(id)))
+	if pool.size() < 3:
+		return []   # 空池护栏：floor<3 / 过滤后不足三张（房型门槛已挡住正常流程，探针兜底）
+	var key := "%d_%d_%d" % [Game.run_seed, Game.floor_num, coord.x * 1000 + coord.y]
+	var picks: Array = []
+	var used := {}
+	for i in 3:
+		var idx: int = Game.stable_hash("%s#%d" % [key, i]) % pool.size()
+		while used.has(idx):   # 线性探查取不重复索引（pool >= 3 恒可解）
+			idx = (idx + 1) % pool.size()
+		used[idx] = true
+		picks.append(pool[idx])
+	return picks
+
+
+## 代价可支付校验（不足 → 卡置灰不可选：防负数 / 防 max_hp 扣死——§4.6）
+func _shrine_affordable(offer: Dictionary) -> bool:
+	match String(offer.get("cost_kind", "")):
+		"diamonds":
+			return Game.diamonds >= int(offer["cost"])
+		"max_hp":
+			return player.max_hp - int(offer["cost"]) >= 1
+		"score":
+			return Game.score >= int(offer["cost"])
+	return true
+
+
+func _open_shrine(coord: Vector2i) -> void:
+	_shrine_coord = coord
+	_shrine_offers = _shrine_offers_for(coord)
+	_milestone("first_shrine")
+	Game.sfx("shrine")
+	shrine_panel.autopilot = _smoke
+	shrine_panel.open(_shrine_offers)
+	if _smoke:
+		var ids := []
+		for o in _shrine_offers:
+			ids.append(String(o["id"]))
+		print("[SMOKE-SHRINE] floor=%d coord=%s offers=%s" % [Game.floor_num, coord, str(ids)])
+
+
+## 效果 + 代价执行（探针与面板选择走同一入口；先效果后代价，顺序无 rng 影响）
+func _shrine_execute(offer: Dictionary) -> void:
+	match String(offer["id"]):
+		"blood_relic":
+			drop_pickup(_arena_center(), "relic", 1, Relics.roll(1)[0]["id"])
+		"ore_upgrade":
+			upgrade_panel.show_choices(Upgrades.roll(3))
+		"purify":
+			# 代价即「×1.5 结算加成作废」：剔除当层后灾祸状态条件还原（§4.1）
+			Game.calamity_floors.erase(Game.floor_num)
+			_calamity = ""
+			_clear_calamity_effects()
+		"ward_boon":
+			player.shield_charges += 1
+		"heal":
+			player.heal(2)
+		"relic_suffix":
+			player.attach_suffix(_shrine_suffix_pick())
+	match String(offer.get("cost_kind", "")):
+		"diamonds":
+			Game.add_diamonds(-int(offer["cost"]))
+		"max_hp":
+			player.max_hp = maxi(1, player.max_hp - int(offer["cost"]))
+			player.hp = mini(player.hp, player.max_hp)
+			player.hp_changed.emit(player.hp, player.max_hp)
+		"score":
+			Game.add_score(-int(offer["cost"]))
+
+
+## 铭刻词缀确定性选取（同 key 同词缀——与三卡同源 stable_hash 派生，零 rng）
+func _shrine_suffix_pick() -> String:
+	var sids: Array = Data.RELIC_SUFFIXES.keys()
+	sids.sort()
+	var skey := "%d_%d_%d" % [Game.run_seed, Game.floor_num,
+		_shrine_coord.x * 1000 + _shrine_coord.y]
+	return String(sids[Game.stable_hash("suffix_" + skey) % sids.size()])
+
+
+func _on_shrine_chosen(index: int) -> void:
+	if index < 0 or index >= _shrine_offers.size():
+		return
+	var offer: Dictionary = _shrine_offers[index]
+	if not _shrine_affordable(offer):
+		return   # 置灰卡不生效（面板已拦，此处双保险）
+	_shrine_execute(offer)
+	dungeon.rooms[_shrine_coord]["cleared"] = true   # 重进置 skip_loot，不重复扣/发
+	Game.sfx("powerup", 1.1)
+	if _smoke:
+		print("[SMOKE-SHRINE] chose=%s coord=%s" % [String(offer["id"]), _shrine_coord])
 
 
 func give_player_weapon(id: String) -> void:

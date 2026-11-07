@@ -130,6 +130,20 @@ static func generate(floor_num: int, rng: RandomNumberGenerator, count: int) -> 
 	if combat_rooms.size() >= 3 and rng.randf() < 0.8:
 		var pick: Vector2i = combat_rooms[rng.randi_range(0, combat_rooms.size() - 1)]
 		d.rooms[pick]["kind"] = "challenge"
+
+	# ---- 抉择圣所（Sprint 13 A）：每层从剩余战斗房确定性挑 1 间（floor>=3）----
+	# 零 rng 消费：按坐标序取首个——同 seed 同布局同圣所位（E1 §4.5，不新增 rng 流）；
+	# 只改 kind，房间坐标与总数不变；_smoke_fingerprint 因 kind 变化重定（预期代价，已登记）
+	if floor_num >= 3:
+		var shrine_pool: Array[Vector2i] = []
+		for c in d.rooms:
+			if c != Vector2i.ZERO and d.rooms[c]["kind"] == "combat" \
+					and d.neighbors(c).size() > 1:
+				shrine_pool.append(c)
+		if not shrine_pool.is_empty():
+			shrine_pool.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+				return a.x * 1000 + a.y < b.x * 1000 + b.y)
+			d.rooms[shrine_pool[0]]["kind"] = "shrine"
 	return d
 
 

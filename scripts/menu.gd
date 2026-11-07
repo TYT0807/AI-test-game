@@ -33,6 +33,15 @@ func _ready() -> void:
 	_shade.color = Color(0.05, 0.04, 0.07, 0.93)
 	_shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(_shade)
+	# Sprint 13 E：地窖背景板（art 预留兑现，纯表现层——遮罩之上、内容层之下）
+	var bg := TextureRect.new()
+	bg.texture = load("res://resources/texture/generated/cellar_bg.png")
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.modulate = Color(0.62, 0.62, 0.72, 0.5)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(bg)
 	_center = VBoxContainer.new()
 	_center.set_anchors_preset(Control.PRESET_CENTER)
 	_center.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -295,6 +304,7 @@ func _build_settings() -> void:
 	_add_toggle("精简 HUD", "compact_hud")
 	_add_option("分辨率", "resolution", Game.RESOLUTION_PRESETS, Game.RESOLUTION_PRESETS)
 	_add_option("窗口模式", "window_mode", [0, 1, 2], Game.WINDOW_MODES)
+	_add_option("HUD 字号", "ui_font", ["0", "1", "2"], ["小", "标准", "大"])
 	_add_binding_section()
 
 

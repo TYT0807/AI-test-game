@@ -47,9 +47,10 @@ var combo_t := 0.0
 ## 本局已播报的里程碑 id（每条只播一次）
 var milestones := {}
 ## 玩家设置：master/bgm/sfx 音量、shake 震动强度、compact_hud 精简 HUD、
-## resolution（"宽x高"，仅窗口模式生效）、window_mode（0 窗口 / 1 全屏 / 2 无边框）
+## resolution（"宽x高"，仅窗口模式生效）、window_mode（0 窗口 / 1 全屏 / 2 无边框）、
+## ui_font（Sprint 13 E HUD 字号档："0" 小 / "1" 标准 / "2" 大——hud 构建时折算 _font_scale）
 var settings := {"master": 1.0, "bgm": 0.8, "sfx": 0.9, "shake": 1.0, "compact_hud": false,
-	"resolution": "1280x720", "window_mode": 0}
+	"resolution": "1280x720", "window_mode": 0, "ui_font": "1"}
 ## 分辨率预设（16:9，与视口拉伸架构解耦——内容按 canvas_items 恒定 1280x720 逻辑分辨率缩放）
 const RESOLUTION_PRESETS := ["1280x720", "1600x900", "1920x1080", "2560x1440"]
 const WINDOW_MODES := ["窗口", "全屏", "无边框全屏"]

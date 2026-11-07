@@ -4,7 +4,7 @@ extends Node
 
 const KNOWN_AI := ["chase", "spitter", "bomber", "boss", "leap", "summon", "erratic", "turret", "echo"]
 const KNOWN_ATLAS := ["slug", "enemy2"]
-const KNOWN_ROOM_KINDS := ["start", "combat", "elite", "treasure", "shop", "boss", "secret", "super_secret", "challenge", "cursed"]
+const KNOWN_ROOM_KINDS := ["start", "combat", "elite", "treasure", "shop", "boss", "secret", "super_secret", "challenge", "cursed", "shrine"]
 ## HUD 状态图标 key：与 Upgrades 里 guard/chain/venom 对应
 const STATUS_ICON_KEYS := ["guard", "chain", "venom"]
 ## 面板有特殊映射的图标 key（upgrade_panel._icon_for 走专用贴图），不按 generated/图集校验
@@ -14,6 +14,7 @@ const AI_PARAM_KEYS := ["ai_range", "ai_cd", "ai_burst", "ai_spread", "ai_bullet
 	"ai_bullet_dmg", "ai_keep", "ai_dash", "ai_dash_time", "ai_n", "ai_sway", "ai_sway_amp"]
 ## autoload 解析期看不到全局类名，用 preload 取升级池
 const UPGRADES := preload("res://scripts/upgrades.gd")
+const DungeonClass := preload("res://scripts/dungeon.gd")
 ## 局外 meta 层（解锁树表 + 最小可用条目数）
 const META := preload("res://scripts/meta.gd")
 ## 掉落/奖励池静态校验用（_check_payload_refs）
@@ -49,6 +50,7 @@ func run() -> Array:
 	_check_squads()
 	_check_active_relics()
 	_check_suffixes()
+	_check_shrine()
 	_check_scripts_compile()
 	if OS.get_environment("SMOKE_V8") != "":
 		_v8_probe()
@@ -176,6 +178,41 @@ func _check_suffixes() -> void:
 			problems.append("词缀 %s effect 未知：%s" % [sid, s.get("effect", "")])
 		if float(s.get("cd", 0)) <= 0.0:
 			problems.append("词缀 %s 冷却非法" % sid)
+
+
+## Sprint 13 A：圣所表自洽（id 唯一 / 代价类型合法 / min_floor 有值 / 房型+里程碑登记）
+func _check_shrine() -> void:
+	var seen := {}
+	var legal_costs := ["", "diamonds", "max_hp", "score"]
+	for id in Data.SHRINE_OFFERS:
+		if seen.has(id):
+			problems.append("SHRINE_OFFERS 重复 id：%s" % id)
+		seen[id] = true
+		var o: Dictionary = Data.SHRINE_OFFERS[id]
+		if not legal_costs.has(String(o.get("cost_kind", ""))):
+			problems.append("圣所 %s 代价类型非法：%s" % [id, o.get("cost_kind", "")])
+		if int(o.get("cost", 0)) < 0:
+			problems.append("圣所 %s 代价为负" % id)
+		if int(o.get("min_floor", 0)) < 1:
+			problems.append("圣所 %s 缺 min_floor" % id)
+	if not Data.ROOM_META.has("shrine"):
+		problems.append("shrine 房型缺 ROOM_META 元信息")
+	if not Data.MILESTONES.has("first_shrine"):
+		problems.append("缺 first_shrine 里程碑文案")
+	# 圣所分配确定性抽查：floor>=3 每层恰 1 间 shrine、floor<3 无（Sprint 13 A；
+	# 本地 rng 固定种子，不消费 Game.rng——E1 零影响）
+	var drng := RandomNumberGenerator.new()
+	drng.seed = 20261107
+	for fn in [1, 2, 3, 5, 9]:
+		var d := DungeonClass.generate(fn, drng, 9)
+		var n := 0
+		for c in d.rooms:
+			if String(d.rooms[c].get("kind", "")) == "shrine":
+				n += 1
+		if fn < 3 and n != 0:
+			problems.append("floor %d 不应有圣所（实得 %d 间）" % [fn, n])
+		if fn >= 3 and n != 1:
+			problems.append("floor %d 应恰 1 间圣所（实得 %d 间）" % [fn, n])
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。

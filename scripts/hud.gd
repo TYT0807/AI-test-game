@@ -62,9 +62,19 @@ var _meta_panel: PanelContainer
 var _compact := false
 
 
+## Sprint 13 E：HUD 字号档（设置页 ui_font：0=小 0.85 / 1=标准 1.0 / 2=大 1.2）。
+## HUD 每局构建时读取一次（菜单改档 → 下局生效）；全部字号经 _fs 折算，最小 9px 兜底
+var _font_scale := 1.0
+
+
+func _fs(n: int) -> int:
+	return maxi(9, int(round(n * _font_scale)))
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	layer = 10
+	_font_scale = [0.85, 1.0, 1.2][clampi(int(Game.settings.get("ui_font", 1)), 0, 2)]
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -100,7 +110,7 @@ func _ready() -> void:
 	_style_bar(_xp_bar, Color("4c9db0"))
 	vb.add_child(_xp_bar)
 	_hp_label = Label.new()
-	_hp_label.add_theme_font_size_override("font_size", 12)
+	_hp_label.add_theme_font_size_override("font_size", _fs(12))
 	vb.add_child(_hp_label)
 
 	var res_row := HBoxContainer.new()
@@ -113,7 +123,7 @@ func _ready() -> void:
 	_diamond_label = Label.new()
 	res_row.add_child(_diamond_label)
 	_score_label = Label.new()
-	_score_label.add_theme_font_size_override("font_size", 14)
+	_score_label.add_theme_font_size_override("font_size", _fs(14))
 	res_row.add_child(_score_label)
 
 	# ---- 右上：时间/击杀/波次 ----
@@ -135,7 +145,7 @@ func _ready() -> void:
 	_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_banner.offset_top = 64.0
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_banner.add_theme_font_size_override("font_size", 30)
+	_banner.add_theme_font_size_override("font_size", _fs(30))
 	_banner.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_banner.add_theme_constant_override("outline_size", 8)
 	_banner.modulate.a = 0.0
@@ -152,7 +162,7 @@ func _ready() -> void:
 	var boss_name := Label.new()
 	boss_name.text = "巨岩虫之王"
 	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_name.add_theme_font_size_override("font_size", 13)
+	boss_name.add_theme_font_size_override("font_size", _fs(13))
 	_boss_box.add_child(boss_name)
 	_boss_bar = ProgressBar.new()
 	_boss_bar.custom_minimum_size = Vector2(0, 10)
@@ -166,7 +176,7 @@ func _ready() -> void:
 	_combo.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_combo.offset_right = -36.0
 	_combo.offset_top = 200.0
-	_combo.add_theme_font_size_override("font_size", 22)
+	_combo.add_theme_font_size_override("font_size", _fs(22))
 	_combo.add_theme_color_override("font_color", Color(1.0, 0.7, 0.3))
 	_combo.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_combo.add_theme_constant_override("outline_size", 6)
@@ -181,7 +191,7 @@ func _ready() -> void:
 	_hint_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_hint_label.offset_bottom = -12.0
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_hint_label.add_theme_font_size_override("font_size", 14)
+	_hint_label.add_theme_font_size_override("font_size", _fs(14))
 	_hint_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_hint_label.add_theme_constant_override("outline_size", 5)
 	root.add_child(_hint_label)
@@ -202,30 +212,30 @@ func _ready() -> void:
 	_gameover_box = go["box"]
 	_stats_label = Label.new()
 	_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_stats_label.add_theme_font_size_override("font_size", 18)
+	_stats_label.add_theme_font_size_override("font_size", _fs(18))
 	_gameover_box.add_child(_stats_label)
 	# G9 结算 5 行：结晶行是唯一高亮，累计 / 解锁物行灰色
 	_crystal_label = Label.new()
 	_crystal_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_crystal_label.add_theme_font_size_override("font_size", 20)
+	_crystal_label.add_theme_font_size_override("font_size", _fs(20))
 	_crystal_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.42))
 	_gameover_box.add_child(_crystal_label)
 	_balance_label = Label.new()
 	_balance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_balance_label.add_theme_font_size_override("font_size", 16)
+	_balance_label.add_theme_font_size_override("font_size", _fs(16))
 	_balance_label.add_theme_color_override("font_color", Color(0.72, 0.72, 0.78))
 	_gameover_box.add_child(_balance_label)
 	_unlock_label = Label.new()
 	_unlock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_unlock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_unlock_label.custom_minimum_size = Vector2(420, 0)
-	_unlock_label.add_theme_font_size_override("font_size", 16)
+	_unlock_label.add_theme_font_size_override("font_size", _fs(16))
 	_unlock_label.add_theme_color_override("font_color", Color(0.72, 0.72, 0.78))
 	_gameover_box.add_child(_unlock_label)
 	var retry := Label.new()
 	retry.text = "按 R 重新开始"
 	retry.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	retry.add_theme_font_size_override("font_size", 16)
+	retry.add_theme_font_size_override("font_size", _fs(16))
 	_gameover_box.add_child(retry)
 	var blink := retry.create_tween()
 	blink.set_loops()
@@ -236,7 +246,7 @@ func _ready() -> void:
 	to_menu.text = "返回主菜单"
 	to_menu.custom_minimum_size = Vector2(160, 36)
 	to_menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	to_menu.add_theme_font_size_override("font_size", 16)
+	to_menu.add_theme_font_size_override("font_size", _fs(16))
 	to_menu.pressed.connect(func() -> void:
 		if Game.main != null and is_instance_valid(Game.main):
 			Game.main.to_main_menu())
@@ -248,7 +258,7 @@ func _ready() -> void:
 	var p2 := Label.new()
 	p2.text = "Esc 继续"
 	p2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	p2.add_theme_font_size_override("font_size", 16)
+	p2.add_theme_font_size_override("font_size", _fs(16))
 	_pause_box.add_child(p2)
 
 	# ---- 信号 ----
@@ -319,7 +329,7 @@ func _build_dungeon_ui(root: Control) -> void:
 	bl.add_child(skill_row)
 	_skill_label = Label.new()
 	_skill_label.text = "空格·过载"
-	_skill_label.add_theme_font_size_override("font_size", 12)
+	_skill_label.add_theme_font_size_override("font_size", _fs(12))
 	_skill_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_skill_label.add_theme_constant_override("outline_size", 4)
 	skill_row.add_child(_skill_label)
@@ -354,7 +364,7 @@ func _build_dungeon_ui(root: Control) -> void:
 
 	var swap_hint := Label.new()
 	swap_hint.text = "Q 切换武器"
-	swap_hint.add_theme_font_size_override("font_size", 11)
+	swap_hint.add_theme_font_size_override("font_size", _fs(11))
 	swap_hint.add_theme_color_override("font_color", Color(0.75, 0.75, 0.8))
 	swap_hint.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	swap_hint.add_theme_constant_override("outline_size", 4)
@@ -363,7 +373,7 @@ func _build_dungeon_ui(root: Control) -> void:
 	# ---- F2/A 反应词缀行（附着后显示）----
 	_suffix_label = Label.new()
 	_suffix_label.text = ""
-	_suffix_label.add_theme_font_size_override("font_size", 11)
+	_suffix_label.add_theme_font_size_override("font_size", _fs(11))
 	_suffix_label.add_theme_color_override("font_color", Color(0.78, 0.62, 1.0))
 	_suffix_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_suffix_label.add_theme_constant_override("outline_size", 4)
@@ -376,7 +386,7 @@ func _build_dungeon_ui(root: Control) -> void:
 	_toast.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_toast.offset_bottom = -40.0
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_toast.add_theme_font_size_override("font_size", 17)
+	_toast.add_theme_font_size_override("font_size", _fs(17))
 	_toast.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
 	_toast.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_toast.add_theme_constant_override("outline_size", 6)
@@ -405,7 +415,7 @@ func _build_status_ui(root: Control) -> void:
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		box.add_child(icon)
 		var lbl := Label.new()
-		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.add_theme_font_size_override("font_size", _fs(12))
 		lbl.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 		lbl.add_theme_constant_override("outline_size", 4)
 		lbl.text = "%s 0" % String(def["name"])
@@ -438,7 +448,7 @@ func _build_meta_ui(root: Control) -> void:
 	row1.add_child(_modifier_icon)
 	_modifier_label = Label.new()
 	_modifier_label.text = "静默"
-	_modifier_label.add_theme_font_size_override("font_size", 12)
+	_modifier_label.add_theme_font_size_override("font_size", _fs(12))
 	_modifier_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_modifier_label.add_theme_constant_override("outline_size", 4)
 	row1.add_child(_modifier_label)
@@ -454,7 +464,7 @@ func _build_meta_ui(root: Control) -> void:
 	row2.add_child(ri)
 	_resonance_label = Label.new()
 	_resonance_label.text = "共鸣 0/5"
-	_resonance_label.add_theme_font_size_override("font_size", 12)
+	_resonance_label.add_theme_font_size_override("font_size", _fs(12))
 	_resonance_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_resonance_label.add_theme_constant_override("outline_size", 4)
 	row2.add_child(_resonance_label)
@@ -466,7 +476,7 @@ func _build_meta_ui(root: Control) -> void:
 	for key in ["fire", "elem", "surv"]:
 		var l := Label.new()
 		l.text = "%s 0/3" % String(Upgrades.TAGS[key]["name"])
-		l.add_theme_font_size_override("font_size", 12)
+		l.add_theme_font_size_override("font_size", _fs(12))
 		l.add_theme_color_override("font_color", Upgrades.TAGS[key]["color"])
 		l.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 		l.add_theme_constant_override("outline_size", 4)
@@ -476,7 +486,7 @@ func _build_meta_ui(root: Control) -> void:
 	# 第四行：楼层主题（4 层起才有）
 	_theme_label = Label.new()
 	_theme_label.text = ""
-	_theme_label.add_theme_font_size_override("font_size", 12)
+	_theme_label.add_theme_font_size_override("font_size", _fs(12))
 	_theme_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_theme_label.add_theme_constant_override("outline_size", 4)
 	vb.add_child(_theme_label)
@@ -506,7 +516,9 @@ func refresh_meta() -> void:
 	_modifier_icon.texture = Assets.xicon(String(m.get("icon", "mod_silent")))
 	if _theme_label != null:
 		var th: Dictionary = Data.theme_for_floor(Game.floor_num)
-		_theme_label.text = ("主题 · " + String(th.get("name", ""))) if th.has("name") else ""
+		# Sprint 13 E：主题符号标记与色值并列展示（色盲友好——颜色不是唯一编码通道）
+		_theme_label.text = ("主题 · %s %s" % [String(th.get("name", "")), String(th.get("mark", ""))]) \
+			if th.has("name") else ""
 
 
 func refresh_resonance() -> void:
@@ -618,7 +630,7 @@ func refresh_minimap(d: Dungeon) -> void:
 			var l := Label.new()
 			l.text = mark
 			l.position = pos + Vector2(3, -2)
-			l.add_theme_font_size_override("font_size", 9)
+			l.add_theme_font_size_override("font_size", _fs(9))
 			l.add_theme_color_override("font_color", Data.room_color(String(info["kind"])))
 			l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_minimap.add_child(l)
@@ -722,7 +734,7 @@ func _overlay(root: Control, title: String, color: Color) -> Dictionary:
 	var t := Label.new()
 	t.text = title
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t.add_theme_font_size_override("font_size", 42)
+	t.add_theme_font_size_override("font_size", _fs(42))
 	t.add_theme_color_override("font_color", color)
 	t.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	t.add_theme_constant_override("outline_size", 10)

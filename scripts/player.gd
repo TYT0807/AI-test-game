@@ -152,6 +152,8 @@ func _ready() -> void:
 		_suffix_probe.call_deferred()
 	if OS.get_environment("SMOKE_SIGIL_COVERAGE") != "":
 		_sigil_coverage_probe.call_deferred()
+	if OS.get_environment("SMOKE_SHRINE") != "":
+		_shrine_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -753,6 +755,89 @@ func _sigil_coverage_probe() -> void:
 	# 恢复印记存档现场（测试不污染玩家进度）
 	Game.sigils = bak
 	Game.save_sigils()
+
+
+## SMOKE_SHRINE=1：圣所断言——三卡确定性 / 效果+代价逐条 / 置灰 / 实开面板全链（Sprint 13 A）
+func _shrine_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	var bak_floor: int = Game.floor_num
+	# 圣所三卡 min_floor>=3：探针统一在第 5 层语境派生（结束还原真实层号）
+	Game.floor_num = 5
+	# ① 确定性：同 key 两次派生逐字一致；不同 key 打印对照（表外打印，坑 45 口径）
+	var coord := Vector2i(3, 4)
+	var ids_a := _shrine_ids(gm._shrine_offers_for(coord))
+	var ids_b := _shrine_ids(gm._shrine_offers_for(coord))
+	Dev.check(ids_a == ids_b and ids_a.size() == 3, "shrine", "三卡同 key 派生一致：%s" % str(ids_a))
+	var ids_c := _shrine_ids(gm._shrine_offers_for(coord + Vector2i(1, 0)))
+	print("[SMOKE-SHRINE] det offers=%s other-coord=%s" % [str(ids_a), str(ids_c)])
+	# ② 效果 + 代价逐条（先记基准再执行，断言可观察差值）
+	var bak_max := max_hp
+	var bak_dia := Game.diamonds
+	var ents_before: int = gm.entities.get_child_count()
+	max_hp = 5
+	gm._shrine_execute(gm._shrine_entry("blood_relic"))
+	Dev.check(max_hp == 4, "shrine", "blood_relic 代价上限 5→4：%d" % max_hp)
+	Dev.check(gm.entities.get_child_count() > ents_before, "shrine", "blood_relic 掉落遗物")
+	Game.diamonds = 20
+	gm._shrine_execute(gm._shrine_entry("ore_upgrade"))
+	Dev.check(Game.diamonds == 12, "shrine", "ore_upgrade 代价源石 20→12：%d" % Game.diamonds)
+	await get_tree().create_timer(1.2, true).timeout   # 升级面板 autopick 收尾（暂停期照走）
+	gm._calamity = "scarce_ore"
+	gm._apply_calamity()
+	Game.calamity_floors.append(Game.floor_num)
+	gm._shrine_execute(gm._shrine_entry("purify"))
+	Dev.check(String(gm._calamity) == "" and not Game.calamity_floors.has(Game.floor_num),
+		"shrine", "purify 灾祸清除 + 当层 ×1.5 名额剔除")
+	shield_charges = 0
+	gm._shrine_execute(gm._shrine_entry("ward_boon"))
+	Dev.check(shield_charges == 1, "shrine", "ward_boon 护盾 +1：%d" % shield_charges)
+	hp = 1
+	gm._shrine_execute(gm._shrine_entry("heal"))
+	Dev.check(hp == 3, "shrine", "heal 回复 1→3：%d" % hp)
+	var sid: String = gm._shrine_suffix_pick()
+	gm._shrine_execute(gm._shrine_entry("relic_suffix"))
+	# 断言绑定值而非 size：SMOKE_SUFFIX 前置探针可能已绑满，铭刻是同值覆盖（size 不变）
+	Dev.check(String(relic_suffixes.get(String(Data.RELIC_SUFFIXES[sid]["relic"]), "")) == sid,
+		"shrine", "relic_suffix 确定性绑定 %s→%s" % [sid, String(Data.RELIC_SUFFIXES[sid]["relic"])])
+	# ③ 置灰：余额/血量不足不可支付（面板据此置灰，主侧 _on_shrine_chosen 双保险同口径）
+	Game.diamonds = 0
+	Dev.check(gm._shrine_affordable(gm._shrine_entry("ward_boon")) == false, "shrine", "源石 0 → ward_boon 置灰")
+	max_hp = 1
+	Dev.check(gm._shrine_affordable(gm._shrine_entry("blood_relic")) == false, "shrine", "上限 1 → blood_relic 置灰（防扣死）")
+	Game.score = 10
+	Dev.check(gm._shrine_affordable(gm._shrine_entry("heal")) == false, "shrine", "积分不足 → heal 置灰")
+	max_hp = maxi(3, bak_max)
+	Game.diamonds = maxi(0, bak_dia)
+	# ④ 实开面板全链：_open_shrine → autopick 可支付卡 → 面板关闭 + cleared 回写
+	var cur := Vector2i.ZERO
+	var found := false
+	for c in gm.dungeon.rooms:
+		if c != Vector2i.ZERO and not bool(gm.dungeon.rooms[c].get("cleared", false)):
+			cur = c
+			found = true
+			break
+	if found:
+		shield_charges = 0
+		gm._open_shrine(cur)
+		Dev.check(gm.shrine_panel._root.visible, "shrine", "面板已打开（三卡渲染）")
+		await get_tree().create_timer(1.4, true).timeout   # autopick 0.5s + 执行收尾
+		Dev.check(not gm.shrine_panel._root.visible, "shrine", "选择后面板关闭")
+		Dev.check(bool(gm.dungeon.rooms[cur]["cleared"]), "shrine", "选择后 cleared 回写（重进不再扣/发）")
+	else:
+		Dev.warn("shrine", "无未清房可做实开面板断言（跳过④，不影响①②③）")
+	# ⑤ 空池护栏：floor 1 无三卡（房型门槛 min_floor>=3）
+	Game.floor_num = 1
+	Dev.check(gm._shrine_offers_for(coord).is_empty(), "shrine", "floor1 空池护栏返回 []")
+	Game.floor_num = bak_floor
+	print("[SMOKE-SHRINE] done")
+
+
+func _shrine_ids(offers: Array) -> Array:
+	var out: Array = []
+	for o in offers:
+		out.append(String(o["id"]))
+	return out
 
 
 func _nearest_enemy() -> Node2D:

@@ -280,19 +280,23 @@ func _ai_chase(_dist: float, dir: Vector2, _delta: float) -> void:
 
 ## F3/B 回响（Sprint 12）：前 2.5 秒沿玩家轨迹缓冲倒放镜像玩家走位，
 ## 之后 3 秒周期游走、末 0.5 秒突进。全部计时走 Game.FIXED_DT（E6）。
+## 数值 Sprint 13 E 提为 Data.ECHO_TUNING（零逻辑改动，调数值只改 data.gd）
 func _ai_echo(dist: float, dir: Vector2, _delta: float) -> void:
 	_echo_t += Game.FIXED_DT
 	var pl: Node2D = Game.main.player
-	if _echo_t < 2.5 and is_instance_valid(pl) and not pl.trail.is_empty():
+	var mirror: float = float(Data.ECHO_TUNING["mirror_time"])
+	if _echo_t < mirror and is_instance_valid(pl) and not pl.trail.is_empty():
 		var trail: Array[Vector2] = pl.trail
-		var idx := clampi(int((_echo_t / 2.5) * float(trail.size())), 0, trail.size() - 1)
+		var idx := clampi(int((_echo_t / mirror) * float(trail.size())), 0, trail.size() - 1)
 		var target: Vector2 = trail[trail.size() - 1 - idx]
 		var to_target := target - global_position
-		velocity = to_target.limit_length(speed * 1.5 * Game.enemy_speed_mult * _slow_mult) + _knock
+		velocity = to_target.limit_length(speed * float(Data.ECHO_TUNING["chase_mult"])
+			* Game.enemy_speed_mult * _slow_mult) + _knock
 		return
 	# 镜像结束：游走 + 周期突进（压制玩家走位节奏）
-	var cycle := fmod(_echo_t, 3.0)
-	var mult := 1.8 if cycle > 2.5 else 0.5
+	var cycle := fmod(_echo_t, float(Data.ECHO_TUNING["cycle"]))
+	var mult := float(Data.ECHO_TUNING["dash_mult"]) if cycle > float(Data.ECHO_TUNING["cycle"]) - 0.5 \
+		else float(Data.ECHO_TUNING["creep_mult"])
 	velocity = dir * speed * mult * Game.enemy_speed_mult * _slow_mult + _knock
 
 

@@ -97,24 +97,25 @@ const FLOOR_POOLS := {
 		"beholder": 1, "knight": 1, "minotaur": 1},
 }
 
-## 楼层主题：4 层起按 4→5→6→7 循环，各带一条环境规则 + 专属池/精英/Boss
+## 楼层主题：4 层起按 4→5→6→7 循环，各带一条环境规则 + 专属池/精英/Boss。
+## mark=色盲友好符号标记（Sprint 13 E：与 tint 并列展示，颜色不是唯一编码通道）
 const FLOOR_THEMES := {
 	4: {"name": "源石矿脉", "rule": "vein", "pool": 4, "elite": "knight",
-		"boss": "skeleton_king", "tint": Color(0.95, 0.85, 0.6)},
+		"boss": "skeleton_king", "tint": Color(0.95, 0.85, 0.6), "mark": "◆"},
 	5: {"name": "毒巢", "rule": "toxic", "pool": 3, "elite": "ogre",
-		"boss": "demon", "tint": Color(0.62, 0.85, 0.55)},
+		"boss": "demon", "tint": Color(0.62, 0.85, 0.55), "mark": "●"},
 	6: {"name": "高压层", "rule": "pressure", "pool": 4, "elite": "beholder",
-		"boss": "dragon", "tint": Color(0.95, 0.58, 0.5)},
+		"boss": "dragon", "tint": Color(0.95, 0.58, 0.5), "mark": "▲"},
 	7: {"name": "静默层", "rule": "silent", "pool": 2, "elite": "minotaur",
-		"boss": "boss", "tint": Color(0.58, 0.6, 0.85)},
+		"boss": "boss", "tint": Color(0.58, 0.6, 0.85), "mark": "□"},
 	8: {"name": "岩浆灼烧", "rule": "magma", "pool": 4, "elite": "minotaur",
-		"boss": "demon", "tint": Color(1.0, 0.62, 0.42)},
+		"boss": "demon", "tint": Color(1.0, 0.62, 0.42), "mark": "★"},
 	9: {"name": "冰面打滑", "rule": "ice", "pool": 2, "elite": "knight",
-		"boss": "skeleton_king", "tint": Color(0.72, 0.86, 1.0)},
+		"boss": "skeleton_king", "tint": Color(0.72, 0.86, 1.0), "mark": "◇"},
 	10: {"name": "毒沼减速", "rule": "swamp", "pool": 3, "elite": "ogre",
-		"boss": "demon", "tint": Color(0.68, 0.92, 0.62)},
+		"boss": "demon", "tint": Color(0.68, 0.92, 0.62), "mark": "▽"},
 	11: {"name": "藤蔓阻挡", "rule": "vines", "pool": 2, "elite": "beholder",
-		"boss": "dragon", "tint": Color(0.52, 0.85, 0.56)},
+		"boss": "dragon", "tint": Color(0.52, 0.85, 0.56), "mark": "■"},
 }
 const FLOOR_POOL_FALLBACK := {
 	"rusher": 3, "goblin": 3, "skeleton": 2, "zombie": 2, "orc": 3, "imp": 2,
@@ -287,6 +288,7 @@ const MILESTONES := {
 	"first_relic": {"text": "第一件遗物"},
 	"resonance_burst": {"text": "源石共鸣 · 爆发"},
 	"floor3": {"text": "第 3 层 —— 敌人在变强"},
+	"first_shrine": {"text": "首入圣所 —— 抉择即构筑"},
 }
 
 ## 房间类型元信息：加新房型 = 这里一条 + game_main 生成/清场各一个分支。
@@ -302,7 +304,26 @@ const ROOM_META := {
 	"super_secret": {"name": "超级秘密", "color": Color(1.0, 0.78, 0.3), "bgm": 0, "mark": "*"},
 	"challenge": {"name": "无伤挑战", "color": Color(1.0, 0.5, 0.85), "bgm": 0, "mark": "!"},
 	"cursed": {"name": "诅咒", "color": Color(0.85, 0.25, 0.35), "bgm": 0, "mark": ""},
+	"shrine": {"name": "圣所", "color": Color(0.62, 0.9, 1.0), "bgm": 0, "mark": "+"},
 }
+
+## Sprint 13 A 抉择圣所：三选一「状态交换」表（零赌局零概率——纯 swap，§4.1）。
+## cost_kind: ""（无资源代价）/ diamonds / max_hp / score；min_floor=出现门槛（房型本身 floor>=3）。
+## effect 在 game_main._shrine_execute 分派；选项集由 stable_hash 纯派生（§4.5 零 Game.rng）
+const SHRINE_OFFERS := {
+	"blood_relic": {"name": "血祭", "desc": "生命上限 -1，掉落 1 件遗物", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
+	"ore_upgrade": {"name": "源石淬炼", "desc": "源石 -8，触发一次升级三选一", "cost_kind": "diamonds", "cost": 8, "min_floor": 3},
+	"purify": {"name": "净化", "desc": "解除本层灾祸（代价：×1.5 结算加成作废）", "cost_kind": "", "cost": 0, "min_floor": 3},
+	"ward_boon": {"name": "护盾祝福", "desc": "源石 -5，获得 1 层护盾", "cost_kind": "diamonds", "cost": 5, "min_floor": 3},
+	"heal": {"name": "修复", "desc": "积分 -60，回复 2 点生命", "cost_kind": "score", "cost": 60, "min_floor": 3},
+	"relic_suffix": {"name": "铭刻", "desc": "生命上限 -1，为主动遗物附 1 条词缀", "cost_kind": "max_hp", "cost": 1, "min_floor": 5},
+}
+
+## Sprint 13 E：回响数值 data 驱动（原硬编码提常量，零逻辑改动——调数值只改这里）。
+## mirror_time=玩家轨迹镜像时长 / cycle=游走周期 / chase_mult=镜像期速比 /
+## dash_mult+creep_mult=游走期突进/蠕行速比 / buff_mult+buff_time=击败后攻速增益
+const ECHO_TUNING := {"mirror_time": 2.5, "cycle": 3.0, "chase_mult": 1.5,
+	"dash_mult": 1.8, "creep_mult": 0.5, "buff_mult": 1.35, "buff_time": 2.0}
 
 const OBSTACLES := {
 	"pillar": {"hp": -1, "solid": true},
