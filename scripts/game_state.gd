@@ -296,7 +296,8 @@ func daily_key() -> String:
 func stable_hash(s: String) -> int:
 	var h := 2166136261
 	for b in s.to_utf8_buffer():
-		h = (h ^ b) * 16777619
+		# 每步 32 位掩码（标准 FNV-1a）：无掩码时多字节键连乘溢入 64 位回绕区，跨版本行为不保证
+		h = ((h ^ b) * 16777619) & 0xFFFFFFFF
 	return h & 0x7FFFFFFF
 
 

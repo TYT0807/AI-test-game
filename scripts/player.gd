@@ -716,6 +716,38 @@ func _sigil_coverage_probe() -> void:
 	Dev.check(Game.main.diamond_mult < dm, "sigil_cov", "scarce_ore 削减")
 	Game.main._clear_calamity_effects()
 	Dev.check(Game.main.diamond_mult == dm, "sigil_cov", "scarce_ore 还原")
+	# 终审补·层流程①：无灾祸层 clear 完全不碰倍率（modifier 全局倍率不得被换层抹掉）
+	Game.main._calamity = ""
+	var dm0: float = Game.main.diamond_mult
+	var mc0: float = mag_cap_mult
+	Game.main.diamond_mult = 1.5   # 模拟 swarm modifier
+	mag_cap_mult = 1.7             # 模拟任意在局倍率
+	Game.main._clear_calamity_effects()
+	Dev.check(Game.main.diamond_mult == 1.5 and mag_cap_mult == 1.7, "sigil_cov",
+		"层流程①: 无灾祸 clear 不动倍率 dm=%s mc=%s" % [Game.main.diamond_mult, mag_cap_mult])
+	# 终审补·层流程②：swarm 1.5 跨 3 层恒为 1.5（无灾祸层 / scarce_ore 层 / frail 层各一）
+	for i in 3:
+		if i == 1:
+			Game.main._calamity = "scarce_ore"
+			Game.main._apply_calamity()
+		elif i == 2:
+			Game.main._calamity = "frail"
+			Game.main._apply_calamity()
+		Game.main._clear_calamity_effects()
+		Dev.check(Game.main.diamond_mult == 1.5, "sigil_cov",
+			"层流程②: 跨层 %d diamond_mult=%s" % [i + 1, Game.main.diamond_mult])
+	Game.main.diamond_mult = dm0
+	mag_cap_mult = mc0
+	# 终审补·边界③：max_hp 已到钳制下限 2 时 apply 必须存「实际」削减量，clear 不得凭空 +1
+	var hp0 := max_hp
+	max_hp = 2
+	Game.main._calamity = "frail"
+	Game.main._apply_calamity()
+	Dev.check(max_hp == 2 and Game.main._calamity_frail_cut == 0, "sigil_cov",
+		"边界③: 钳制层 cut 存实际值 max_hp=%d cut=%d" % [max_hp, Game.main._calamity_frail_cut])
+	Game.main._clear_calamity_effects()
+	Dev.check(max_hp == 2, "sigil_cov", "边界③: clear 无凭空 +1 max_hp=%d" % max_hp)
+	max_hp = hp0
 	Game.main._calamity = ""
 	print("[SMOKE-SIGIL-COV] done")
 	# 恢复印记存档现场（测试不污染玩家进度）

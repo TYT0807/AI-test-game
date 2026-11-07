@@ -406,8 +406,11 @@ func _apply_calamity() -> void:
 	match _calamity:
 		"frail":
 			# 核验 #3：cut 差值增量还原（与层内成长解耦，避免绝对值还原吞成长）
-			_calamity_frail_cut = maxi(1, int(round(player.max_hp * 0.2)))
-			player.max_hp = maxi(2, player.max_hp - _calamity_frail_cut)
+			# 终审边界：存「实际」削减量（max_hp 已到钳制下限时可能为 0），否则 clear 会凭空 +1 血上限
+			var old_hp: int = player.max_hp
+			_calamity_frail_cut = maxi(1, int(round(old_hp * 0.2)))
+			player.max_hp = maxi(2, old_hp - _calamity_frail_cut)
+			_calamity_frail_cut = old_hp - player.max_hp
 			player.hp = mini(player.hp, player.max_hp)
 			player.hp_changed.emit(player.hp, player.max_hp)
 		"frenzy":
