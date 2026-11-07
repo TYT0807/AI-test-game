@@ -387,7 +387,8 @@ func _roll_calamity() -> void:
 	if Game.floor_num < 2:
 		return  # 第 1 层保底无灾祸（新手保护）
 	_calamity = ["frail", "frenzy", "scarce_ammo", "scarce_ore"][Game.rng.randi_range(0, 3)]
-	Game.calamity_floors.append(Game.floor_num)
+	if not Game.calamity_floors.has(Game.floor_num):
+		Game.calamity_floors.append(Game.floor_num)   # B5：同层不重复登记（Array.erase 只删首个，防残留）
 	_apply_calamity()
 	hud.flash_toast("灾祸降临：" + _calamity_name(_calamity))
 	hud.banner("灾祸 · " + _calamity_name(_calamity))
@@ -446,9 +447,11 @@ func _clear_calamity_effects() -> void:
 				Game.main.diamond_mult = _calamity_saved_diamond_mult
 		"frenzy":
 			Game.calamity_speed_mult = 1.0   # 二轮重写丢失的无条件还原（本轮核验补回——frenzy 曾跨层固化整局）
-	_calamity_frail_cut = 0
-	_calamity_saved_diamond_mult = 1.0
-	_calamity_saved_mag_cap_mult = 1.0
+	if _calamity != "":
+		# B6：saved 值重置收拢进条件——空灾祸层 clear 前后 saved 保持不变（纯语义收拢，零行为变化）
+		_calamity_frail_cut = 0
+		_calamity_saved_diamond_mult = 1.0
+		_calamity_saved_mag_cap_mult = 1.0
 
 
 func _roll_modifier() -> void:
@@ -1704,8 +1707,14 @@ func drop_pickup(pos: Vector2, kind: String, value := 1, payload := "") -> void:
 func on_slug_killed(slug) -> void:
 	Game.sfx("die", Game.fx_rng.randf_range(0.9, 1.15), -6.0)
 	Game.register_kill(slug.score_value)
-	if String(Data.enemy(slug.variant).get("ai", "")) == "boss":
-		Game.mark_codex("bosses", slug.variant)   # Sprint 13 C：已击败 Boss 登记（PrismWarden/boss2 非 slug 实体，按规格 §C 只挂本记录点）
+	# Sprint 14 A：Boss 图鉴登记改「codex_id 优先、variant 回退」（§3.1/§3.2）——
+	# boss.gd _die 实际会走本回调：守望者 variant="warden" 曾零登记（假阴性）、
+	# boss2 variant="boss" 曾误登记巨岩虫之王（假阳性）；专用 id 隔离后两者各归其位
+	var cid := String(slug.get("codex_id")) if "codex_id" in slug else ""   # 普通 slug 无此属性（get 返回 null，String(null) 不存在）
+	if cid != "":
+		Game.mark_codex("bosses", cid)
+	elif String(Data.enemy(slug.variant).get("ai", "")) == "boss":
+		Game.mark_codex("bosses", slug.variant)
 	if Game.combo >= 20:
 		_milestone("combo20")
 	# 楼层主题「源石矿脉」：每次击杀额外掉 1 源石
@@ -1933,7 +1942,7 @@ func _shrine_offers_for(coord: Vector2i) -> Array:
 		if Game.floor_num < int(o.get("min_floor", 3)):
 			continue
 		if String(id) == "purify" and _calamity == "":
-			continue   # 无灾祸层不出现净化（§4.6）
+			continue   # 无灾祸层不出现净化（§4.6）；起点房时序不对称（B4）当前无害的前提：shrine 恒非 Vector2i.ZERO（validate 启动期断言）
 		pool.append(_shrine_entry(String(id)))
 	if pool.size() < 3:
 		return []   # 空池护栏：floor<3 / 过滤后不足三张（房型门槛已挡住正常流程，探针兜底）

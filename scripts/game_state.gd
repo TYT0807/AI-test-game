@@ -289,8 +289,13 @@ func codex_path() -> String:
 ## 图鉴 id 合法性（登记与读档同一张校验——未知 id 两头都忽略）
 func _codex_id_valid(kind: String, id: String) -> bool:
 	match kind:
-		"enemies", "bosses":
+		"enemies":
 			return Data.ENEMIES.has(id)
+		"bosses":
+			# Sprint 14 A/B1：收窄为「真 Boss」——主题 Boss 专用 id + ENEMIES 内 ai=="boss"；
+			# 旧档遗留的 "boss"（巨岩虫之王）仍是合法键，不做隐式迁移（§3.4）
+			return Data.CODEX_BOSS_NAMES.has(id) \
+				or (Data.ENEMIES.has(id) and String(Data.ENEMIES[id].get("ai", "")) == "boss")
 		"relics":
 			for r in RelicsRef.POOL:
 				if String(r["id"]) == id:
@@ -322,7 +327,10 @@ func mark_codex(kind: String, id: String) -> void:
 ## 上局复盘摘要（_settle_meta 结算时快照 _run_stats——STATS_KEYS 内五项，不新增统计源；负数钳制）
 func set_codex_last_run(stats: Dictionary) -> void:
 	var clean := {}
-	for k in stats:
+	for k in Meta.STATS_KEYS:
+		# Sprint 14 B3：键白名单——越界键直接忽略（_run_stats 的 SMOKE 覆盖键也进不来）
+		if not stats.has(k):
+			continue
 		var v = stats[k]
 		clean[String(k)] = maxi(int(v), 0) if (v is int or v is float) else v
 	codex["last_run"] = clean

@@ -325,6 +325,20 @@ const SHRINE_OFFERS := {
 const ECHO_TUNING := {"mirror_time": 2.5, "cycle": 3.0, "chase_mult": 1.5,
 	"dash_mult": 1.8, "creep_mult": 0.5, "buff_mult": 1.35, "buff_time": 2.0}
 
+## Sprint 14 A：两个主题 Boss 的图鉴专用 id（不在 ENEMIES 表——避免与「巨岩虫之王」的
+## variant="boss" 撞名误登记，§3.2）。登记三件套的数据层单源：
+## 白名单（game_state._codex_id_valid）/ UI 分母（codex_bosses_total）/ 显示名都从这里派生
+const CODEX_BOSS_NAMES := {"prism_warden": "棱镜守望者", "pyrothalassian": "熔潮主宰"}
+
+
+## 图鉴 bosses 分母：ENEMIES 内真 Boss 数 + 主题 Boss 专用 id 数（菜单与探针同源，防 6/4 错位）
+func codex_bosses_total() -> int:
+	var n := 0
+	for eid in ENEMIES:
+		if String(ENEMIES[eid].get("ai", "")) == "boss":
+			n += 1
+	return n + CODEX_BOSS_NAMES.size()
+
 const OBSTACLES := {
 	"pillar": {"hp": -1, "solid": true},
 	"barrel": {"hp": 1, "explode": 58.0},

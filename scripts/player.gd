@@ -861,9 +861,11 @@ func _shrine_ids(offers: Array) -> Array:
 	return out
 
 
-## SMOKE_CODEX=1：图鉴断言——隔离档 / 未知 id 忽略 / 读写往返 / 负数钳制（Sprint 13 C）
+## SMOKE_CODEX=1：图鉴断言——隔离档 / 未知 id 忽略 / 读写往返 / 负数钳制（Sprint 13 C）+
+## Sprint 14 A 登记三件套 + B 批加固断言
 func _codex_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
 	# ① 隔离档：SMOKE 下路径必须是 _smoke_codex.cfg（主档不被污染）
 	Dev.check(String(Game.codex_path()).contains("_smoke_codex"), "codex",
 		"SMOKE 隔离档：%s" % Game.codex_path())
@@ -896,6 +898,59 @@ func _codex_probe() -> void:
 	Game.set_codex_last_run({"max_floor": -3, "kills": -7})
 	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
 		and int(Game.codex["last_run"].get("kills", -1)) == 0, "codex", "负数钳制 → 0")
+	# ---------------- Sprint 14 A：登记三件套断言 ----------------
+	# ① 写入：两个主题 Boss 专用 id 可登记
+	Game.mark_codex("bosses", "prism_warden")
+	Game.mark_codex("bosses", "pyrothalassian")
+	Dev.check((Game.codex["bosses"] as Array).has("prism_warden")
+		and (Game.codex["bosses"] as Array).has("pyrothalassian"), "codex", "A: 主题 Boss 专用 id 登记成功")
+	# 探针登记后即撤销：真实 warden/boss2 击杀会重新登记 → 回归后查 cfg 可区分「探针写」与「击杀写」
+	(Game.codex["bosses"] as Array).erase("prism_warden")
+	(Game.codex["bosses"] as Array).erase("pyrothalassian")
+	Game.save_codex()
+	# ② 白名单：非 Boss 敌人被拒（B1）；巨岩虫之王键仍合法（旧档兼容 §3.4，不隐式迁移）
+	Dev.check(not Game._codex_id_valid("bosses", "rusher"), "codex", "B1: 非 Boss 敌人 id 被白名单拒绝")
+	Dev.check(Game._codex_id_valid("bosses", "boss"), "codex", "旧档兼容: 巨岩虫之王键仍合法")
+	# ③ 分母与显示名单源（防 6/4 错位与英文 id 直出）
+	Dev.check(Data.codex_bosses_total() == 6, "codex", "A: bosses 分母 = 6（ENEMIES 真 Boss + 2 主题）")
+	Dev.check(String(Data.CODEX_BOSS_NAMES["prism_warden"]) == "棱镜守望者"
+		and String(Data.CODEX_BOSS_NAMES["pyrothalassian"]) == "熔潮主宰", "codex", "A: 显示名中文映射")
+	# ---------------- Sprint 14 B 批加固 ----------------
+	# B3：last_run 键白名单（越界键忽略，只收 META.STATS_KEYS 五项）
+	Game.set_codex_last_run({"diamonds": 3, "bogus_key": 99, "max_floor": 2})
+	Dev.check(not (Game.codex["last_run"] as Dictionary).has("bogus_key")
+		and int(Game.codex["last_run"].get("diamonds", -1)) == 3
+		and int(Game.codex["last_run"].get("max_floor", -1)) == 2, "codex", "B3: 越界键被 STATS_KEYS 白名单忽略")
+	# B5：同层重复 roll 只登记一次 calamity_floors（Array.erase 只删首个的残留防线）
+	var bak_floor: int = Game.floor_num
+	Game.floor_num = 5
+	gm._calamity_forced = true
+	gm._roll_calamity()
+	gm._roll_calamity()
+	var cnt5 := 0
+	for f in Game.calamity_floors:
+		if f == 5:
+			cnt5 += 1
+	Dev.check(cnt5 == 1, "codex", "B5: 同层 roll 两次仅登记一次")
+	gm._calamity_forced = false
+	gm._calamity = ""
+	gm._clear_calamity_effects()
+	Game.calamity_floors.clear()
+	Game.floor_num = bak_floor
+	# B6：空灾祸层 clear 不再无条件重置 saved（纯语义收拢——验证保持不变）
+	gm._calamity = ""
+	gm._calamity_saved_diamond_mult = 0.42
+	gm._clear_calamity_effects()
+	Dev.check(is_equal_approx(float(gm._calamity_saved_diamond_mult), 0.42), "codex", "B6: 空 clear 保留 saved 值")
+	gm._calamity_saved_diamond_mult = 1.0
+	# B2：读档路径钳制（手工写负数 → load_codex → 归 0）——「实现保证」升级为「断言覆盖」；
+	# 放最后：会覆盖 last_run 现场
+	var cfgf := ConfigFile.new()
+	cfgf.set_value("codex", "last_run", {"max_floor": -9, "time": -2.5})
+	cfgf.save(Game.codex_path())
+	Game.load_codex()
+	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
+		and int(Game.codex["last_run"].get("time", -1)) == 0, "codex", "B2: 读档负数钳制 → 0")
 	print("[SMOKE-CODEX] done")
 
 

@@ -11,6 +11,7 @@ func setup(floor_num: int) -> void:
 	# 核验 #5 修复：身份补齐（此前 DUMP/结算残留守望者字段）
 	boss_name = "熔潮主宰"
 	variant = "boss"   # 击杀走 Boss 掉落路径（宝箱），stairs 由 _room_cleared 发放
+	codex_id = "pyrothalassian"   # Sprint 14 A：图鉴登记与掉落契约解耦（variant 不动——曾把「巨岩虫之王」误登记）
 	_floor_num = floor_num
 	_phase_rules = []
 	_phase_tints = []

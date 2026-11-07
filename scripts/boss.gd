@@ -25,6 +25,9 @@ var dmg := 2
 var xp_value := 40
 var score_value := 2000
 var variant := "warden"
+# Sprint 14 A：图鉴专用 id（不占 variant——boss2 的 variant="boss" 承载词缀必掉/宝箱/震屏
+# 三条既有掉落契约，严禁改动；本字段只服务图鉴登记，boss2.setup 覆写为 "pyrothalassian"）
+var codex_id := "prism_warden"
 var dead := false
 var speed := 42.0
 

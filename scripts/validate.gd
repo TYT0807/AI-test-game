@@ -214,6 +214,11 @@ func _check_shrine() -> void:
 			problems.append("floor %d 不应有圣所（实得 %d 间）" % [fn, n])
 		if fn >= 3 and n != 1:
 			problems.append("floor %d 应恰 1 间圣所（实得 %d 间）" % [fn, n])
+		# B4：shrine 恒非起点房——_enter_room 早于 _roll_calamity 的时序不对称当前无害依赖此条；
+		# 未来放宽房型/分配规则时在此当场报错（用断言锁前提，不改时序 → 零 E1 漂移）
+		for c in d.rooms:
+			if String(d.rooms[c].get("kind", "")) == "shrine" and c == Vector2i.ZERO:
+				problems.append("floor %d 的 shrine 落在起点房 Vector2i.ZERO（B4 前提被破坏）" % fn)
 
 
 ## Sprint 13 C：图鉴结构自洽（kinds 分类齐 / last_run 存在 / 校验器与数据表对齐）

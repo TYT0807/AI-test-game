@@ -27,6 +27,7 @@
 ## UI
 
 - 主菜单 +「图鉴」按钮（icon_codex 新像素图标，gen_assets 确定性生成）+ `codex` 页：**上局复盘**行（最深/击杀/源石/用时/得分）+ 五个分区（已遇敌人/已击败 Boss/已发现遗物/已获词缀/已历主题，X/Y 计数 + 发现名单、空态灰字）——**只读平行页，不读不写 `meta.gd UNLOCKS`**（冻结规格 v2.10）
+- 结算覆盖层（hud.game_over）：_stats_label 追加「本局复盘 · 最深 N 层 · 源石 X」行（STATS_KEYS 内数据）
 
 ## 核验修复批（主理人 🟡：图标未登记 → 按钮静默白框）
 
@@ -34,7 +35,8 @@
 - **修复**：`GEN_NAMES` 追加 `"icon_codex"`（仅此一行，`ACTION_DEFS` 未动）；`validate._check_codex` 补启动期断言 `Assets.g("icon_codex") != null`——「生成与登记必须成对」从此当场报错不靠人眼
 - **回归**：启动自检 0 problems（断言绿）、SMOKE_CODEX 探针 done、冻结重定 `md5sum -c` **33/33 OK**（assets.gd/validate.gd 两条目重算，无新脚本）
 - 四条低优先观察在册不返工（bosses 校验器未收窄 / load_codex 钳制断言未覆盖 / relics 口径待产品确认 / last_run 无键白名单）；Boss 覆盖范围注记已裁定接受
-- 结算覆盖层（hud.game_over）：_stats_label 追加「本局复盘 · 最深 N 层 · 源石 X」行（STATS_KEYS 内数据）
+
+## 验证（全部实跑）
 
 ## 验证（全部实跑）
 
@@ -53,3 +55,8 @@
 - Sprint 13 全部锁定范围（A+C+E）已交付完毕；备选 B/D 未接（草案 §七口径）
 - 图鉴 Boss 类不含 PrismWarden/熔潮主宰（非 slug 实体，规格 §C 记录点未覆盖）——如需纳入，后续单列一小批在 boss 死亡路径挂登记（属规格扩展，不在本批自作主张）
 - 非阻塞前瞻三条（主理人在册，不返工）：_enter_room 早于 _roll_calamity 的起点房瞬间 / Array.erase 首个匹配 / clear 末尾 saved 无条件重置
+
+## 流程纪律沉淀（Sprint 13–14 归拢，原载主理人核验报告）
+
+1. **登记三件套**（Sprint 14 草案 §〇.7 正式成文）：任何「新增一个 id / 资源 / 记录点」必须同时核对三处，缺一即「登记了但生效不了」——① 生成或写入 → ② 注册表 / 白名单 / UI 分母 / 显示名 → ③ 可见效果的断言。反例：icon_codex（PNG 生成但 GEN_NAMES 漏登记）、bulwark（表有但 match 漏分支）、frenzy（断言只验标志不验数值）。
+2. **凡标 ✓ 必附本轮实读行号**（主理人侧同款纪律）：不得沿用上一轮行号印象——frenzy 事实错误（引旧码 :431）即为此类；范围注记同样要附实读行号（Sprint 13「两个 Boss 不走 on_slug_killed」注记即因缺实读而失实，Sprint 14 §3.1 订正）。

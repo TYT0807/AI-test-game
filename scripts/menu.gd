@@ -320,14 +320,15 @@ func _build_codex() -> void:
 	replay.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
 	_rows.add_child(replay)
 
-	var boss_total := 0
-	for eid in Data.ENEMIES:
-		if String(Data.ENEMIES[eid].get("ai", "")) == "boss":
-			boss_total += 1
+	var boss_total := Data.codex_bosses_total()   # Sprint 14 A：分母单源（ENEMIES 真 Boss + 2 主题 Boss）
 	_codex_section("enemies", "已遇敌人", Data.ENEMIES.size(),
 		func(id: String) -> String: return String(Data.ENEMIES[id].get("name", id)))
 	_codex_section("bosses", "已击败 Boss", boss_total,
-		func(id: String) -> String: return String(Data.ENEMIES[id].get("name", id)))
+		func(id: String) -> String:
+			# 显示名单源：主题 Boss 中文名优先（不在 ENEMIES，防英文 id 直出），普通 Boss 走 ENEMIES
+			if Data.CODEX_BOSS_NAMES.has(id):
+				return String(Data.CODEX_BOSS_NAMES[id])
+			return String(Data.ENEMIES[id].get("name", id)))
 	_codex_section("relics", "已发现遗物", RelicsRef.POOL.size(),
 		func(id: String) -> String:
 			for r in RelicsRef.POOL:
