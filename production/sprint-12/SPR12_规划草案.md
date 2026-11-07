@@ -70,7 +70,7 @@
 
 ### 6.1 C 第二主题 Boss「熔潮主宰 / Pyrothalassian（暂名）」（L）
 - **复用骨架**：新建 `scripts/boss2.gd`，**复用 `PrismWarden` 的状态机范式**（INTRO→ACTIVE→PHASE_2→PHASE_3→DYING、`phase_theme_index` 纯函数、主题复用脉冲、既有 `Game.rng` 流增援、`SMOKE_BOSS` 探针范式）。不另起炉灶。
-- **差异化（避免与守望者雷同）**：① 主题序列偏移 `phase_theme_index(floor_num, k + OFFSET)`（OFFSET=4，走另一组三阶段组合）；② 机制权重偏向 DoT/压迫（magma+toxic+swamp 脉冲更密）；③ 外观换 tint（与守望者区分，数据驱动）；④ 接入点谓词 `_is_sovereign_floor(n) = n>4 and (n-4)%16==15`（每 16 层一次，与守望者每 8 层错开，互不冲突）。
+- **差异化（避免与守望者雷同）**：① 主题序列偏移 `phase_theme_index(floor_num, k + OFFSET)`（OFFSET=4，走另一组三阶段组合）；② 机制权重偏向 DoT/压迫（magma+toxic+swamp 脉冲更密）；③ 外观换 tint（与守望者区分，数据驱动）；④ 接入点谓词 `_is_sovereign_floor(n) = n>4 and (n-4)%16==15`（每 16 层一次）。**措辞更正（主理人 2026-11-07 复核）**：原式写「与守望者每 8 层错开、互不冲突」为数学错误——`(n-4)%16==15` 蕴含 `(n-4)%8==7`，故 sovereign 层必同时命中 `_is_warden_floor`，是 warden 层的**子集**（19/35/51…）而非错开。实际效果 = 每 16 层把其中一次守望者战替换为熔潮主宰；实现须由 sovereign 优先分支兜住（编程侧 `game_main.gd:1056–1067` 已正确做到）。
 - **风险**：新 Boss 实体（L），须过成员清单 + 编译扫描 + 不污染 enemy 循环 + 同套探针（`SMOKE_BOSS2` 表外，守坑 45）。
 - **E1**：主题选取纯函数零 rng；阶段随机路由既有 `Game.rng` 流（不新建）；Boss 战 rng 消费登记 + 基线随本批重定（同 B）。
 

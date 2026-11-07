@@ -110,6 +110,8 @@ var _scholar_floor_done := -1  # 博学印记：本层已发过首次清场奖�
 var _calamity := ""
 var _calamity_floor := -1
 var _calamity_saved_max_hp := 0
+var _calamity_saved_diamond_mult := 1.0
+var _calamity_saved_mag_cap_mult := 1.0
 var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
 
 
@@ -373,7 +375,9 @@ func start_run() -> void:
 func _roll_calamity() -> void:
 	_calamity = ""
 	var rolled := Game.rng.randf()
-	if not _smoke and not _calamity_forced and rolled > 0.15:
+	# 核验 #4 修复：强制开关只认 SMOKE_CALAMITY 显式环境变量；
+	# 普通 SMOKE 走自然 15%（不隐式强制，保回归可比性）
+	if not _calamity_forced and rolled > 0.15:
 		return
 	if Game.floor_num < 2:
 		return  # 第 1 层保底无灾祸（新手保护）
@@ -396,10 +400,15 @@ func _calamity_name(id: String) -> String:
 
 
 func _apply_calamity() -> void:
+	# 保存进入灾祸前的倍率/上限（换层还原用——核验 #2/#3：不抹 modifier 全局倍率、
+	# 不吞层内 max_hp 成长；maxi 还原策略见 _clear_calamity_effects）
+	_calamity_saved_diamond_mult = Game.main.diamond_mult
+	_calamity_saved_mag_cap_mult = player.mag_cap_mult
+	_calamity_saved_max_hp = player.max_hp
 	match _calamity:
 		"frail":
-			_calamity_saved_max_hp = player.max_hp
-			player.max_hp = maxi(2, int(player.max_hp * 0.8))
+			var cut := maxi(1, int(round(player.max_hp * 0.2)))
+			player.max_hp = maxi(2, player.max_hp - cut)
 			player.hp = mini(player.hp, player.max_hp)
 			player.hp_changed.emit(player.hp, player.max_hp)
 		"frenzy":
@@ -412,17 +421,18 @@ func _apply_calamity() -> void:
 				Game.main.diamond_mult = minf(Game.main.diamond_mult, 0.7)
 
 
-## 换层清除：恢复灾祸改动的起始状态（frail 的 max_hp 用保存值精确还原）
+## 换层清除：恢复灾祸改动的起始状态。
+## frail 用 maxi 还原（保留层内升级/遗物的 +1 成长）；倍率用保存值还原（不抹 modifier 的全局倍率——核验 #2）
 func _clear_calamity_effects() -> void:
-	if _calamity == "frail" and _calamity_saved_max_hp > 0 and is_instance_valid(player):
-		player.max_hp = _calamity_saved_max_hp
+	if _calamity == "frail" and is_instance_valid(player):
+		player.max_hp = maxi(player.max_hp, _calamity_saved_max_hp)
 		player.hp = mini(player.hp, player.max_hp)
 		player.hp_changed.emit(player.hp, player.max_hp)
 	Game.calamity_speed_mult = 1.0
 	if Game.main != null and is_instance_valid(Game.main):
-		Game.main.diamond_mult = 1.0
+		Game.main.diamond_mult = _calamity_saved_diamond_mult
 	if is_instance_valid(player):
-		player.mag_cap_mult = 1.0
+		player.mag_cap_mult = _calamity_saved_mag_cap_mult
 	_calamity_saved_max_hp = 0
 
 
@@ -748,6 +758,9 @@ func _apply_sigil_contract() -> void:
 			player.sigil_ward = true
 		"scholar":
 			player.scholar_active = true
+		"bulwark":
+			# Sprint 12 核验 #1 修复：此前 match 漏了本分支（印记完全不生效）
+			player.relic_shield_t = maxf(player.relic_shield_t, 2.5)
 	if _smoke:
 		print("[SMOKE-SIGIL] applied contract: %s (before any rng draw)" % eq)
 

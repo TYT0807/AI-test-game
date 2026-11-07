@@ -150,6 +150,8 @@ func _ready() -> void:
 		_relic_probe.call_deferred()
 	if OS.get_environment("SMOKE_SUFFIX") != "":
 		_suffix_probe.call_deferred()
+	if OS.get_environment("SMOKE_SIGIL_COVERAGE") != "":
+		_sigil_coverage_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -659,6 +661,66 @@ func _suffix_probe() -> void:
 	_fire_relic_suffixes("dash_dodge", "ON_DASH_START", global_position)
 	Dev.check(shield_charges == 1, "suffix", "小壁垒给予 1 层护盾：%d" % shield_charges)
 	print("[SMOKE-SUFFIX] done")
+
+
+## SMOKE_SIGIL_COVERAGE=1：9 枚印记逐枚覆盖断言（核验 #1 修复批：每枚验证可观察效果）
+func _sigil_coverage_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var bak := {"shards": int(Game.sigils["shards"]), "unlocked": (Game.sigils["unlocked"] as Array).duplicate(),
+		"equipped": Game.equipped_sigil()}
+	for id in Data.SIGILS:
+		Game.equip_sigil(String(id))
+		Game.main._apply_sigil_contract()
+		var ok := false
+		var detail := ""
+		match id:
+			"vigor":
+				ok = max_hp == Player.BASE_MAX_HP + 1
+				detail = "max_hp=%d" % max_hp
+			"arsenal":
+				ok = weapon_slots[1] == "shotgun"
+				detail = "slot1=%s" % weapon_slots[1]
+			"purse":
+				ok = Game.diamonds == 15
+				detail = "diamonds=%d" % Game.diamonds
+			"kindred":
+				ok = is_instance_valid(Game.main._ally)
+				detail = "ally=%s" % str(ok)
+			"bulwark":
+				ok = relic_shield_t >= 2.5
+				detail = "shield_t=%.1f" % relic_shield_t
+			"sprinter":
+				ok = dash_boost_mult == 1.3
+				detail = "dash=%s" % str(dash_boost_mult)
+			"harvester":
+				ok = harvester_active
+				detail = "flag=%s" % str(harvester_active)
+			"ward":
+				ok = sigil_ward
+				detail = "flag=%s" % str(sigil_ward)
+			"scholar":
+				ok = scholar_active
+				detail = "flag=%s" % str(scholar_active)
+		Dev.check(ok, "sigil_cov", "%s %s" % [id, detail])
+	# 核验 #2/#3 单测：灾祸倍率保存还原 + frail maxi 保成长（直接驱动，不经层流程）
+	var dm0: float = Game.main.diamond_mult
+	var hp_before := max_hp
+	max_hp = hp_before + 1   # 模拟层内升级成长
+	Game.main._calamity = "frail"
+	Game.main._apply_calamity()
+	Dev.check(max_hp < hp_before + 1, "sigil_cov", "frail 削减生效 max_hp=%d" % max_hp)
+	Game.main._clear_calamity_effects()
+	Dev.check(max_hp == hp_before + 1, "sigil_cov", "frail 还原保成长 max_hp=%d" % max_hp)
+	Game.main._calamity = "scarce_ore"
+	Game.main._apply_calamity()
+	Dev.check(Game.main.diamond_mult < dm0, "sigil_cov", "scarce_ore 削减生效")
+	Game.main._clear_calamity_effects()
+	Dev.check(Game.main.diamond_mult == dm0, "sigil_cov", "diamond 还原保存值")
+	Game.main._calamity = ""
+	print("[SMOKE-SIGIL-COV] done")
+	# 恢复印记存档现场（测试不污染玩家进度）
+	Game.sigils = bak
+	Game.save_sigils()
 
 
 func _nearest_enemy() -> Node2D:

@@ -292,8 +292,16 @@ func daily_key() -> String:
 	return "%04d%02d%02d" % [d.year, d.month, d.day]
 
 
+## 稳定字符串哈希（FNV-1a，跨引擎版本确定性——核验 #6：内建 hash() 不保证跨版本一致）
+func stable_hash(s: String) -> int:
+	var h := 2166136261
+	for b in s.to_utf8_buffer():
+		h = (h ^ b) * 16777619
+	return h & 0x7FFFFFFF
+
+
 func daily_seed_for(key: String) -> int:
-	return absi(int(hash(key))) % 2147483647
+	return stable_hash(key)
 
 
 ## 击败/通关时记录当日最佳（层数优先，同层比时间）
