@@ -76,3 +76,14 @@
 **逐枚覆盖断言**（新增 `SMOKE_SIGIL_COVERAGE=1`）：9 枚印记逐枚 apply + 可观察断言 + #2/#3 单测（frail 削减/maxi 保成长、scarce_ore 削减/diamond 还原）——实测 9 断言 + 4 单测全过、0 [ERR]。
 
 **修复后回归**：全量十探针（SMOKE+V8+REBIND+RELIC+SUFFIX+PERSIST+COV+CALAMITY+DAILY+BOSS）4000+ 帧 → **0 报错**；冻结重定 32/32（表述勘误：清单为纯 .gd，无 .uid）。
+
+## 六、二轮修复（主理人复核 CONCERNS → 编程侧整改，commit `0c7f94f`）
+
+主理人二轮核验：#1/#4/#5/#6 已闭环、#7 部分落盘；**#2/#3 语义不成立**（maxi 是「回到灾祸前」非「补回削减量」；clear 无条件还原抹掉 swarm 局跨层倍率）+ 单测时序错误（成长放在 apply 之前，saved 已含成长，断言恒过）。本轮整改：
+
+1. **#2**：`_clear_calamity_effects` 改 **match _calamity 条件还原**——frail 还原 max_hp、scarce_ammo 还原 mag_cap_mult、scarce_ore 还原 diamond_mult、`_calamity == ""` 完全不碰倍率（swarm 局跨层 1.5 保持）；三 saved 值 clear 时一并重置
+2. **#3**：frail 改**差值增量还原**——apply 保存 `_calamity_frail_cut`（= round(max_hp × 0.2) ≥ 1），clear `max_hp += cut`（与层内成长解耦：灾祸 10→8、成长 +1 → 还原后 11）
+3. **单测时序修正**：成长移到 apply 之后（先灾祸削减、后层内成长、再换层还原），三断言分别验证「削减生效/成长保留/倍率还原」
+4. **#6**：`stable_hash` 每步 `& 0xFFFFFFFF`（标准 FNV-1a 32 位，跨语言/跨版本可复现）
+
+**回归**：全量十二探针（SMOKE+V8+REBIND+RELIC+SUFFIX+PERSIST+COV+CALAMITY+DAILY+FORCE+JUMP+BOSS+ECHO）6000 帧 → **0 报错**；冻结重定 32/32。二轮待主理人复核。
