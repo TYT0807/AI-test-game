@@ -1005,70 +1005,35 @@ func _is_third_floor(n: int) -> bool:
 	return n > 4 and (n - 4) % 32 == 23
 
 
-## Sprint 18 A v2：本层编队形势的**纯只读静态派生**（主理人 2026-11-08 v2 口径）。
-## 只读 `Data.SQUADS` 静态表定义，**绝不读 `_squad_id` / `_squad_queue`**，零 rng / 零计时 / 零权重。
-## 废弃 v1 的「近战/远程主倾向」：`tide` 权重 12 且 `min_floor=3`，在 3–7 层恒为最大权重项且 7 近战 / 3 远程，
-## 故任何基于权重占比的主倾向派生都会输出同一句话——那不是信息而是死文案（v1 实值自验见交付文档偏差节）。
-## 门槛与 `_roll_squad()` 的 `floor_num < 3` 早退（:932）同步。
-## 红线：只描述性质，**不得出现任何推荐语**（建议/推荐/优先/带）——从机制上杜绝主导策略。
-## 本函数不写任何状态、不碰 `data.gd`，可与真实抽取以任意先后顺序共存，不影响 E1 指纹。
-func floor_situation() -> String:
-	if Game.floor_num < 3:
+## Sprint 18 A v3：本层**房型计数**提示的纯只读派生（主理人 2026-11-08 v3 口径）。
+## 只读 `dungeon.rooms` **当前已生成那张图**的 `kind` 字段；零 rng / 零计时 / 零权重 / 零状态写入。
+## 废弃 v2 的 `Data.SQUADS` 布尔特征并集：那是**每层恒定查表**——3 层恒为「远射 · 冲锋 · 成群」，
+## 跑两局就背下来，不再构成信息；且 `ROOM_META` 里 start/combat/elite/cursed 的 mark 全是 ""
+## （data.gd:297-306），小地图对这四类房型零标注——本函数补的正是这个信息盲区。
+## 注意：本函数读的是**已生成**的地图，与 `Game.floor_num` 无关；改 floor_num 不会重生成地图，
+## 而重生成会消费 `Game.rng`（破 E1 零抽取红线），故探针不得靠改楼层造语境。
+## 红线：只陈述房型事实，**不得出现任何推荐语**（建议/推荐/优先/带）——从机制上杜绝主导策略。
+func floor_layout_hint() -> String:
+	if dungeon == null:
 		return ""
-	# 本层特征集 = 所有 min_floor <= floor_num 的候选编队的特征并集（纯布尔，不含权重）
-	var feats := {}
-	for sid in Data.SQUADS:
-		var s: Dictionary = Data.SQUADS[sid]
-		if Game.floor_num < int(s.get("min_floor", 3)):
-			continue
-		var f := 0
-		var b := 0
-		var total_members := 0
-		var has_echo := false
-		var has_defuser := false
-		var has_mender := false
-		var has_shield := false
-		for m in s.get("members", []):
-			var c := int(m.get("count", 1))
-			total_members += c
-			if bool(m.get("front", false)):
-				f += c
-			else:
-				b += c
-			if String(m.get("id", "")) == "echo":
-				has_echo = true
-			if bool(m.get("defuser", false)):
-				has_defuser = true
-			var affix := String(m.get("affix", ""))
-			if affix == "mender":
-				has_mender = true
-			elif affix == "shielded":
-				has_shield = true
-		if has_echo:
-			feats["回响"] = true
-		if has_defuser:
-			feats["拆弹"] = true
-		if has_mender:
-			feats["治疗"] = true
-		if has_shield:
-			feats["护盾"] = true
-		if b >= 2:
-			feats["远射"] = true
-		if f > b:
-			feats["冲锋"] = true
-		if total_members >= 8:
-			feats["成群"] = true
-	# 固定优先级（回响 > 拆弹 > 治疗 > 护盾 > 远射 > 冲锋 > 成群），取前 3
+	var ne := 0
+	var has_cursed := false
+	for c in dungeon.rooms:
+		var k := String(dungeon.rooms[c].get("kind", ""))
+		if k == "elite":
+			ne += 1
+		elif k == "cursed":
+			has_cursed = true
 	var parts: Array[String] = []
-	for tag in ["回响", "拆弹", "治疗", "护盾", "远射", "冲锋", "成群"]:
-		if feats.has(tag) and parts.size() < 3:
-			parts.append(tag)
-	return " · ".join(PackedStringArray(parts))
+	parts.append(("精英 %d" % ne) if ne > 0 else "无精英")
+	if has_cursed:
+		parts.append("有诅咒房")
+	return " ｜ ".join(PackedStringArray(parts))
 
 
 ## Sprint 16 C：层签刷新（纯只读拼装——主题 name+mark + 灾祸名或「无」，恰好 2 项默认）。
 ## 零 rng / 零 fx_rng / 零抽取；挂点：start_run 与 next_floor 的 roll 全完成之后（§4.2，严禁移动 roll）
-## Sprint 18 B：主行文本**一字不改**，新增第二行 = `形势 · <sit>` ｜ 主题手记（`FLAVOR["themes/"+rule]`），
+## Sprint 18 B：主行文本**一字不改**，新增第二行 = `本层 · <房型计数>` ｜ 主题手记（`FLAVOR["themes/"+rule]`），
 ## 两段皆空则传 `""`（第二行隐藏）。**只走层签常驻行，不调 flash_toast()**——首发现播报归 mark_codex()。
 func update_floor_sign() -> void:
 	if not is_instance_valid(hud):
@@ -1077,9 +1042,9 @@ func update_floor_sign() -> void:
 	var theme_part := (String(th.get("name", "")) + String(th.get("mark", ""))) if th.has("name") else "无主题"
 	var cal: String = _calamity_name(_calamity) if _calamity != "" else "无"
 	var sub_parts: Array[String] = []
-	var sit := floor_situation()
-	if sit != "":
-		sub_parts.append("形势 · " + sit)
+	var lay := floor_layout_hint()
+	if lay != "":
+		sub_parts.append("本层 · " + lay)
 	var rule := String(th.get("rule", ""))
 	if rule != "":
 		var flav := String(Data.FLAVOR.get("themes/" + rule, ""))

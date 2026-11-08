@@ -2,7 +2,7 @@
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
 296b8b7293e5cacc10edc23ea4c425d2 *scripts/shrine_panel.gd
 2f157b417097d412f0c9f7c25fd03401 *scripts/boss2.gd
-e8dae022217d501f743e8c308482abdf *scripts/player.gd
+33551e7f5b4f8767e5feb56dc3e7cbad *scripts/player.gd
 9fd432b72e0fc390d8d1693ffa15a6ae *scripts/validate.gd
 3ac9cac7af3a833f538964f7ca53a39c *scripts/boss3.gd
 ebea1702abcdc50dd6cbb281669c3da0 *scripts/menu.gd
@@ -18,7 +18,7 @@ ebea1702abcdc50dd6cbb281669c3da0 *scripts/menu.gd
 8b262f792c40f865ff182799cace9551 *scripts/boss.gd
 92242d0669a7eadbf2aec2376928e6a3 *scripts/merchant.gd
 9248ff72854c353576134c1979b844ab *scripts/explosion.gd
-1288d675dacbf7d89bc6aac02c44ad88 *scripts/game_main.gd
+22e019451c75cd403141ff8706949168 *scripts/game_main.gd
 b4083f0b64d70f789a1f409a3001126a *scripts/dev_overlay.gd
 b8499a95324fa66a90a7d698979a29b5 *scripts/dev_log.gd
 c26d847b0052674c615d616310a2a93e *scripts/weapons.gd

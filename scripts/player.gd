@@ -166,8 +166,8 @@ func _ready() -> void:
 		_floor_sign_probe.call_deferred()
 	if OS.get_environment("SMOKE_DAILY_SHARE") != "":
 		_daily_share_probe.call_deferred()
-	if OS.get_environment("SMOKE_SITUATION") != "":
-		_situation_probe.call_deferred()
+	if OS.get_environment("SMOKE_LAYOUT") != "":
+		_layout_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -1174,68 +1174,94 @@ func _oath_probe() -> void:
 	print("[SMOKE-OATH] done")
 
 
-## SMOKE_SITUATION=1：Sprint 18 A(v2) 层签形势派生断言（`game_main.floor_situation()` 纯只读静态派生）
-## 【Sprint 18 断言盘点】
-##   · 验效果型：floor=3 全等表值 / floor=4 含护盾 / floor=6 含拆弹 / floor=7 含回响 /
-##     零 rng·fx_rng 状态差 / 文案零推荐语
-##   · 恒等型：floor=8 == floor=7（候选集自 7 层起恒定；锁幂等——同输入必同输出，可抓状态泄漏）
-##   · 验效果型（截断）：floor=7 特征集实有 6 类，输出恒 ≤ 3 项——删掉派生的 `out.size() >= 3` 即转红
-##   · 前提守卫型恒过：floor=1/2 返回 ""（门槛 `< 3` 是派生函数首行，与 SQUADS 表值无关，改表不会转红）
-## 本探针只读表值、只改 `Game.floor_num` 语境并还原，不写盘、不抽取。
-func _situation_probe() -> void:
+## SMOKE_LAYOUT=1：Sprint 18 A(v3) 层签**房型计数**断言（`game_main.floor_layout_hint()` 纯只读派生）
+## 【Sprint 18 v3 断言盘点】
+##   · 验效果型（真值重数）：独立遍历 `dungeon.rooms` 重数 elite 个数与 cursed 有无，与返回值全等比对——
+##     验真值不验形状。**不靠改 `Game.floor_num` 造楼层**：被测函数读的是已生成的那张图，改 floor_num
+##     不会重生成地图，重生成要消费 `Game.rng`（破零抽取红线）；那样写出的断言等于「同一张图换个标签」，是假断言。
+##   · 验效果型（格式锁）：按「 ｜ 」切分，首段为「无精英」或「精英 N」（N 纯数字）；
+##     诅咒段出现**当且仅当**本图确有诅咒房，且只允许字面「有诅咒房」（反条件即可两侧全红，与地图内容无关）
+##   · 验效果型（零位置泄漏）：输出不含 `(` `,` `Vector2i` `[`——只报计数不报坐标
+##   · 验效果型（零抽取）：调用前后 `Game.rng.state` / `Game.fx_rng.state` 全等
+##   · 验效果型（空图守卫）：dungeon 置空时返回 ""；置空后立即还原、同图输出不变（无 await 间隙）
+##   · 恒等型：同图连调两次全等（幂等锁，可抓状态泄漏）
+## 本探针只读 `dungeon.rooms`；除「置空立即还原」外不改任何状态，不写盘、不抽取、不重生成地图。
+func _layout_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
-	var bak_floor: int = Game.floor_num
-	# ① 门槛守卫（与 _roll_squad 的 floor_num < 3 早退同步）：前提守卫型
-	Game.floor_num = 1
-	Dev.check(gm.floor_situation() == "", "situation", "floor=1 无编队形势（门槛 <3）")
-	Game.floor_num = 2
-	Dev.check(gm.floor_situation() == "", "situation", "floor=2 无编队形势（门槛 <3）")
-	# ② 验效果：floor=3 候选仅 tide → 远射·冲锋·成群（全等比对，逐标签锁死）
-	Game.floor_num = 3
-	var s3: String = gm.floor_situation()
-	Dev.check(s3 == "远射 · 冲锋 · 成群", "situation", "floor=3 派生与表值全等：%s" % s3)
-	# ③ 验效果：floor=4 并入 shield_summon → 护盾（shielded 出现在 4 层候选里）
-	Game.floor_num = 4
-	var s4: String = gm.floor_situation()
-	Dev.check(s4.contains("护盾"), "situation", "floor=4 含护盾特征：%s" % s4)
-	# ④ 验效果：floor=6 并入 sniper_defuser → 拆弹（v1 权重口径下永不浮现，v2 布尔口径下必浮现）
-	Game.floor_num = 6
-	var s6: String = gm.floor_situation()
-	Dev.check(s6.contains("拆弹"), "situation", "floor=6 含拆弹特征：%s" % s6)
-	# ⑤ 验效果：floor=7 并入 echo_pack → 回响
-	Game.floor_num = 7
-	var s7: String = gm.floor_situation()
-	Dev.check(s7.contains("回响"), "situation", "floor=7 含回响特征：%s" % s7)
-	# ⑥ 恒等型：floor=8 与 floor=7 全等（候选集自 7 层起恒定；亦锁幂等——同输入必同输出，可抓状态泄漏）
-	Game.floor_num = 8
-	var s8: String = gm.floor_situation()
-	Dev.check(s8 == s7, "situation", "floor=8 与 floor=7 全等（候选集恒定）：%s / %s" % [s8, s7])
-	# ⑥b 验效果：最多 3 项（截断规则锁——删掉派生里的 `out.size() >= 3` 即转红：7 层特征集实有 6 类）
-	Dev.check(s7.split(" · ").size() <= 3, "situation",
-		"派生至多 3 项特征（截断生效）：%s（%d 项）" % [s7, s7.split(" · ").size()])
-	# ⑦ 验效果：红线——零推荐语（只描述性质，不给主导策略）
+	if not is_instance_valid(gm.dungeon):
+		Dev.check(false, "layout", "探针前置失败：dungeon 为空，无法重数房型")
+		return
+	# ① 真值重数（独立遍历，不调用被测函数；期望串按规格格式独立构造）
+	var ne_truth := 0
+	var cursed_truth := false
+	var kinds := {}
+	for c in gm.dungeon.rooms:
+		var k := String(gm.dungeon.rooms[c].get("kind", ""))
+		kinds[k] = int(kinds.get(k, 0)) + 1
+		if k == "elite":
+			ne_truth += 1
+		elif k == "cursed":
+			cursed_truth = true
+	var lay: String = gm.floor_layout_hint()
+	var exp_parts: Array[String] = []
+	exp_parts.append(("精英 %d" % ne_truth) if ne_truth > 0 else "无精英")
+	if cursed_truth:
+		exp_parts.append("有诅咒房")
+	var exp_lay := " ｜ ".join(PackedStringArray(exp_parts))
+	Dev.check(lay == exp_lay, "layout",
+		"房型计数与 dungeon.rooms 独立重数全等：实返=%s 重数=%s" % [lay, exp_lay])
+	Dev.check(ne_truth == int(kinds.get("elite", 0)), "layout",
+		"elite 计数自洽：%d / kinds=%s" % [ne_truth, str(kinds)])
+	# ② 格式锁（不依赖重数值，抓格式退化）
+	var segs := lay.split(" ｜ ")
+	Dev.check(segs.size() >= 1 and segs.size() <= 2, "layout", "房型段数 ∈ [1,2]：%d" % segs.size())
+	var head: String = segs[0]
+	var head_ok: bool = head == "无精英" or (head.begins_with("精英 ") and head.substr(3).is_valid_int())
+	Dev.check(head_ok, "layout", "首段为「无精英」或「精英 N」：%s" % head)
+	Dev.check((segs.size() == 2) == cursed_truth, "layout",
+		"诅咒段出现当且仅当本图有诅咒房（重数=%s）：%s" % [str(cursed_truth), lay])
+	if segs.size() == 2:
+		Dev.check(segs[1] == "有诅咒房", "layout", "次段只允许「有诅咒房」：%s" % segs[1])
+	# ③ 零位置泄漏：只报计数，不报坐标
+	var leak := ""
+	for bad in ["(", ",", "Vector2i", "["]:
+		if lay.contains(bad):
+			leak = bad
+	Dev.check(leak == "", "layout", "输出零位置泄漏（命中：%s）：%s" % [leak, lay])
+	# ④ 红线：零推荐语（只陈述房型事实，不给主导策略）
 	var hit := ""
-	var redline: Array[String] = ["建议", "推荐", "优先", "带"]
-	for bad in redline:
-		if s3.contains(bad) or s4.contains(bad) or s6.contains(bad) or s7.contains(bad):
-			hit = bad
-	Dev.check(hit == "", "situation", "形势文案零推荐语（命中：%s）" % hit)
-	# ⑧ 验效果：派生零 rng / 零 fx_rng 消费（state 前后相等，与 _roll_squad 抽取解耦自证）
+	for bad2 in ["建议", "推荐", "优先", "带"]:
+		if lay.contains(bad2):
+			hit = bad2
+	Dev.check(hit == "", "layout", "房型文案零推荐语（命中：%s）" % hit)
+	# ⑤ 零 rng / fx_rng 消费（state 前后相等，与地图生成解耦自证）
 	var rs_state = Game.rng.state
 	var fx_state = Game.fx_rng.state
-	gm.floor_situation()
-	Dev.check(Game.rng.state == rs_state and Game.fx_rng.state == fx_state, "situation",
-		"floor_situation 零 Game.rng / fx_rng 消费")
-	Game.floor_num = bak_floor
-	print("[SMOKE-SITUATION] done s3=%s s4=%s s6=%s s7=%s s8=%s" % [s3, s4, s6, s7, s8])
+	gm.floor_layout_hint()
+	Dev.check(Game.rng.state == rs_state and Game.fx_rng.state == fx_state, "layout",
+		"floor_layout_hint 零 Game.rng / fx_rng 消费")
+	# ⑥ 幂等：同图连调两次全等（可抓状态泄漏）
+	Dev.check(gm.floor_layout_hint() == lay, "layout", "同图连调两次全等（幂等）：%s" % lay)
+	# ⑦ 空图守卫：置空返回 ""，立即还原后同图输出不变（无 await 间隙，不影响后续探针）
+	var bak_dungeon = gm.dungeon
+	gm.dungeon = null
+	var empty_ret: String = gm.floor_layout_hint()
+	gm.dungeon = bak_dungeon
+	Dev.check(empty_ret == "", "layout", "dungeon 为空时返回空串（守卫生效）：[%s]" % empty_ret)
+	Dev.check(is_instance_valid(gm.dungeon) and gm.floor_layout_hint() == lay, "layout",
+		"置空后立即还原，同图输出不变")
+	print("[SMOKE-LAYOUT] done lay=%s ne=%d cursed=%s kinds=%s" % [
+		lay, ne_truth, str(cursed_truth), str(kinds)])
 
 
 ## SMOKE_FLOOR_SIGN / SMOKE_FLAVOR：层签 + 地窖低语断言（Sprint 16 C/D，Sprint 18 B 扩展第二行）
 ## 【Sprint 17 B 断言盘点】全为「验效果型」：层签文本包含实值 / rng.state 与 fx_rng.state 前后相等 /
 ## toast 文本与重复登记不变 / 分母不变 / 图鉴手记行渲染扫描；A1 跳层断言另见 game_main.start_run。
-## 【Sprint 18 B 增补】第二行「验效果型」：floor=1 第二行为空且隐藏 / floor=4 第二行显示且含形势与主题手记实值 /
-## 主行文本一字不改（与实值全等比对，防 B 项改动溢出到主行）。
+## 【Sprint 18 B / A-v3 增补】第二行「验效果型」：floor=1 第二行**非空且可见**、全等「本层 · <房型>」/
+## floor=4 第二行显示且含「本层」+ 房型段实值 + 主题手记实值 / 主行文本一字不改（与实值全等比对）。
+## 注：本探针用 floor_num 切主题语境，地图始终是已生成的同一张（floor_layout_hint 不随 floor_num 变），
+## 故 floor=4 段验的是**界面拼装**，不代表真实 4 层地图；真实地图真值由 _layout_probe 独立重数。
 func _floor_sign_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
@@ -1261,26 +1287,39 @@ func _floor_sign_probe() -> void:
 	var fx_state = Game.fx_rng.state
 	gm.update_floor_sign()
 	Dev.check(Game.fx_rng.state == fx_state, "floor_sign", "层签刷新零 fx_rng 消费")
-	# Sprint 18 B：floor=1 → 第二行为空且隐藏（无形势、无主题手记）
-	Dev.check(String(Game.main.hud._floor_sign_sub_label.text) == ""
-		and Game.main.hud._floor_sign_sub_label.visible == false, "floor_sign_sub",
-		"floor=1 层签第二行为空且隐藏")
-	# Sprint 18 B：floor=4（源石矿脉 vein）→ 第二行显示，含「形势」+ 主题手记实值
+	# Sprint 18 A v3：floor=1 → 第二行**非空且可见**（v2 中此处为空；v3 房型段恒有内容）
+	# 推导与硬编码解耦：先取同一张图的房型段实值，再逐步比对结构。
+	# 注意探针运行时 SMOKE 已可能推进楼层，故这里**不硬编码**层号/计数，只锁「本层 · <当前图房型段>」
+	var lay1: String = gm.floor_layout_hint()
+	var sub1: String = String(Game.main.hud._floor_sign_sub_label.text)
+	Dev.check(Game.main.hud._floor_sign_sub_label.visible and sub1 != "", "floor_sign_sub",
+		"floor=1 层签第二行非空且可见：%s" % sub1)
+	Dev.check(sub1.begins_with("本层 · "), "floor_sign_sub",
+		"floor=1 第二行以「本层 · 」开头：%s" % sub1)
+	Dev.check(sub1.contains(lay1), "floor_sign_sub",
+		"floor=1 第二行含房型段实值：%s（房型段=%s）" % [sub1, lay1])
+	# theme_for_floor(n<4) 返回 {} → 1 层无手记段 → 第二行收尾即房型段末尾（全等锁）
+	Dev.check(sub1 == "本层 · " + lay1, "floor_sign_sub",
+		"floor=1 第二行全等「本层 · <房型>」（无主题故无手记段）：%s" % sub1)
+	# Sprint 18 B / A-v3：floor=4（源石矿脉 vein）→ 第二行显示，含「本层」房型段 + 主题手记实值
 	Game.floor_num = 4
 	gm.update_floor_sign()
+	var lay4: String = gm.floor_layout_hint()
 	var sub: String = String(Game.main.hud._floor_sign_sub_label.text)
-	Dev.check(Game.main.hud._floor_sign_sub_label.visible and sub.contains("形势"), "floor_sign_sub",
-		"floor=4 层签第二行显示且含形势：%s" % sub)
+	Dev.check(Game.main.hud._floor_sign_sub_label.visible and sub.contains("本层 · "), "floor_sign_sub",
+		"floor=4 层签第二行显示且含「本层 · 」：%s" % sub)
+	Dev.check(sub.contains(lay4), "floor_sign_sub",
+		"floor=4 第二行含房型段实值（floor_layout_hint）：%s（房型段=%s）" % [sub, lay4])
 	Dev.check(sub.contains("矿脉层"), "floor_sign_sub",
 		"floor=4 第二行含主题手记实值（FLAVOR themes/vein）：%s" % sub)
-	# 两段拼接分隔符（形势段与手记段之间为「 ｜ 」——锁组合结构，不锁具体文案）
+	# 拼接分隔符（房型段/诅咒段与手记段之间为「 ｜ 」——锁组合结构，不锁具体文案）
 	Dev.check(sub.contains(" ｜ "), "floor_sign_sub",
-		"floor=4 第二行以「 ｜ 」连接形势与手记：%s" % sub)
+		"floor=4 第二行以「 ｜ 」连接房型与手记：%s" % sub)
 	# Sprint 18 B：主行一字不改（全等回归锁——防 B 项改动溢出到主行格式）
 	var main4: String = String(Game.main.hud._floor_sign_label.text)
 	Dev.check(main4 == "层签 · 源石矿脉◆ ｜ 灾祸：无", "floor_sign_sub",
 		"floor=4 主行文本一字未改：%s" % main4)
-	print("[SMOKE-FLOOR-SIGN] B: sub1=<hidden> sub4=%s main4=%s" % [sub, main4])
+	print("[SMOKE-FLOOR-SIGN] B: sub1=%s sub4=%s main4=%s" % [sub1, sub, main4])
 	Game.floor_num = 1   # 还原本探针自设语境（后续 D 段在 1 层跑）
 	gm.update_floor_sign()
 	# D：首发现播报（清条目 → mark → toast 文本含手记；重复 mark → 文本不变）
