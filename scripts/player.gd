@@ -1273,6 +1273,9 @@ func _floor_sign_probe() -> void:
 		"floor=4 层签第二行显示且含形势：%s" % sub)
 	Dev.check(sub.contains("矿脉层"), "floor_sign_sub",
 		"floor=4 第二行含主题手记实值（FLAVOR themes/vein）：%s" % sub)
+	# 两段拼接分隔符（形势段与手记段之间为「 ｜ 」——锁组合结构，不锁具体文案）
+	Dev.check(sub.contains(" ｜ "), "floor_sign_sub",
+		"floor=4 第二行以「 ｜ 」连接形势与手记：%s" % sub)
 	# Sprint 18 B：主行一字不改（全等回归锁——防 B 项改动溢出到主行格式）
 	var main4: String = String(Game.main.hud._floor_sign_label.text)
 	Dev.check(main4 == "层签 · 源石矿脉◆ ｜ 灾祸：无", "floor_sign_sub",

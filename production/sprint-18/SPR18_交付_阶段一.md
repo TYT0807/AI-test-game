@@ -10,10 +10,10 @@
 |---|---|
 | A `floor_situation()` v2 | 落 `game_main.gd:1015`；1–12 层派生实值与主理人预期**逐行全等**（见 §三） |
 | B 层签双行 | `hud.gd:596` `set_floor_sign(text, sub := "")` + `hud.gd:61/504-511` `_floor_sign_sub_label`；`game_main.gd:1073` 拼装第二行，**主行一字未改** |
-| 探针 | 新增 `[SMOKE-SITUATION]`（10 条断言）+ `_floor_sign_probe` 扩 4 条双行断言（合计新增 14 条） |
-| 四门控 | 全过（§四），全量 6000 帧 **0 报错** |
-| 负向对照 | 7 组实跑落盘（§五），其中 1 组按设计为 **0 红** 并如实标注为「前提守卫型恒过」实证 |
-| 冻结清单 | 重定 3 行、仍 34 行、34 OK / 0 FAILED；`data.gd` 保持原值 `0c9cf515…` |
+| 探针 | 新增 `[SMOKE-SITUATION]`（10 条断言）+ `_floor_sign_probe` 扩 5 条双行断言（合计新增 15 条） |
+| 四门控 | 全过（§四），全量 6000 帧 **0 报错**（跑 2 次：主批 + 补第 15 条断言后） |
+| 负向对照 | 8 组实跑落盘（§五），其中 1 组按设计为 **0 红** 并如实标注为「前提守卫型恒过」实证 |
+| 冻结清单 | 重定 4 行次（`player.gd` 重定 2 次）、仍 34 行、34 OK / 0 FAILED；`data.gd` 保持原值 `0c9cf515…` |
 
 ## 一、A · `floor_situation()` 纯只读静态派生（v2 布尔口径）
 
@@ -70,7 +70,7 @@ env SMOKE=1 SMOKE_SEED=12345 SMOKE_V8=1 SMOKE_REBIND=1 SMOKE_RELIC_PROBE=orb_shi
 **③ E1 双跑**：同 seed 1800 帧 ×2 → `_tools/spr18_p1_e1_{1,2}.log`；`cmp` 两指纹文件 **byte-identical**（md5 均 `0fc7391ca770964489340c350f53b53e`）；`rooms=(−1,0),(−1,1),(0,−1),(0,0),(0,1),(0,2),(0,3),(1,1),(2,1) kinds=secret,treasure,shop,start,combat,elite,super_secret,elite,boss` —— **零重定**。
 **④ E6**：`git diff` 新增行中 `delta` **零命中**（全库 33 处 `FIXED_DT` 未动；现存 `delta` 用法均为既有 `_process` 链路，本批未触碰）。
 
-## 五、负向对照（7 组，全部实跑落盘）
+## 五、负向对照（8 组，全部实跑落盘）
 
 | 变体 | 突变点 | `[ERR]` | 转红断言 |
 |---|---|---|---|
@@ -81,8 +81,9 @@ env SMOKE=1 SMOKE_SEED=12345 SMOKE_V8=1 SMOKE_REBIND=1 SMOKE_RELIC_PROBE=orb_shi
 | `v4_nosub` | `set_floor_sign` 忽略 `sub` | **2** | 第二行显示且含形势 / 含主题手记实值 |
 | `v5_mainline` | 主行 `"层签 · "` → `"层 "` | **1** | 主行文本一字未改（全等锁） |
 | `v6_noprefix` | 第二行丢 `"形势 · "` 前缀 | **1** | 第二行含形势 |
+| `v7_sep` | 拼接符 `" ｜ "` → `" / "` | **1** | 第二行以「 ｜ 」连接形势与手记 |
 
-日志：`_tools/spr18_neg_{v1_threshold,v1b_noguard,v2_notrunc,v3_rng,v4_nosub,v5_mainline,v6_noprefix}.log`。
+日志：`_tools/spr18_neg_{v1_threshold,v1b_noguard,v2_notrunc,v3_rng,v4_nosub,v5_mainline,v6_noprefix,v7_sep}.log`。
 **注（诚实标注）**：`v1b_noguard` 按设计 **0 红**——floor 1/2 本无 `min_floor<=floor` 的候选编队，`min_floor` 过滤已足以返回 `""`，故门槛只是防御性早退。这证明探针 ①/② **属「前提守卫型恒过」**，不能当作有效绿灯；有效门槛验证由 `v1_threshold` 承担。该结论已写进 `_situation_probe` 的分类注释，不粉饰。
 
 ## 六、断言盘点（新增 14 条）
@@ -103,6 +104,7 @@ env SMOKE=1 SMOKE_SEED=12345 SMOKE_V8=1 SMOKE_REBIND=1 SMOKE_RELIC_PROBE=orb_shi
 | 12 | 验效果型 | floor=4 第二行显示且含 `形势` | v4 / v6 |
 | 13 | 验效果型 | floor=4 第二行含 `矿脉层`（`FLAVOR["themes/vein"]` 实值） | v4 |
 | 14 | 验效果型（回归锁） | floor=4 主行 == `层签 · 源石矿脉◆ ｜ 灾祸：无` | v5_mainline |
+| 15 | 验效果型（结构锁） | floor=4 第二行含 `" ｜ "`（形势段与手记段的拼接符） | v7_sep |
 
 ## 七、偏差清单
 
@@ -113,6 +115,7 @@ env SMOKE=1 SMOKE_SEED=12345 SMOKE_V8=1 SMOKE_REBIND=1 SMOKE_RELIC_PROBE=orb_shi
 5. **探针断言比派单要求多 3 条**：⑥ 恒等（8 层==7 层）、⑥b 截断（≤3 项）、floor=3 全等（派单要求精确相等，已照做）。加 ⑥b 的原因：原 ⑥ 单独不能抓截断（去掉截断后 8 层仍等于 7 层），故单独补一条真锁。
 6. **floor=4 第二行有两个 `·` 分隔符**（`形势 · 护盾 · 远射 · 冲锋 ｜ …`）。这是规格「`形势 · <sit>`」与 sit 自身 `" · "` 连接的叠加结果，我未擅自改文案；可读性终审留给文策渊。
 7. **未改 `data.gd`**：v2 纯布尔口径不需要动 `SQUADS` 权重（派单亦明确不改）。
+8. **【本批第 2 次并发写入】主理人在我提交 `4cf2cc4` 之后又往 `scripts/player.gd` 追加了第 15 条断言**（`sub.contains(" ｜ ")`，锁形势段与手记段的拼接符）。我已：① 900 帧实跑确认转绿（`_tools/spr18_p1_sep.log`）；② 补负向对照 `v7_sep`（拼接符改 `" / "` → 1 红，`_tools/spr18_neg_v7_sep.log`），证明它真的会咬；③ 只重定 `player.gd` 单行（`dbcb8f5e…→e8dae022…`，清单仍 34 行 34 OK）；④ 重跑全量 6000 帧绿（`_tools/spr18_p1_full2.log`：0 报错 / validate 0 / 34-34 编译扫描 / 12 done）。该条断言属主理人授权新增，我按「先验证后入库」处理，未回退。
 
 ## 八、回滚
 
