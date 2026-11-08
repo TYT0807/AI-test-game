@@ -376,6 +376,20 @@ const FLAVOR := {
 	"themes/ice": "冰面。刹车提前半秒。",
 	"themes/swamp": "毒沼。慢是慢了点，稳当。",
 	"themes/vines": "藤蔓。烧掉，或者绕路。",
+	# Sprint 18 阶段二 D：圣所熟客呼应 10 条（键 shrine/<offer_id>，与 SHRINE_OFFERS 一一对应）。
+	# **只作 Data.FLAVOR.get("shrine/"+id) 直查**给 shrine_panel 三卡灰字用；**不喂 mark_codex**
+	# （CODEX_KINDS 五类不含 shrine，喂了会被 :319 的 codex.has(kind) 守卫直接拒绝）→ 不进任何
+	# 发现集 / 分母 / 首发现播报。显示条件为**恒显**（不读发现状态），内容随三卡派生而变。
+	"shrine/blood_relic": "血祭。地窖里最不缺的就是血。",
+	"shrine/ore_upgrade": "源石淬炼。矿里人管这叫喂石头。",
+	"shrine/purify": "净化。这层的脏，散得掉。",
+	"shrine/ward_boon": "护盾祝福。挡一下，就散了。",
+	"shrine/heal": "修复。缝两针，血就回来了。",
+	"shrine/relic_suffix": "铭刻。刻上去的，抠不下来。",
+	"shrine/greed_pact": "贪欲契约。血换石头，老规矩了。",
+	"shrine/wind_dance": "风之舞。腿快了，坑还是那些坑。",
+	"shrine/shard_pact": "共鸣契约。地窖的账，只记碎片。",
+	"shrine/power_surge": "力量激涌。手重了，人也就薄了。",
 }
 
 

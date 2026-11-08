@@ -15,6 +15,7 @@ var _names: Array[Label] = []
 var _descs: Array[Label] = []
 var _costs: Array[Label] = []
 var _hints: Array[Label] = []
+var _flavors: Array[Label] = []   # Sprint 18 阶段二 D：三卡灰字（Data.FLAVOR["shrine/<id>"] 直查，纯只读）
 var _root: Control
 
 
@@ -55,6 +56,7 @@ func _ready() -> void:
 		_descs.append(parts["desc"])
 		_costs.append(parts["cost"])
 		_hints.append(parts["hint"])
+		_flavors.append(parts["flavor"])
 	for i in 3:
 		_ok.append(false)
 
@@ -94,6 +96,16 @@ func _make_card(index: int) -> Dictionary:
 	cost.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
 	vb.add_child(cost)
 
+	# Sprint 18 阶段二 D：熟客呼应灰字（比 desc 小两档，暗灰，恒显但查不到即隐藏）
+	var flavor := Label.new()
+	flavor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	flavor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	flavor.custom_minimum_size = Vector2(190, 0)
+	flavor.add_theme_font_size_override("font_size", 11)
+	flavor.add_theme_color_override("font_color", Color(0.62, 0.64, 0.70))
+	flavor.visible = false
+	vb.add_child(flavor)
+
 	var hint := Label.new()
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 13)
@@ -103,7 +115,7 @@ func _make_card(index: int) -> Dictionary:
 	card.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			_pick(index))
-	return {"card": card, "name": name_l, "desc": desc, "cost": cost, "hint": hint}
+	return {"card": card, "name": name_l, "desc": desc, "cost": cost, "hint": hint, "flavor": flavor}
 
 
 func open(offers: Array) -> void:
@@ -123,9 +135,14 @@ func open(offers: Array) -> void:
 			_names[i].text = String(o["name"])
 			_descs[i].text = String(o["desc"])
 			_costs[i].text = _cost_text(o)
+			# D：灰字直查 FLAVOR["shrine/<id>"]；查不到 → 空文本 + 隐藏（不改卡的任何可用性）
+			var fv := String(Data.FLAVOR.get("shrine/" + String(o.get("id", "")), ""))
+			_flavors[i].text = fv
+			_flavors[i].visible = fv != ""
 			_set_state(i, i < can_afford.size() and bool(can_afford[i]))
 		else:
 			_cards[i].visible = false
+			_flavors[i].visible = false
 	_root.visible = true
 	get_tree().paused = true
 	# SMOKE 自动驾驶：选第一张可支付的卡（升级面板同范式；SMOKE_NO_AUTOPICK 可关闭）

@@ -152,6 +152,8 @@ func _ready() -> void:
 		_suffix_probe.call_deferred()
 	if OS.get_environment("SMOKE_SIGIL_COVERAGE") != "":
 		_sigil_coverage_probe.call_deferred()
+	if OS.get_environment("SMOKE_SIGIL_OATH") != "":
+		_sigil_oath_probe.call_deferred()
 	if OS.get_environment("SMOKE_SHRINE") != "":
 		_shrine_probe.call_deferred()
 	if OS.get_environment("SMOKE_CODEX") != "":
@@ -781,6 +783,64 @@ func _sigil_coverage_probe() -> void:
 	Game.save_sigils()
 
 
+## SMOKE_SIGIL_OATH=1：印记页「上局誓约」一行（Sprint 18 阶段二 C）
+## 【断言盘点 · 全部「验效果型」，验渲染不验字段】
+##   ① 真调 `menu.show_page("sigils")` 重建印记页 → 遍历 `_rows` 找 Label，断言文本含
+##      「上局誓约」+ name 实值 + 兑现态 + 进度 (cur/need) —— 不是"字段存在"而是"渲染出来"；
+##   ② `last_run.oath` 为空 → 该 Label **不创建**（非建后隐藏）；
+##   ③ 零副作用：`show_page("sigils")` 前后 `Game.codex` 深拷贝全等（**同步比对，不跨 await**，
+##      避免与同期探针的 codex 写入互相干扰）。
+## 探针自设语境（改内存 oath、切页），结束全部还原：oath 原值回填、切回原页。
+func _sigil_oath_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	if gm.menu == null or not is_instance_valid(gm.menu):
+		Dev.check(false, "sigil_oath", "探针前置失败：menu 未就绪")
+		return
+	var menu: Node = gm.menu
+	var bak_page: String = String(menu._page)
+	var bak_oath = Game.codex["last_run"].get("oath", {})
+	Game.codex["last_run"]["oath"] = {"id": "keep_hp", "name": "守血",
+		"desc": "生命上限不低于 5", "done": true, "cur": 5, "need": 5}
+	# ③ 零副作用（同步段：构建页面不得改动 codex 任何字段）
+	var snap: Dictionary = Game.codex.duplicate(true)
+	menu.show_page("sigils")
+	Dev.check(Game.codex == snap, "sigil_oath", "页面构建零副作用（Game.codex 前后深等）")
+	await get_tree().process_frame
+	# ① 有 oath → 渲染出「上局誓约」行，且含实值
+	var hit := _find_label_containing(menu._rows, "上局誓约")
+	Dev.check(hit != null, "sigil_oath", "有 last_run.oath → 印记页出现「上局誓约」行")
+	if hit != null:
+		var t: String = String(hit.text)
+		Dev.check(t.begins_with("上局誓约 · "), "sigil_oath",
+			"用词为「上局誓约」（与图鉴页「本局誓约」区分）：%s" % t)
+		Dev.check(t.contains("守血") and t.contains("已兑现") and t.contains("（5/5）"),
+			"sigil_oath", "上局誓约行含 name/兑现态/进度实值：%s" % t)
+	# ② 无 oath → 整个 Label 不创建
+	Game.codex["last_run"].erase("oath")
+	menu.show_page("sigils")
+	await get_tree().process_frame
+	Dev.check(_find_label_containing(menu._rows, "上局誓约") == null, "sigil_oath",
+		"last_run.oath 为空 → 该行不创建（非建后隐藏）")
+	# 还原：oath 原值回填 + 切回原页
+	if (bak_oath as Dictionary).is_empty():
+		Game.codex["last_run"].erase("oath")
+	else:
+		Game.codex["last_run"]["oath"] = bak_oath
+	menu.show_page(bak_page)
+	print("[SMOKE-SIGIL-OATH] done")
+
+
+func _find_label_containing(root: Node, needle: String) -> Label:
+	for c in root.get_children():
+		if c is Label and String((c as Label).text).contains(needle):
+			return c as Label
+		var d := _find_label_containing(c, needle)
+		if d != null:
+			return d
+	return null
+
+
 ## SMOKE_SHRINE=1：圣所断言——三卡确定性 / 效果+代价逐条 / 置灰 / 实开面板全链（Sprint 13 A）
 ## 【Sprint 17 B 断言盘点】以「验效果型」为主：代价数值（20→12 源石 / 5→4 上限 / 40 源石）、
 ## 面板可见状态、cleared 回写、暂停态。两条限时 buff 已由 Sprint 15 收口批从「只验标志」
@@ -893,6 +953,30 @@ func _shrine_probe() -> void:
 	Game.floor_num = 1
 	Dev.check(gm._shrine_offers_for(coord).is_empty(), "shrine", "floor1 空池护栏返回 []")
 	Game.floor_num = bak_floor
+	# ---------------- Sprint 18 阶段二 D：三卡灰字（FLAVOR["shrine/<id>"] 直查） ----------------
+	# 验渲染：断言「三卡每张的 _flavors[i].text == 表值」且 visible，而不是"表里有键"。
+	# 三卡由探针自控（不依赖派生），避免 floor/coord 变化导致命中集合不同。
+	var fset: Array = [gm._shrine_entry("blood_relic"), gm._shrine_entry("ore_upgrade"),
+		gm._shrine_entry("heal")]
+	gm.shrine_panel.open(fset)
+	var f_hits := 0
+	var f_list := ""
+	for i in 3:
+		var oid := String(fset[i]["id"])
+		var want := String(Data.FLAVOR.get("shrine/" + oid, ""))
+		var got := String(gm.shrine_panel._flavors[i].text)
+		var vis: bool = gm.shrine_panel._flavors[i].visible
+		f_list += "%s=[%s]" % [oid, got]
+		Dev.check(want != "" and got == want and vis, "shrine",
+			"D: 卡 %d(%s) 灰字 == FLAVOR 实值且可见：[%s]" % [i, oid, got])
+		if want != "" and got == want and vis:
+			f_hits += 1
+	Dev.check(f_hits == 3, "shrine", "D: 三卡灰字全部命中（%d/3）" % f_hits)
+	print("[SMOKE-SHRINE] D flavors %s" % f_list)
+	# 自开自关：不留给 autopick 触发真实选择（隐藏后 safe_delay 回调会因 _root.visible=false 跳过）
+	gm.shrine_panel._root.visible = false
+	gm.shrine_panel._offers = []
+	get_tree().paused = false
 	print("[SMOKE-SHRINE] done")
 
 

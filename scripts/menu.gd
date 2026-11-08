@@ -624,6 +624,22 @@ func _build_sigils() -> void:
 	balance.add_theme_font_size_override("font_size", 20)
 	balance.add_theme_color_override("font_color", Color(0.6, 0.9, 0.95))
 	_rows.add_child(balance)
+	# Sprint 18 阶段二 C：上局誓约一行（**纯只读展示**——不调 save_codex / set_codex_last_run，
+	# 不调 mark_codex，不进任何发现集与分母，不读写 Game.rng）。数据源与 _build_codex() 的
+	# 「本局誓约」同源，但词必须区分：图鉴页是事后复盘（本局），印记页是"开局带哪枚"的决策位（上局）。
+	# oath 为空或 name 为空 → **整个 Label 不创建**（不建了再隐藏，省一层节点）。
+	var last_oath: Dictionary = Game.codex.get("last_run", {}).get("oath", {})
+	if not last_oath.is_empty() and String(last_oath.get("name", "")) != "":
+		var odone: bool = bool(last_oath.get("done", false))
+		var ol := Label.new()
+		ol.text = "上局誓约 · %s「%s」%s（%d/%d）" % [String(last_oath.get("name", "")),
+			String(last_oath.get("desc", "")), "已兑现" if odone else "未兑现",
+			int(last_oath.get("cur", 0)), int(last_oath.get("need", 0))]
+		ol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ol.add_theme_font_size_override("font_size", 14)
+		ol.add_theme_color_override("font_color",
+			Color(0.6, 0.95, 0.7) if odone else Color(0.72, 0.75, 0.82))
+		_rows.add_child(ol)
 	var eq_name := "无"
 	if String(Game.sigils["equipped"]) != "" and Data.SIGILS.has(String(Game.sigils["equipped"])):
 		eq_name = String(Data.SIGILS[String(Game.sigils["equipped"])]["name"])
