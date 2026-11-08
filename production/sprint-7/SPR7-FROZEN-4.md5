@@ -5,8 +5,8 @@
 558c85f4c8630830a36bf71b9ef2ecb1 *scripts/upgrades.gd
 5aa28e9bc4c9592d07bc00bd693d1259 *scripts/toxic_cloud.gd
 63b716c5fd064f93bcd7bb5b3391d2f1 *scripts/shop_stand.gd
-692dd9e7c2f28579f7da344421cb106d *scripts/player.gd
 6a17cd2898825541876254240b392381 *scripts/pickup.gd
+6a3df7daed75580d6f5e9d4b3d85ec7b *scripts/player.gd
 7eeafed26f5f0478aaef5025bb2a7057 *scripts/secret_wall.gd
 84d93d4bdd3403d83cc5583e7b7a4e8d *scripts/bullet.gd
 86c9466a751c0b932db142ae2626c891 *scripts/ally.gd
@@ -22,12 +22,12 @@ b8499a95324fa66a90a7d698979a29b5 *scripts/dev_log.gd
 c26d847b0052674c615d616310a2a93e *scripts/weapons.gd
 c29161dba5fef897a5a69d11935090c6 *scripts/prop.gd
 c42b6bfa1592ef4cbcea4f4ec83a3445 *scripts/menu.gd
-d2d1b07e6593425087e3493d7c466600 *scripts/validate.gd
 dae73db19770c0a8fb3c53fe8bed8cd3 *scripts/relics.gd
 daf2935f4945f29fa163e0fbd1796ecb *scripts/upgrade_panel.gd
 dd4d872610243243f50b5b638581866f *scripts/crate.gd
 e02b98d5b9710cea2dffa014c637a3fe *scripts/slug.gd
 e08a82062bf73d305d5bd8f2c1008f8a *scripts/dungeon.gd
+e4bbc5071a903d72e6c60a44d2b6b25c *scripts/validate.gd
 ea59a6abcc5e0e3796edfa2c4fae2cde *scripts/data.gd
 f1ea5536bbd550e09e9d5e89d64f57fb *scripts/meta.gd
 fa7acbc36e849a88aad52b2b084a6986 *scripts/bomb.gd

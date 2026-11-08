@@ -214,8 +214,9 @@ func _check_shrine() -> void:
 			problems.append("floor %d 不应有圣所（实得 %d 间）" % [fn, n])
 		if fn >= 3 and n != 1:
 			problems.append("floor %d 应恰 1 间圣所（实得 %d 间）" % [fn, n])
-		# B4：shrine 恒非起点房——_enter_room 早于 _roll_calamity 的时序不对称当前无害依赖此条；
-		# 未来放宽房型/分配规则时在此当场报错（用断言锁前提，不改时序 → 零 E1 漂移）
+		# B4【断言性质：前提守卫型恒过】shrine 恒非起点房——_enter_room 早于 _roll_calamity
+		# 的时序不对称当前无害依赖此条；生成规则不变则本断言恒过，其价值在「前提被破坏时
+		# 当场报错」而非每日回归信号。未来放宽房型/分配规则时在此报错（锁前提，不改时序 → 零 E1 漂移）
 		for c in d.rooms:
 			if String(d.rooms[c].get("kind", "")) == "shrine" and c == Vector2i.ZERO:
 				problems.append("floor %d 的 shrine 落在起点房 Vector2i.ZERO（B4 前提被破坏）" % fn)

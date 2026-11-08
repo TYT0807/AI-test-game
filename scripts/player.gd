@@ -824,9 +824,13 @@ func _shrine_probe() -> void:
 	Dev.check(Game.diamonds == 40 and max_hp == pre_hp2 - 1, "shrine", "D: greed_pact 上限换源石 30→40")
 	Game.score = 200
 	gm._shrine_execute(gm._shrine_entry("wind_dance"))
-	Dev.check(_buffs.has("boots") and Game.score == 120, "shrine", "D: wind_dance 积分换移速 buff")
+	Dev.check(_buffs.has("boots") and is_equal_approx(float(_buffs["boots"].mult), 1.25) \
+		and float(_buffs["boots"].t) > 0.0 and Game.score == 120, "shrine",
+		"D: wind_dance 积分换移速 buff（mult=1.25/t>0 数值验证）")
 	gm._shrine_execute(gm._shrine_entry("power_surge"))
-	Dev.check(_buffs.has("book") and max_hp == pre_hp2 - 2, "shrine", "D: power_surge 上限换增伤 buff")
+	Dev.check(_buffs.has("book") and is_equal_approx(float(_buffs["book"].mult), 1.3) \
+		and float(_buffs["book"].t) > 0.0 and max_hp == pre_hp2 - 2, "shrine",
+		"D: power_surge 上限换增伤 buff（mult=1.3/t>0 数值验证）")
 	Game.diamonds = 20
 	var sh0 := int(Game.sigils["shards"])
 	gm._shrine_execute(gm._shrine_entry("shard_pact"))
@@ -1045,6 +1049,7 @@ func _third_boss_probe() -> void:
 	Dev.check(not Game.main._is_sovereign_floor(27) and Game.main._is_warden_floor(27),
 		"third_boss", "优先链前提: 27 是首领层且避开主权层")
 	Dev.check(Data.codex_bosses_total() == 7, "third_boss", "分母单源: 7（ENEMIES 真 Boss + 3 主题）")
+	# 【断言性质：前半为常量自比较守卫（防表被误改/错字，非行为断言）；后半 _codex_id_valid 是真校验门】
 	Dev.check(String(Data.CODEX_BOSS_NAMES["third_boss"]) == "玄渊之主"
 		and Game._codex_id_valid("bosses", "third_boss"), "third_boss", "表+校验器: third_boss 合法")
 	# 击杀登记路径单元证据：构造 boss3 实例直调 on_slug_killed——与 boss.gd _die :338 同一入口；
