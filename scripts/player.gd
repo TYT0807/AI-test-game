@@ -1265,11 +1265,16 @@ func _daily_share_probe() -> void:
 		"daily_share", "更优成绩覆盖最佳（5 层 / 60.0s）")
 	Dev.check(Game.daily_history().size() == 1, "daily_share", "同日不重复追加（仍 1 条）")
 
-	# ④ 7 天上限（纯函数，验数值）
+	# ④ 7 天截尾（Sprint 17 QA 补强 Major#4：不只验 size，还验保留的是「最新 7 条」——
+	# 把 out.slice(size-7) 改成 out.slice(0,7) 留最旧 7 条时，此断言必须转红）
 	var many: Array = []
 	for i in 9:
 		many.append({"key": "202611%02d" % (i + 1), "layers": i + 1, "time": float(i)})
-	Dev.check(Game.sanitize_daily_history(many).size() == 7, "daily_share", "本地榜上限 7 天（9 条截断为 7）")
+	var trimmed := Game.sanitize_daily_history(many)
+	Dev.check(trimmed.size() == 7
+		and String(trimmed[0].get("key", "")) == "20261103"
+		and String(trimmed[6].get("key", "")) == "20261109", "daily_share",
+		"7 天截尾保留最新 7 条（首 20261103 / 尾 20261109，非最旧 7 条）")
 
 	# ⑤ 验渲染：真实 Label / LineEdit 节点文本（脱离 _rows 构建，避免与其它并发探针抢树）
 	var holder := VBoxContainer.new()
@@ -1299,6 +1304,60 @@ func _daily_share_probe() -> void:
 	Dev.check(int(Game.daily_best_today().get("layers", -1)) >= 0,
 		"daily_share", "坏档今日最佳不崩且非负")
 	Dev.check(Game.daily_history_text() == "近 7 日：暂无记录", "daily_share", "坏档显示文本降级")
+
+	# ⑦ Sprint 17 QA 补强 Major#3：_load_daily_share / _copy_daily_share 四条定向断言。
+	# 全部验文本 + 验字节/状态数值，不只验标志；复用 daily_path_override 隔离档。
+	var menu_ref = Game.main.menu
+	var bak_mode := Game.daily_mode
+	Game.daily_mode = false
+	var other := "20261107"
+	var cross_code := other + "-" + Game.daily_share_checksum(other)
+	# ① 跨日码拒绝：校验位合法但日期不是今日 → 状态行文本变化 + daily_mode 未置位 + 档字节未变
+	var f_a := FileAccess.get_file_as_bytes(p)
+	var status_a := Label.new()
+	menu_ref._load_daily_share(cross_code, status_a)
+	Dev.check(Game.daily_share_code_valid(cross_code)
+		and String(status_a.text).contains("校验失败或非今日")
+		and not Game.daily_mode
+		and FileAccess.get_file_as_bytes(p) == f_a,
+		"qa_fix", "跨日码拒绝：状态行文本变化 + daily_mode 未置位 + 档字节未变")
+	# ② 篡改/垃圾码拒绝：状态行文本 + 未置位 + 未写盘 + rng 状态未变（未触发 start_game→start_run）
+	var f_b := FileAccess.get_file_as_bytes(p)
+	var rs_b = Game.rng.state
+	var status_b := Label.new()
+	menu_ref._load_daily_share(code + "0", status_b)
+	menu_ref._load_daily_share("garbage", status_b)
+	Dev.check(String(status_b.text).contains("校验失败或非今日")
+		and not Game.daily_mode
+		and FileAccess.get_file_as_bytes(p) == f_b
+		and Game.rng.state == rs_b,
+		"qa_fix", "篡改/垃圾码拒绝：状态行文本 + 未置位 + 未写盘 + rng 状态未变")
+	# ③ headless 剪贴板跳过不抛错：护栏源码回读 + 调用无异常 + 档字节/rng 状态未变
+	var f_c := FileAccess.get_file_as_bytes(p)
+	var rs_c = Game.rng.state
+	menu_ref._copy_daily_share()   # 若抛错，下面这行根本到不了
+	var menu_src := FileAccess.get_file_as_string("res://scripts/menu.gd")
+	Dev.check(String(menu_src).contains('if DisplayServer.get_name() == "headless":')
+		and DisplayServer.get_name() == "headless"
+		and FileAccess.get_file_as_bytes(p) == f_c
+		and Game.rng.state == rs_c,
+		"qa_fix", "headless 剪贴板跳过：护栏存在 + 未抛错 + 档字节/rng 状态未变")
+	# ④ 合法今日码载入（最后一条断言）：临时置空 Game.main 隔离 start_game()→start_run()
+	# 的重开局副作用（start_game 内有 null 守卫），同步还原、无帧穿插；之后不再断言。
+	var f_d := FileAccess.get_file_as_bytes(p)
+	var status_d := Label.new()
+	var saved_main = Game.main
+	Game.main = null
+	menu_ref._load_daily_share(code, status_d)
+	Game.main = saved_main
+	Dev.check(Game.daily_mode == true
+		and not String(status_d.text).contains("校验失败")
+		and FileAccess.get_file_as_bytes(p) == f_d,
+		"qa_fix", "合法今日码载入：daily_mode 置位 + 未走拒绝分支 + 未写盘")
+	print("[SMOKE-QA-FIX] done cross=%s tamper=%s loaded_mode=%s bytes_unchanged=%s" % [
+		String(status_a.text), String(status_b.text), str(Game.daily_mode),
+		str(FileAccess.get_file_as_bytes(p) == f_d)])
+	Game.daily_mode = bak_mode
 	# 现场恢复：还原空档 + 取消 override
 	var restore := ConfigFile.new()
 	restore.save(p)

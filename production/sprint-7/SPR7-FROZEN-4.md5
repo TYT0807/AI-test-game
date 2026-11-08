@@ -2,8 +2,8 @@
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
 296b8b7293e5cacc10edc23ea4c425d2 *scripts/shrine_panel.gd
 2f157b417097d412f0c9f7c25fd03401 *scripts/boss2.gd
-3eb8331bc492af3c0027d68ef18c9cca *scripts/player.gd
-0df43d915e00dcdecb15e3c7f631e06d *scripts/validate.gd
+e66793bfff40da2bdef0c35cc998693a *scripts/player.gd
+9fd432b72e0fc390d8d1693ffa15a6ae *scripts/validate.gd
 3ac9cac7af3a833f538964f7ca53a39c *scripts/boss3.gd
 ebea1702abcdc50dd6cbb281669c3da0 *scripts/menu.gd
 558c85f4c8630830a36bf71b9ef2ecb1 *scripts/upgrades.gd

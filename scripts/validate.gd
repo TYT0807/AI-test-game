@@ -294,6 +294,14 @@ func _check_daily() -> void:
 	var shown := Game.daily_history_text()
 	if not shown.begins_with("近 7 日：") or shown.is_empty():
 		problems.append("每日本地榜显示文本异常：%s" % shown)
+	# Sprint 17 QA 补强 Major#1：主菜单挂接线源码回读。
+	# SMOKE 下 menu._ready 走 show_page("")，_build_main_page() 从不执行；探针用脱离树
+	# holder 直调 build_daily_share_widgets() → 删掉挂接行四门控与断言仍全绿。
+	# 启动期锁挂接字符串（照 _check_contracts 的源码回读范式），零生产逻辑改动、零并发风险。
+	var menu_src := FileAccess.get_file_as_string("res://scripts/menu.gd")
+	var main_page_src := _slice(menu_src, "func _build_main_page()", "func build_daily_share_widgets(")
+	if main_page_src == "" or not main_page_src.contains("build_daily_share_widgets(left)"):
+		problems.append("主菜单 _build_main_page 未挂接 build_daily_share_widgets(left)（挂接线断开）")
 	if Game.daily_path() == "":
 		problems.append("daily_path 为空")
 
