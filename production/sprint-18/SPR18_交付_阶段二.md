@@ -164,9 +164,13 @@ $ git status --short                    → 仅 4 个 M + 主理人 2 个未跟�
 
 1. **【方法学订正】`SMOKE_DAILY=1` 时 seed 按本地日期派生，跨日跑指纹不可比。**
    `game_main.gd:344-346`：`if Game.daily_mode: Game.rng.seed = Game.daily_seed_for(Game.daily_key())` —— daily 模式的 seed 来自**日期**。本批第一轮全量（23:4x）与第二轮（00:0x 跨本地零点）的 floor=1 地图不同，一度看起来像 E1 回归；**实为跨日**。故 E1 门控改用**不带 `SMOKE_DAILY`** 的固定 seed 跑，得到 `55bf3134…`，与阶段一 v3 批次逐字节相同 → 零漂移。**这条写进方法学：E1 对照禁用 `SMOKE_DAILY`，除非当日对比。**
-2. **【环境事实】`data.gd` 是全库唯一 CRLF 文件**（489 处 `\r\n`，其余脚本全 LF）。两个后果：
-   - 改它时**锚点必须带 `\r\n`**（我第一版 D-NC1 就因用 `\n` 锚点空跑，0 命中，已修）；
-   - `git show 6a3dec0:scripts/data.gd` 得到的是 **LF 归一化版**（md5 `da583847…`），与工作树 CRLF 版（清单里的 `0c9cf515…`/现在的 `95311b8d…`）不同。**冻结清单以工作树为准**，若有干净克隆环境跑 `md5sum -c`，`data.gd` 一行会对不上——这是**既有状态**，不是本批引入，登记待决策（是否统一行尾 / 是否改用 `git hash-object` 校验）。
+2. **【环境事实 · 已知限制】`scripts/` 下行尾混排：8 个 CRLF / 26 个 LF。**
+   全量逐字节扫描（34 个脚本）：CRLF 的是 `assets.gd`(502) / `bullet.gd`(236) / `data.gd`(489) / `prop.gd`(96) / `secret_wall.gd`(36) / `slug.gd`(485) / `upgrade_panel.gd`(276) / `upgrades.gd`(222)；其余 26 个为 **纯 LF**；**无单文件内部混排**（不存在「同一文件里 CRLF 与 LF 并存」这种更麻烦的状态）。
+   **冻结清单 `SPR7-FROZEN-4.md5` 是「工作树字节快照」，不是仓库归一化字节。** 在 `core.autocrlf` 配置不同的环境 clone 后，上述 **8 行** md5 会对不上，**属预期行为，不是文件被篡改**。
+   这也解释了 `git show 6a3dec0:scripts/data.gd` 得到 `da583847…`（LF 归一化）而工作树是 `95311b8d…`（CRLF）。**清单以工作树为准。**
+   另注：`core.autocrlf=true` 并不能推出「工作树全 CRLF」——本仓库就是 8:26 的混合，这 8 个文件的行尾是历史上带进来的，autocrlf 没有回头统一。**不要再假设 autocrlf=true 等于全 CRLF。**
+   改这 8 个文件时**锚点必须带 `\r\n`**（本批第一版 D-NC1 就因用 `\n` 锚点空跑，0 命中，已修）。
+   本批**不改行尾**（统一行尾 = 8 行重算 + 全量重跑，收益只是跨环境可复现，而本项目单机开发、无 CI，换不来这个成本）。将来若要跨环境校验，应改用 `git hash-object` 或补 `.gitattributes` 强制 `text=auto eol=lf`，作为**一次独立批次**做。
 3. **C 的显示条件为「oath 非空且 name 非空」**（派单只写"dictionary 为空或 name 为空 → 不创建"，我照做并额外用 `name` 非空做双保险；两者都属"不创建"）。
 4. **D 的灰字字号取 11**（派单给"11 或 12，按实读 `_fs` 有无可用接口决定"）：`shrine_panel.gd` 里**没有 `_fs` 辅助**（那是 `hud.gd` 的），故直接 `add_theme_font_size_override("font_size", 11)`，与文件内既有写法一致（desc 14 / cost 15 / hint 13）。
 5. **新增 env `SMOKE_SIGIL_OATH`**（派单未指定探针开关名）。全量命令串已含它；不含它在 v3 代码下不会报错，只会漏跑 C 探针。
