@@ -319,6 +319,29 @@ func _build_codex() -> void:
 	replay.add_theme_font_size_override("font_size", 15)
 	replay.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
 	_rows.add_child(replay)
+	# Sprint 16 A/B：誓约兑现 + 抉择回声（只读 last_run 平行字段，纯展示零数值）
+	var oath: Dictionary = lr.get("oath", {})
+	if not oath.is_empty():
+		var ol := Label.new()
+		var omark := "已兑现" if bool(oath.get("done", false)) else "未兑现"
+		ol.text = "本局誓约 · %s「%s」%s（%d/%d）" % [String(oath.get("name", "")),
+			String(oath.get("desc", "")), omark, int(oath.get("cur", 0)), int(oath.get("need", 0))]
+		ol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ol.add_theme_font_size_override("font_size", 14)
+		ol.add_theme_color_override("font_color",
+			Color(0.6, 0.95, 0.7) if bool(oath.get("done", false)) else Color(0.72, 0.75, 0.82))
+		_rows.add_child(ol)
+	var echo: Dictionary = lr.get("echo", {})
+	if int(echo.get("count", 0)) > 0:
+		var names := []
+		for cid3 in echo.get("choices", []):
+			names.append(String(Data.SHRINE_OFFERS.get(String(cid3), {}).get("name", cid3)))
+		var el := Label.new()
+		el.text = "抉择回声 · %s：%s" % [String(echo.get("tag", "")), " → ".join(names)]
+		el.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		el.add_theme_font_size_override("font_size", 13)
+		el.add_theme_color_override("font_color", Color(0.78, 0.82, 0.9))
+		_rows.add_child(el)
 
 	var boss_total := Data.codex_bosses_total()   # Sprint 14 A：分母单源（ENEMIES 真 Boss + 2 主题 Boss）
 	_codex_section("enemies", "已遇敌人", Data.ENEMIES.size(),

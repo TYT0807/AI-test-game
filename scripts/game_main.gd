@@ -335,6 +335,9 @@ func start_run() -> void:
 	Upgrades.reset()
 	_run_settled = false
 	_boost_ticked = false
+	_oath_counters = {}   # Sprint 16 A/B：誓约计数与抉择链按局归零
+	_echo_choices = []
+	_echo_costs = {}
 	Game.floor_num = 1
 	# D 每日挑战（Sprint 12 §6.2）：daily 模式在 rng 首抽前覆盖 seed（E1 零漂移——
 	# 同日期派生同 seed，整局可复现；run_seed 随之等于 daily_seed，指纹自然一致）
@@ -1998,6 +2001,7 @@ func _open_shrine(coord: Vector2i) -> void:
 		# 核验 #3：空池不发选项不播音效不点里程碑，直接置已清——防「有横幅无面板」死房
 		dungeon.rooms[coord]["cleared"] = true
 		return
+	oath_count("shrine_visits")   # Sprint 16 A：誓约计数（圣所常客/兼修并蓄）
 	_milestone("first_shrine")
 	Game.sfx("shrine")
 	shrine_panel.autopilot = _smoke
@@ -2022,6 +2026,7 @@ func _shrine_execute(offer: Dictionary) -> void:
 			_clear_calamity_effects()
 			_calamity = ""
 			Game.calamity_floors.erase(Game.floor_num)   # 代价：若为唯一灾祸层，×1.5 结算作废
+			oath_count("purify_used")   # Sprint 16 A：净化誓约计数
 		"ward_boon":
 			player.shield_charges += 1
 		"heal":
@@ -2066,9 +2071,71 @@ func _on_shrine_chosen(index: int) -> void:
 		return   # 置灰卡不生效（面板已拦，此处双保险）
 	_shrine_execute(offer)
 	dungeon.rooms[_shrine_coord]["cleared"] = true   # 重进置 skip_loot，不重复扣/发
+	# Sprint 16 B：抉择链登记（offer 依时间序 + 代价类型分布——只增，局末落 last_run 平行字段）
+	_echo_choices.append(String(offer["id"]))
+	var ck := String(offer.get("cost_kind", ""))
+	_echo_costs[ck] = int(_echo_costs.get(ck, 0)) + 1
 	Game.sfx("powerup", 1.1)
 	if _smoke:
 		print("[SMOKE-SHRINE] chose=%s coord=%s" % [String(offer["id"]), _shrine_coord])
+
+
+## ---------------- Sprint 16 A/B：地窖誓约 + 抉择回声（只读事件计数 + 局末画像） ----------------
+
+var _oath_counters := {}       # 本局誓约事件计数（只增；键集 = Data.OATH_CONDITIONS watched 并集）
+var _echo_choices: Array = []  # B：本局圣所抉择链（offer id 依时间序）
+var _echo_costs := {}          # B：代价类型分布 {cost_kind: count}
+
+
+## 誓约事件计数：既有分支处调用（零 rng、零计时、不调 mark_codex——P0 自激红线）
+func oath_count(key: String, n := 1) -> void:
+	_oath_counters[key] = int(_oath_counters.get(key, 0)) + n
+
+
+## 誓约兑现度派生（纯只读）：装备印记 → {id, name, desc, done, cur, need}
+## 多条件（watched 多键）取最小计数，全达标才兑现；kills 直接读既有全局计数
+func oath_fulfillment() -> Dictionary:
+	var equipped: String = String(Game.sigils.get("equipped", ""))
+	var def: Dictionary = Data.OATH_CONDITIONS.get(equipped, {})
+	if def.is_empty():
+		return {}
+	var cur := 999
+	for w in def["watched"]:
+		var v: int = Game.kills if String(w) == "kills" else int(_oath_counters.get(String(w), 0))
+		cur = mini(cur, v)
+	var need: int = int(def["need"])
+	return {"id": equipped, "name": String(def["name"]), "desc": String(def["desc"]),
+		"done": cur >= need, "cur": cur, "need": need}
+
+
+## 抉择回声标签：按主导代价类型派生（废弃矿窟的实用主义口吻）
+func _echo_tag() -> String:
+	if _echo_choices.is_empty():
+		return "未入圣所"
+	var best_k := ""
+	var best_n := -1
+	for k in _echo_costs:
+		if int(_echo_costs[k]) > best_n:
+			best_n = int(_echo_costs[k])
+			best_k = String(k)
+	match best_k:
+		"max_hp":
+			return "血偿流"
+		"diamonds":
+			return "散财流"
+		"score":
+			return "功勋流"
+	return "实用流"
+
+
+## A/B 平行字段落盘：写入 codex["last_run"] 的 oath / echo 键并再存一次盘。
+## 不改 set_codex_last_run 本体、不扩 STATS_KEYS（字段若塞进 stats 会被其白名单静默丢弃——§2.3）
+func _write_codex_replay() -> void:
+	var echo := {"choices": _echo_choices.duplicate(), "costs": _echo_costs.duplicate(),
+		"tag": _echo_tag(), "count": _echo_choices.size()}
+	Game.codex["last_run"]["oath"] = oath_fulfillment()
+	Game.codex["last_run"]["echo"] = echo
+	Game.save_codex()
 
 
 ## ---------------- Sprint 14 C：图鉴发现度被动（开局一次性起始状态） ----------------
@@ -2273,6 +2340,7 @@ func _settle_meta() -> String:
 		print("[SMOKE-SIGIL] shards +%d balance=%d" % [shard_gain, int(Game.sigils["shards"])])
 	var stats := _run_stats()
 	Game.set_codex_last_run(stats)   # Sprint 13 C：上局复盘快照（codex.cfg 持久化）
+	_write_codex_replay()   # Sprint 16 A/B：誓约+抉择平行字段落盘（set_codex_last_run 自带一次写盘，此处第二次——两次写盘为既定代价 §2.3）
 	var r := Game.meta_settle_run(stats)
 	_boost_ticked = true   # meta_settle_run 内部已递减一次引导加成
 	var pay := int(r.get("payout", 0))

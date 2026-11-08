@@ -149,6 +149,9 @@ func reset() -> void:
 func add_diamonds(n: int) -> void:
 	diamonds += n
 	run_diamonds_earned += n
+	# Sprint 16 A：誓约计数（满载而归）——只计获得，不因消费倒扣
+	if n > 0 and main != null and is_instance_valid(main) and main.has_method("oath_count"):
+		main.oath_count("diamonds_picked", n)
 	# 源石共鸣核心（mx_resocore）：共鸣计数源改为「每拾取 3 颗源石 +1」
 	# （与旧的「拾取升级/遗物 +1」互斥，不两条并存）
 	if main != null and is_instance_valid(main) and is_instance_valid(main.player) \

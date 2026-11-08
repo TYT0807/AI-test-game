@@ -248,6 +248,14 @@ func _check_codex() -> void:
 	for bid in Data.CODEX_BOONS:
 		if String(Data.CODEX_BOONS[bid].get("kind", "")) == "suffixes":
 			problems.append("CODEX_BOONS.%s 以 suffixes 为阈值（boon 自激正反馈——P0 红线）" % bid)
+	# Sprint 16 A：誓约表与印记一一对应（锚点即装备印记）
+	if Data.OATH_CONDITIONS.size() != Data.SIGILS.size():
+		problems.append("OATH_CONDITIONS 应与 SIGILS 一一对应（%d vs %d）" % [Data.OATH_CONDITIONS.size(), Data.SIGILS.size()])
+	for sid in Data.SIGILS:
+		if not Data.OATH_CONDITIONS.has(sid):
+			problems.append("誓约缺印记对应条目：%s" % sid)
+		elif (Data.OATH_CONDITIONS[sid]["watched"] as Array).is_empty():
+			problems.append("誓约 %s 无监听事件" % sid)
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。

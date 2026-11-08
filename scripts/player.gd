@@ -160,6 +160,8 @@ func _ready() -> void:
 		_codex_boon_probe.call_deferred()
 	if OS.get_environment("SMOKE_THIRD_BOSS") != "":
 		_third_boss_probe.call_deferred()
+	if OS.get_environment("SMOKE_OATH") != "" or OS.get_environment("SMOKE_ECHO_CHAIN") != "":
+		_oath_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -486,6 +488,8 @@ func _activate_relic(id: String) -> Dictionary:
 			_dash_dir = _aim if _aim != Vector2.ZERO else Vector2.DOWN
 			_dash_t = float(def["duration"]) * dash_boost_mult
 			grant_invuln(_dash_t + 0.05)
+			if Game.main != null and is_instance_valid(Game.main):
+				Game.main.oath_count("dashes")   # Sprint 16 A：誓约计数（残影连闪）
 			# F2/A 反应词缀触发点：冲刺开始（ON_DASH_START）
 			_fire_relic_suffixes("dash_dodge", "ON_DASH_START", global_position)
 			ev = {"dash": true}
@@ -627,6 +631,8 @@ func _fire_relic_suffixes(relic_id: String, trigger: String, pos: Vector2) -> Di
 	if float(_suffix_cds.get(sid, 0.0)) > 0.0:
 		return {"cooldown": true}
 	_suffix_cds[sid] = float(def.get("cd", 2.0))
+	if Game.main != null and is_instance_valid(Game.main):
+		Game.main.oath_count("suffix_fires")   # Sprint 16 A：誓约计数（双持共鸣/兼修并蓄）——触发即计
 	match String(def.get("effect", "")):
 		"theme_hazard":
 			if Game.main == null or not is_instance_valid(Game.main):
@@ -1065,6 +1071,72 @@ func _third_boss_probe() -> void:
 	print("[SMOKE-THIRD-BOSS] done")
 
 
+## SMOKE_OATH / SMOKE_ECHO_CHAIN：地窖誓约 + 抉择回声断言（Sprint 16 A/B）
+func _oath_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	# 表结构：9 条与印记一一对应（validate 同源，探针复验）
+	Dev.check(Data.OATH_CONDITIONS.size() == Data.SIGILS.size(), "oath", "誓约 9 条对应 9 印记")
+	# ① 计数器增量
+	var c0: int = int(gm._oath_counters.get("hits_taken", 0))
+	gm.oath_count("hits_taken")
+	Dev.check(int(gm._oath_counters.get("hits_taken", 0)) == c0 + 1, "oath", "计数器增量")
+	# ② 兑现度派生：阈值边界（vigor 3 次受击）
+	Game.equip_sigil("vigor")
+	gm._oath_counters["hits_taken"] = 2
+	var f: Dictionary = gm.oath_fulfillment()
+	Dev.check(String(f.get("id", "")) == "vigor" and not bool(f.get("done", true))
+		and int(f.get("cur", -1)) == 2, "oath", "兑现度 2/3 未兑现")
+	gm._oath_counters["hits_taken"] = 3
+	f = gm.oath_fulfillment()
+	Dev.check(bool(f.get("done", false)) and int(f.get("need", -1)) == 3, "oath", "兑现度 3/3 已兑现")
+	# 多条件取最小（scholar：shrine 计 0 → cur=0）
+	Game.equip_sigil("scholar")
+	f = gm.oath_fulfillment()
+	Dev.check(int(f.get("cur", 99)) == 0, "oath", "多条件取最小")
+	# B：抉择链 + 主导代价标签
+	gm._echo_choices.clear()
+	gm._echo_costs.clear()
+	gm._echo_choices.append("purify")
+	gm._echo_costs[""] = 1
+	gm._echo_choices.append("greed_pact")
+	gm._echo_costs["max_hp"] = 2
+	Dev.check(String(gm._echo_tag()) == "血偿流", "echo", "构筑标签：主导代价 max_hp → 血偿流")
+	# A/B 落盘（真实入口 _write_codex_replay）：写 → load → 逐字段读回 + 五类发现集不被抹
+	var sets_before := {}
+	for k in Game.CODEX_KINDS:
+		sets_before[k] = (Game.codex[k] as Array).duplicate()
+	var done_before: bool = bool(gm.oath_fulfillment().get("done", false))
+	gm._write_codex_replay()
+	Game.load_codex()
+	var lr: Dictionary = Game.codex["last_run"]
+	Dev.check(String((lr.get("oath", {}) as Dictionary).get("id", "")) == "scholar"
+		and bool((lr["oath"] as Dictionary).get("done", true)) == done_before, "oath",
+		"誓约字段落盘读回（含 done）")
+	var echo: Dictionary = lr.get("echo", {})
+	Dev.check(int(echo.get("count", -1)) == 2 and String(echo.get("tag", "")) == "血偿流"
+		and (echo.get("choices", []) as Array).size() == 2
+		and int(((echo.get("costs", {}) as Dictionary).get("max_hp", 0))) == 2, "echo",
+		"抉择链+标签+计数+代价分布读回")
+	var sets_ok := true
+	for k in Game.CODEX_KINDS:
+		if (Game.codex[k] as Array) != (sets_before[k] as Array):
+			sets_ok = false
+	Dev.check(sets_ok, "oath", "五类发现集不被抹（P0-3.2 写法）")
+	# ③ 渲染验证：真调 menu._build_codex 扫描生成标签（验渲染非验字段）
+	Game.main.menu._build_codex()
+	var oath_shown := false
+	var echo_shown := false
+	for c in Game.main.menu._rows.get_children():
+		if c is Label:
+			if String(c.text).contains("本局誓约"):
+				oath_shown = true
+			if String(c.text).contains("抉择回声"):
+				echo_shown = true
+	Dev.check(oath_shown and echo_shown, "oath", "复盘页渲染誓约+回声行")
+	print("[SMOKE-OATH] done")
+
+
 func _nearest_enemy() -> Node2D:
 	var best: Node2D = null
 	var best_d := 1e9
@@ -1157,11 +1229,15 @@ func take_damage(dmg: int, from_pos: Vector2, _from_node: Node = null) -> void:
 	# 护盾：优先消耗一层抵挡本次伤害
 	if shield_charges > 0:
 		shield_charges -= 1
+		if Game.main != null and is_instance_valid(Game.main):
+			Game.main.oath_count("shield_blocks")   # Sprint 16 A：誓约计数（盾未破身）
 		Game.main.hud.flash_toast("护盾抵挡了这次伤害（剩 %d 层）" % shield_charges)
 		Game.sfx("powerup", 1.4, -6.0)
 		_invuln_t = 0.6
 		return
 	hp = maxi(hp - dmg, 0)
+	if Game.main != null and is_instance_valid(Game.main):
+		Game.main.oath_count("hits_taken")   # Sprint 16 A：誓约计数（流血不退）
 	# 动能转换器 mr_kinetic：受击后 2 秒内移速 +40%
 	if has_kinetic:
 		buff("kinetic", 1.4, 2.0)

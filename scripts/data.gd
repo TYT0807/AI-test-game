@@ -347,6 +347,21 @@ const CODEX_BOONS := {
 	"bosses_2": {"kind": "bosses", "need": 2, "effect": "suffix", "value": 1},
 }
 
+## Sprint 16 A：地窖誓约（9 条，一一对应 SIGILS 键——装备印记即誓约锚点）。
+## 只读既有事件计数（watched 键由 player/game_main 既有分支登记），不定义新事件、
+## 不调 mark_codex（P0 自激红线）、不设周期性主题 Boss 为必要条件；多条件全达标才兑现
+const OATH_CONDITIONS := {
+	"vigor": {"name": "流血不退", "desc": "在伤害下仍前进：受击 3 次", "watched": ["hits_taken"], "need": 3},
+	"arsenal": {"name": "双持共鸣", "desc": "让遗物词缀共鸣 2 次", "watched": ["suffix_fires"], "need": 2},
+	"purse": {"name": "圣所常客", "desc": "寻宝直觉带你两次走进圣所", "watched": ["shrine_visits"], "need": 2},
+	"kindred": {"name": "并肩清扫", "desc": "清扫 30 只敌人", "watched": ["kills"], "need": 30},
+	"bulwark": {"name": "盾未破身", "desc": "让环盾替你挡下一次伤害", "watched": ["shield_blocks"], "need": 1},
+	"sprinter": {"name": "残影连闪", "desc": "冲刺 15 次", "watched": ["dashes"], "need": 15},
+	"harvester": {"name": "满载而归", "desc": "获得 40 颗源石", "watched": ["diamonds_picked"], "need": 40},
+	"ward": {"name": "净化誓约", "desc": "在圣所净化一次灾祸", "watched": ["purify_used"], "need": 1},
+	"scholar": {"name": "兼修并蓄", "desc": "既进圣所，又让词缀共鸣 1 次", "watched": ["shrine_visits", "suffix_fires"], "need": 1},
+}
+
 
 ## 图鉴 bosses 分母：ENEMIES 内真 Boss 数 + 主题 Boss 专用 id 数（菜单与探针同源，防 6/4 错位）
 func codex_bosses_total() -> int:
