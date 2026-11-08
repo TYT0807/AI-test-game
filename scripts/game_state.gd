@@ -410,11 +410,56 @@ func add_shards(n: int) -> void:
 var daily_mode := false
 var daily_seed := 0
 const DAILY_PATH := "user://daily.cfg"
+## Sprint 17 C：SMOKE 隔离档——原实现直接写 DAILY_PATH（会污染玩家档），此处补齐隔离范式。
+const DAILY_SMOKE_PATH := "user://_smoke_daily.cfg"
+## 仅 SMOKE_DAILY_SHARE 探针用的测试缝：指向独立路径，避免与 SMOKE_DAILY 结算写入互相污染。
+var daily_path_override := ""
+
+
+func daily_path() -> String:
+	if daily_path_override != "":
+		return daily_path_override
+	var custom := OS.get_environment("SMOKE_DAILY_PATH")
+	if custom != "":
+		return custom
+	if OS.get_environment("SMOKE") != "":
+		return DAILY_SMOKE_PATH
+	return DAILY_PATH
 
 
 func daily_key() -> String:
 	var d := Time.get_date_dict_from_system()
 	return "%04d%02d%02d" % [d.year, d.month, d.day]
+
+
+## Sprint 17 C：分享码 = 日期键 + stable_hash 校验位（纯文本、零 rng、零计时）。
+## 格式 YYYYMMDD-XXXXXX（6 位大写十六进制）；不联网、不新增 action、不触 GEN_NAMES。
+func daily_share_checksum(key: String) -> String:
+	return "%06X" % (stable_hash("daily:" + key) & 0xFFFFFF)
+
+
+func daily_share_code() -> String:
+	var k := daily_key()
+	return "%s-%s" % [k, daily_share_checksum(k)]
+
+
+## 拆出日期键；格式非法返回空串（不抛错，供 UI 与坏档降级使用）
+func daily_share_code_key(code: String) -> String:
+	var parts := code.strip_edges().split("-")
+	if parts.size() != 2:
+		return ""
+	return String(parts[0])
+
+
+## 只验「格式 + 校验位」，不限定必须今日（是否今日由主菜单载入时另判）
+func daily_share_code_valid(code: String) -> bool:
+	var parts := code.strip_edges().split("-")
+	if parts.size() != 2:
+		return false
+	var k := String(parts[0])
+	if k.length() != 8 or not k.is_valid_int():
+		return false
+	return String(parts[1]) == daily_share_checksum(k)
 
 
 ## 稳定字符串哈希（FNV-1a，跨引擎版本确定性——核验 #6：内建 hash() 不保证跨版本一致）
@@ -430,23 +475,82 @@ func daily_seed_for(key: String) -> int:
 	return stable_hash(key)
 
 
-## 击败/通关时记录当日最佳（层数优先，同层比时间）
+## Sprint 17 C：本地榜读档规整（纯函数，坏档降级不崩）。只收 key 8 位数字、
+## layers/time 非负的 Dictionary；非 Array 或坏条目直接丢弃；超出 7 天截尾留最近。
+func sanitize_daily_history(raw) -> Array:
+	var out: Array = []
+	if not (raw is Array):
+		return out
+	for e in raw:
+		if not (e is Dictionary):
+			continue
+		var k := String(e.get("key", ""))
+		if k.length() != 8 or not k.is_valid_int():
+			continue
+		var layers := int(e.get("layers", 0))
+		var t := float(e.get("time", 0.0))
+		if layers < 0 or t < 0.0:
+			continue
+		out.append({"key": k, "layers": layers, "time": t})
+	if out.size() > 7:
+		out = out.slice(out.size() - 7)
+	return out
+
+
+## 最近 7 天本地榜（只读派生：每次从档重读并规整，返回全新 Array/Dictionary）
+func daily_history() -> Array:
+	var cfg := ConfigFile.new()
+	cfg.load(daily_path())
+	return sanitize_daily_history(cfg.get_value("daily", "history", []))
+
+
+## 主菜单「近 7 日」显示文本（纯文本派生；validate 与 menu 同源，便于启动期校验显示内容）
+func daily_history_text() -> String:
+	var hist := daily_history()
+	if hist.is_empty():
+		return "近 7 日：暂无记录"
+	var parts: Array = []
+	for e in hist:
+		var k := String(e.get("key", ""))
+		var t := int(e.get("time", 0.0))
+		parts.append("%s/%s %d层 %02d:%02d" % [k.substr(4, 2), k.substr(6, 2),
+			int(e.get("layers", 0)), int(t / 60.0), t % 60])
+	return "近 7 日：" + " · ".join(PackedStringArray(parts))
+
+
+## 击败/通关时记录当日最佳（层数优先，同层比时间）+ Sprint 17 C 写入最近 7 天本地榜
 func record_daily_best(layers: int, time_sec: float) -> void:
 	var cfg := ConfigFile.new()
-	cfg.load(DAILY_PATH)
+	cfg.load(daily_path())
 	var k := daily_key()
 	var prev_layers := int(cfg.get_value("daily", k + "_layers", 0))
 	var prev_time := float(cfg.get_value("daily", k + "_time", 0.0))
 	var better := layers > prev_layers or (layers == prev_layers and (prev_time <= 0.0 or time_sec < prev_time))
+	var best_layers := layers if better else prev_layers
+	var best_time := time_sec if better else prev_time
 	if better:
-		cfg.set_value("daily", k + "_layers", layers)
-		cfg.set_value("daily", k + "_time", time_sec)
-		cfg.save(DAILY_PATH)
+		cfg.set_value("daily", k + "_layers", best_layers)
+		cfg.set_value("daily", k + "_time", best_time)
+	# 本地榜：同一天只留一条（用最优值）；新的一天追加；始终截到最近 7 条
+	var hist := sanitize_daily_history(cfg.get_value("daily", "history", []))
+	var found := false
+	for e in hist:
+		if String(e.get("key", "")) == k:
+			found = true
+			e["layers"] = best_layers
+			e["time"] = best_time
+			break
+	if not found and best_layers > 0:
+		hist.append({"key": k, "layers": best_layers, "time": best_time})
+	if hist.size() > 7:
+		hist = hist.slice(hist.size() - 7)
+	cfg.set_value("daily", "history", hist)
+	cfg.save(daily_path())
 
 
 func daily_best_today() -> Dictionary:
 	var cfg := ConfigFile.new()
-	cfg.load(DAILY_PATH)
+	cfg.load(daily_path())
 	var k := daily_key()
 	return {"layers": int(cfg.get_value("daily", k + "_layers", 0)),
 		"time": float(cfg.get_value("daily", k + "_time", 0.0))}

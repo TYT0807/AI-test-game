@@ -136,6 +136,8 @@ func _build_main_page() -> void:
 		best_label.add_theme_font_size_override("font_size", 13)
 		best_label.add_theme_color_override("font_color", Color(0.6, 0.9, 0.95))
 		left.add_child(best_label)
+	# Sprint 17 C：每日分享码 + 最近 7 天本地榜（纯局外只读；返回真实 Label 供验渲染断言）
+	build_daily_share_widgets(left)
 
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 14)
@@ -159,6 +161,63 @@ func _build_main_page() -> void:
 	foot.add_theme_color_override("font_color", Color(0.60, 0.58, 0.64))
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	right.add_child(foot)
+
+
+## Sprint 17 C：每日分享码 + 最近 7 天本地榜控件（纯局外只读、零 rng、零计时）。
+## 返回真实 Label / LineEdit 节点供 SMOKE_DAILY_SHARE 做「验渲染」断言；探针可在脱离
+## 场景树的容器上构建，避免与其它并发探针抢 _rows。不新增 PNG / ACTION_DEFS action。
+func build_daily_share_widgets(parent: Node) -> Dictionary:
+	var code := Game.daily_share_code()
+	var share_label := Label.new()
+	share_label.text = "今日分享码：" + code
+	share_label.add_theme_font_size_override("font_size", 13)
+	share_label.add_theme_color_override("font_color", Color(0.85, 0.78, 0.55))
+	parent.add_child(share_label)
+
+	# 状态行同时承载「近 7 日」榜单与载入失败提示（纯文本，不弹窗）
+	var hist_label := Label.new()
+	hist_label.text = Game.daily_history_text()
+	hist_label.add_theme_font_size_override("font_size", 12)
+	hist_label.add_theme_color_override("font_color", Color(0.62, 0.72, 0.68))
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	var edit := LineEdit.new()
+	edit.text = code
+	edit.custom_minimum_size = Vector2(188, 28)
+	edit.add_theme_font_size_override("font_size", 13)
+	row.add_child(edit)
+	var copy_btn := Button.new()
+	copy_btn.text = "复制"
+	copy_btn.custom_minimum_size = Vector2(52, 28)
+	copy_btn.pressed.connect(_copy_daily_share)
+	row.add_child(copy_btn)
+	var load_btn := Button.new()
+	load_btn.text = "载入"
+	load_btn.custom_minimum_size = Vector2(52, 28)
+	load_btn.pressed.connect(func() -> void:
+		_load_daily_share(String(edit.text).strip_edges(), hist_label))
+	row.add_child(load_btn)
+	parent.add_child(row)
+	parent.add_child(hist_label)
+	return {"share": share_label, "history": hist_label, "edit": edit}
+
+
+## headless 下 DisplayServer 为 dummy，剪贴板不可用 → 跳过（同 _skip_confirm 口径）
+func _copy_daily_share() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.clipboard_set(Game.daily_share_code())
+
+
+## 粘贴/载入：只接受「格式+校验位合法且为今日」的码；本地功能不联网、不改 start_run 的 rng 顺序。
+## 校验失败只改状态行文本，不启动游戏、不写盘。
+func _load_daily_share(code: String, status: Label) -> void:
+	if not Game.daily_share_code_valid(code) or Game.daily_share_code_key(code) != Game.daily_key():
+		status.text = "分享码校验失败或非今日，未载入"
+		return
+	Game.daily_mode = true
+	start_game()
 
 
 ## 纯几何装饰：不新增任何 PNG / 图标 key，避开「新增图标查表导致面板崩」

@@ -164,6 +164,8 @@ func _ready() -> void:
 		_oath_probe.call_deferred()
 	if OS.get_environment("SMOKE_FLOOR_SIGN") != "" or OS.get_environment("SMOKE_FLAVOR") != "":
 		_floor_sign_probe.call_deferred()
+	if OS.get_environment("SMOKE_DAILY_SHARE") != "":
+		_daily_share_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -1217,6 +1219,91 @@ func _floor_sign_probe() -> void:
 	Dev.check(note_shown, "flavor", "图鉴渲染手记行")
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
+
+
+## SMOKE_DAILY_SHARE=1：Sprint 17 C 每日分享码 + 本地榜断言
+## 【Sprint 17 B 口径】全为「验效果型」：验数值 / 验渲染 / 负向构造 / 零 rng 状态差值，无恒过绿灯。
+func _daily_share_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	# 表外探针用独立隔离路径，避免与 SMOKE_DAILY 结算写入同一档互相污染（结束还原）
+	var bak_override := Game.daily_path_override
+	Game.daily_path_override = "user://_smoke_daily_share.cfg"
+	var p := Game.daily_path()
+	var fresh := ConfigFile.new()
+	fresh.save(p)   # 复位空档，清掉跨 run 残留
+
+	# ① 分享码往返（格式 + 校验位 + 日期键）+ 两条负向
+	var code := Game.daily_share_code()
+	Dev.check(Game.daily_share_code_valid(code) and code.begins_with(Game.daily_key() + "-"),
+		"daily_share", "分享码格式+校验位往返一致：%s" % code)
+	Dev.check(Game.daily_share_code_key(code) == Game.daily_key(), "daily_share", "分享码日期键读回一致")
+	Dev.check(not Game.daily_share_code_valid(code + "0"), "daily_share", "篡改校验位被拒（负向）")
+	Dev.check(not Game.daily_share_code_valid("garbage"), "daily_share", "非法格式被拒（负向）")
+
+	# ② 零 rng 消费 + 同 seed 双跑逐字一致
+	var rs = Game.rng.state
+	var fs = Game.fx_rng.state
+	var code2 := Game.daily_share_code()
+	Dev.check(code2 == code and Game.rng.state == rs and Game.fx_rng.state == fs,
+		"daily_share", "分享码零 Game.rng/fx_rng 消费且两次派生逐字一致")
+
+	# ③ 榜单读写往返（真数值，不只验字段存在）
+	Game.record_daily_best(3, 125.0)
+	var today := Game.daily_best_today()
+	Dev.check(int(today.get("layers", -1)) == 3 and is_equal_approx(float(today.get("time", -1.0)), 125.0),
+		"daily_share", "今日最佳读回数值一致（3 层 / 125.0s）")
+	var hist := Game.daily_history()
+	Dev.check(hist.size() == 1 and String(hist[0].get("key", "")) == Game.daily_key()
+		and int(hist[0].get("layers", -1)) == 3
+		and is_equal_approx(float(hist[0].get("time", -1.0)), 125.0),
+		"daily_share", "本地榜历史读回 1 条且数值一致")
+	Game.record_daily_best(1, 200.0)   # 更差：不覆盖
+	Dev.check(int(Game.daily_best_today().get("layers", -1)) == 3, "daily_share", "较差成绩不覆盖最佳")
+	Game.record_daily_best(5, 60.0)    # 更好：覆盖
+	Dev.check(int(Game.daily_best_today().get("layers", -1)) == 5
+		and is_equal_approx(float(Game.daily_best_today().get("time", -1.0)), 60.0),
+		"daily_share", "更优成绩覆盖最佳（5 层 / 60.0s）")
+	Dev.check(Game.daily_history().size() == 1, "daily_share", "同日不重复追加（仍 1 条）")
+
+	# ④ 7 天上限（纯函数，验数值）
+	var many: Array = []
+	for i in 9:
+		many.append({"key": "202611%02d" % (i + 1), "layers": i + 1, "time": float(i)})
+	Dev.check(Game.sanitize_daily_history(many).size() == 7, "daily_share", "本地榜上限 7 天（9 条截断为 7）")
+
+	# ⑤ 验渲染：真实 Label / LineEdit 节点文本（脱离 _rows 构建，避免与其它并发探针抢树）
+	var holder := VBoxContainer.new()
+	var w: Dictionary = Game.main.menu.build_daily_share_widgets(holder)
+	var share_label: Label = w["share"]
+	var hist_label: Label = w["history"]
+	var edit: LineEdit = w["edit"]
+	Dev.check(String(share_label.text).contains(code) and String(edit.text) == code,
+		"daily_share", "主菜单分享码标签/输入框渲染实值：%s" % String(share_label.text))
+	Dev.check(String(hist_label.text).begins_with("近 7 日：")
+		and String(hist_label.text).contains("5层"), "daily_share",
+		"主菜单本地榜渲染实值：%s" % String(hist_label.text))
+	holder.free()
+	# 表外探针落地证据：Dev.check 只在失败时打印，显式留一行成功数值证据（零 rng、不进指纹）
+	print("[SMOKE-DAILY-SHARE] evidence code=%s best=%d层/%.1fs hist=%d text=%s" % [
+		code, int(Game.daily_best_today().get("layers", -1)),
+		float(Game.daily_best_today().get("time", -1.0)),
+		Game.daily_history().size(), Game.daily_history_text()])
+
+	# ⑥ 坏档降级不崩（放最后：会覆盖探针档）
+	var bad := ConfigFile.new()
+	bad.set_value("daily", "history", "not_an_array")
+	bad.set_value("daily", Game.daily_key() + "_layers", "oops")
+	bad.set_value("daily", Game.daily_key() + "_time", "bad")
+	bad.save(p)
+	Dev.check(Game.daily_history().is_empty(), "daily_share", "坏档 history 类型错误 → 降级为空 Array")
+	Dev.check(int(Game.daily_best_today().get("layers", -1)) >= 0,
+		"daily_share", "坏档今日最佳不崩且非负")
+	Dev.check(Game.daily_history_text() == "近 7 日：暂无记录", "daily_share", "坏档显示文本降级")
+	# 现场恢复：还原空档 + 取消 override
+	var restore := ConfigFile.new()
+	restore.save(p)
+	Game.daily_path_override = bak_override
+	print("[SMOKE-DAILY-SHARE] done code=%s" % code)
 
 
 func _nearest_enemy() -> Node2D:

@@ -52,6 +52,7 @@ func run() -> Array:
 	_check_suffixes()
 	_check_shrine()
 	_check_codex()
+	_check_daily()
 	_check_scripts_compile()
 	if OS.get_environment("SMOKE_V8") != "":
 		_v8_probe()
@@ -264,6 +265,37 @@ func _check_codex() -> void:
 	for bid in Data.CODEX_BOSS_NAMES:
 		if not Data.FLAVOR.has("bosses/" + bid):
 			problems.append("FLAVOR 缺主题 Boss 手记：%s" % bid)
+
+
+## Sprint 17 C：每日分享码格式/校验位 + DAILY_PATH 读档容错 + 主菜单显示文本（纯只读，不写盘）
+func _check_daily() -> void:
+	var code := Game.daily_share_code()
+	if not code.begins_with(Game.daily_key() + "-"):
+		problems.append("每日分享码未以今日日期键开头：%s" % code)
+	if not Game.daily_share_code_valid(code):
+		problems.append("每日分享码校验位不匹配：%s" % code)
+	if Game.daily_share_code_valid(code + "0"):
+		problems.append("每日分享码篡改未被拦截")
+	if Game.daily_share_code_key(code) != Game.daily_key():
+		problems.append("每日分享码日期键读回不一致")
+	# 坏档降级：非 Array / 非 Dictionary / 非法 key / 负数值 四类输入都必须安全返回空数组
+	for bad in ["garbage", 42, {"x": 1}, [1, "x", {"key": "bad", "layers": -1, "time": -1.0}]]:
+		var h := Game.sanitize_daily_history(bad)
+		if not (h is Array) or not h.is_empty():
+			problems.append("daily 历史坏档降级失败：%s" % str(bad))
+	var hist := Game.daily_history()
+	if not (hist is Array) or hist.size() > 7:
+		problems.append("DAILY_PATH 读档返回的本地榜非法（应为 ≤7 条 Array）")
+	for e in hist:
+		if not (e is Dictionary) or String(e.get("key", "")).length() != 8 \
+				or int(e.get("layers", 0)) < 0 or float(e.get("time", 0.0)) < 0.0:
+			problems.append("DAILY_PATH 本地榜条目非法：%s" % str(e))
+	# 主菜单显示文本同源校验（不建 UI 节点，避免启动期碰菜单树）
+	var shown := Game.daily_history_text()
+	if not shown.begins_with("近 7 日：") or shown.is_empty():
+		problems.append("每日本地榜显示文本异常：%s" % shown)
+	if Game.daily_path() == "":
+		problems.append("daily_path 为空")
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。
