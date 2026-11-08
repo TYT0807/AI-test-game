@@ -241,6 +241,12 @@ func _check_codex() -> void:
 	# 图标登记断言：PNG 已生成但 GEN_NAMES 漏登记 = Assets.g() 返回 null → 静默白框（核验 🟡 修复）
 	if Assets.g("icon_codex") == null:
 		problems.append("icon_codex 已生成但未登记 GEN_NAMES（Assets.g 返回 null → 主菜单图鉴按钮静默白框）")
+	# Sprint 15 P0 红线（判据端切链）：CODEX_BOONS.kind 不得为 "suffixes"——
+	# 否则「送词缀 → mark_codex → 发现度上升 → 更多 boon」正反馈自激。
+	# 若产品确需 suffixes 阈值，须改用「不回写图鉴的内部绑定路径」（草案 §3.1 备选）并重做此门
+	for bid in Data.CODEX_BOONS:
+		if String(Data.CODEX_BOONS[bid].get("kind", "")) == "suffixes":
+			problems.append("CODEX_BOONS.%s 以 suffixes 为阈值（boon 自激正反馈——P0 红线）" % bid)
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。

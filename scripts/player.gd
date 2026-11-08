@@ -815,6 +815,20 @@ func _shrine_probe() -> void:
 	# 断言绑定值而非 size：SMOKE_SUFFIX 前置探针可能已绑满，铭刻是同值覆盖（size 不变）
 	Dev.check(String(relic_suffixes.get(String(Data.RELIC_SUFFIXES[sid]["relic"]), "")) == sid,
 		"shrine", "relic_suffix 确定性绑定 %s→%s" % [sid, String(Data.RELIC_SUFFIXES[sid]["relic"])])
+	# ---------------- Sprint 15 D：圣所池 6→10（新增四选项效果+代价逐条） ----------------
+	var pre_hp2 := max_hp
+	Game.diamonds = 30
+	gm._shrine_execute(gm._shrine_entry("greed_pact"))
+	Dev.check(Game.diamonds == 40 and max_hp == pre_hp2 - 1, "shrine", "D: greed_pact 上限换源石 30→40")
+	Game.score = 200
+	gm._shrine_execute(gm._shrine_entry("wind_dance"))
+	Dev.check(_buffs.has("boots") and Game.score == 120, "shrine", "D: wind_dance 积分换移速 buff")
+	gm._shrine_execute(gm._shrine_entry("power_surge"))
+	Dev.check(_buffs.has("book") and max_hp == pre_hp2 - 2, "shrine", "D: power_surge 上限换增伤 buff")
+	Game.diamonds = 20
+	var sh0 := int(Game.sigils["shards"])
+	gm._shrine_execute(gm._shrine_entry("shard_pact"))
+	Dev.check(int(Game.sigils["shards"]) == sh0 + 6 and Game.diamonds == 8, "shrine", "D: shard_pact 源石换碎片")
 	# ③ 置灰：余额/血量不足不可支付（面板据此置灰，主侧 _on_shrine_chosen 双保险同口径）
 	Game.diamonds = 0
 	Dev.check(gm._shrine_affordable(gm._shrine_entry("ward_boon")) == false, "shrine", "源石 0 → ward_boon 置灰")
@@ -902,14 +916,18 @@ func _codex_probe() -> void:
 	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
 		and int(Game.codex["last_run"].get("kills", -1)) == 0, "codex", "负数钳制 → 0")
 	# ---------------- Sprint 14 A：登记三件套断言 ----------------
-	# ① 写入：两个主题 Boss 专用 id 可登记
+	# ① 写入：两个主题 Boss 专用 id 可登记（只撤销本次新增——若 id 已在档中则保留，防误删既有发现；
+	# smoke 档跨 run 累积，Sprint 14 回归已写入过这两个 id）
+	var had_pw: bool = (Game.codex["bosses"] as Array).has("prism_warden")
+	var had_pt: bool = (Game.codex["bosses"] as Array).has("pyrothalassian")
 	Game.mark_codex("bosses", "prism_warden")
 	Game.mark_codex("bosses", "pyrothalassian")
 	Dev.check((Game.codex["bosses"] as Array).has("prism_warden")
 		and (Game.codex["bosses"] as Array).has("pyrothalassian"), "codex", "A: 主题 Boss 专用 id 登记成功")
-	# 探针登记后即撤销：真实 warden/boss2 击杀会重新登记 → 回归后查 cfg 可区分「探针写」与「击杀写」
-	(Game.codex["bosses"] as Array).erase("prism_warden")
-	(Game.codex["bosses"] as Array).erase("pyrothalassian")
+	if not had_pw:
+		(Game.codex["bosses"] as Array).erase("prism_warden")
+	if not had_pt:
+		(Game.codex["bosses"] as Array).erase("pyrothalassian")
 	Game.save_codex()
 	# ② 白名单：非 Boss 敌人被拒（B1）；巨岩虫之王键仍合法（旧档兼容 §3.4，不隐式迁移）
 	Dev.check(not Game._codex_id_valid("bosses", "rusher"), "codex", "B1: 非 Boss 敌人 id 被白名单拒绝")
@@ -949,11 +967,18 @@ func _codex_probe() -> void:
 	# B2：读档路径钳制（手工写负数 → load_codex → 归 0）——「实现保证」升级为「断言覆盖」；
 	# 放最后：会覆盖 last_run 现场
 	var cfgf := ConfigFile.new()
+	cfgf.load(Game.codex_path())   # Sprint 15 P0-3.2：先读回原档再改——否则 save() 抹掉五类发现集（非隔离环境会清玩家图鉴）
 	cfgf.set_value("codex", "last_run", {"max_floor": -9, "time": -2.5})
 	cfgf.save(Game.codex_path())
 	Game.load_codex()
 	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
 		and int(Game.codex["last_run"].get("time", -1)) == 0, "codex", "B2: 读档负数钳制 → 0")
+	# P0-3.2 验收：B2 断言后五类发现集与探针执行前逐类一致（现场恢复，非隔离环境也不清档）
+	var sets_same := true
+	for k in Game.CODEX_KINDS:
+		if (Game.codex[k] as Array) != (snap[k] as Array):
+			sets_same = false
+	Dev.check(sets_same, "codex", "P0-3.2: B2 后五类发现集现场恢复")
 	print("[SMOKE-CODEX] done")
 
 
@@ -991,7 +1016,11 @@ func _codex_boon_probe() -> void:
 	var dm0: float = gm.diamond_mult
 	var mc0: float = mag_cap_mult
 	var sp0: float = Game.calamity_speed_mult
+	# Sprint 15 P0：自激切断真差值断言——送词缀回写图鉴（suffixes 分类增长）后，
+	# boon 派生必须逐字不变（判据端切链：无 suffixes 阈值则回写不影响判定）
+	var boons_before: Dictionary = Game.codex_boons()
 	gm._apply_codex_boons()
+	Dev.check(Game.codex_boons() == boons_before, "codex_boon", "P0: 送词缀回写后派生不变（自激已切断）")
 	Dev.check(shield_charges == 1, "codex_boon", "shield 落地: %d" % shield_charges)
 	Dev.check(Game.diamonds == 3, "codex_boon", "diamonds 落地: %d" % Game.diamonds)
 	Dev.check(max_hp == Player.BASE_MAX_HP + 1 and hp == max_hp, "codex_boon",

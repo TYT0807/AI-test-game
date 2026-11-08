@@ -329,7 +329,7 @@ func _build_codex() -> void:
 			if Data.CODEX_BOSS_NAMES.has(id):
 				return String(Data.CODEX_BOSS_NAMES[id])
 			return String(Data.ENEMIES[id].get("name", id)))
-	_codex_section("relics", "已发现遗物", RelicsRef.POOL.size(),
+	_codex_section("relics", "已见遗物", RelicsRef.POOL.size(),
 		func(id: String) -> String:
 			for r in RelicsRef.POOL:
 				if String(r["id"]) == id:
@@ -352,11 +352,24 @@ func _codex_section(kind: String, title: String, total: int, name_of: Callable) 
 	head.add_theme_font_size_override("font_size", 16)
 	head.add_theme_color_override("font_color", Color(0.6, 0.9, 0.95))
 	_rows.add_child(head)
+	# Sprint 15 C：进度条可视化（纯 UI 零 rng 零 E1）
+	if total > 0:
+		var bar := ProgressBar.new()
+		bar.max_value = total
+		bar.value = arr.size()
+		bar.show_percentage = false
+		bar.custom_minimum_size = Vector2(560, 6)
+		bar.modulate = Color(0.5, 0.9, 0.75)
+		_rows.add_child(bar)
 	var parts := []
 	for id in arr:
 		parts.append(String(name_of.call(String(id))))
 	var body := Label.new()
-	body.text = ("　" + "、".join(parts)) if parts.size() > 0 else "　（尚未发现）"
+	var undiscovered: int = total - arr.size()
+	if parts.size() > 0:
+		body.text = "　" + "、".join(parts) + (("　（未发现 %d）" % undiscovered) if undiscovered > 0 else "")
+	else:
+		body.text = "　（尚未发现 %d 项）" % total if total > 0 else "　（尚未发现）"
 	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body.custom_minimum_size = Vector2(560, 0)

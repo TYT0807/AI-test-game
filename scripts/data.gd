@@ -317,6 +317,11 @@ const SHRINE_OFFERS := {
 	"ward_boon": {"name": "护盾祝福", "desc": "源石 -5，获得 1 层护盾", "cost_kind": "diamonds", "cost": 5, "min_floor": 3},
 	"heal": {"name": "修复", "desc": "积分 -60，回复 2 点生命", "cost_kind": "score", "cost": 60, "min_floor": 3},
 	"relic_suffix": {"name": "铭刻", "desc": "生命上限 -1，为主动遗物附 1 条词缀", "cost_kind": "max_hp", "cost": 1, "min_floor": 5},
+	# Sprint 15 D：池扩容 6→10（按 min_floor 分层——低层温和、高层高代价高收益；全部纯状态交换零赌局）
+	"greed_pact": {"name": "贪欲契约", "desc": "生命上限 -1，源石 +10", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
+	"wind_dance": {"name": "风之舞", "desc": "积分 -80，本局移速 +25%（120 秒）", "cost_kind": "score", "cost": 80, "min_floor": 5},
+	"shard_pact": {"name": "共鸣契约", "desc": "源石 -12，地窖碎片 +6", "cost_kind": "diamonds", "cost": 12, "min_floor": 5},
+	"power_surge": {"name": "力量激涌", "desc": "生命上限 -1，伤害 +30%（90 秒）", "cost_kind": "max_hp", "cost": 1, "min_floor": 7},
 }
 
 ## Sprint 13 E：回响数值 data 驱动（原硬编码提常量，零逻辑改动——调数值只改这里）。

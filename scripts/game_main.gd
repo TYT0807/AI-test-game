@@ -2010,6 +2010,15 @@ func _shrine_execute(offer: Dictionary) -> void:
 			player.heal(2)
 		"relic_suffix":
 			player.attach_suffix(_shrine_suffix_pick())
+		# Sprint 15 D：池扩容新增四选项（全部复用既有接口——buff/add_diamonds/add_shards，零 rng）
+		"greed_pact":
+			Game.add_diamonds(10)
+		"wind_dance":
+			player.buff("boots", 1.25, 120.0)
+		"power_surge":
+			player.buff("book", 1.3, 90.0)
+		"shard_pact":
+			Game.add_shards(6)
 	match String(offer.get("cost_kind", "")):
 		"diamonds":
 			# 核验 #4：spend 只动余额——add_diamonds 负数会倒扣共鸣计数与 earned 统计
