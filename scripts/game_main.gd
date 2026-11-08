@@ -367,6 +367,7 @@ func start_run() -> void:
 		print("[SMOKE-META] run start diamonds=%d taken=%d modifier=%s" % [
 			Game.diamonds, Upgrades.taken.size(), modifier])
 	_apply_floor_theme()
+	update_floor_sign()   # Sprint 16 C：层签刷新（modifier/calamity/theme roll 全完成后、进房前——零 rng 顺序改动）
 	# 探针：直接跳到指定楼层（只看主题色调与 HUD 提示），仅 SMOKE
 	var jump_env := OS.get_environment("SMOKE_JUMP_FLOOR")
 	if _smoke and jump_env != "":
@@ -985,6 +986,17 @@ func _is_third_floor(n: int) -> bool:
 	return n > 4 and (n - 4) % 32 == 23
 
 
+## Sprint 16 C：层签刷新（纯只读拼装——主题 name+mark + 灾祸名或「无」，恰好 2 项默认）。
+## 零 rng / 零 fx_rng / 零抽取；挂点：start_run 与 next_floor 的 roll 全完成之后（§4.2，严禁移动 roll）
+func update_floor_sign() -> void:
+	if not is_instance_valid(hud):
+		return
+	var th: Dictionary = Data.theme_for_floor(Game.floor_num)
+	var theme_part := (String(th.get("name", "")) + String(th.get("mark", ""))) if th.has("name") else "无主题"
+	var cal: String = _calamity_name(_calamity) if _calamity != "" else "无"
+	hud.set_floor_sign("层签 · %s ｜ 灾祸：%s" % [theme_part, cal])
+
+
 func _pick_spawn_pos() -> Vector2:
 	for i in 10:
 		var p := player.global_position + Vector2.from_angle(Game.rng.randf() * TAU) * Game.rng.randf_range(230, 320)
@@ -1317,6 +1329,7 @@ func next_floor() -> void:
 		_smoke_fingerprint(nf)
 		_enter_room(dungeon.current, Vector2i.ZERO)
 		_roll_calamity()
+		update_floor_sign()   # Sprint 16 C：层签刷新（本路径 roll 在进房后——roll 完成后补刷，零 rng 顺序改动 §4.2）
 		drop_pickup(_arena_center() + Vector2(0, 40), "heal")
 		if _smoke:
 			print("[SMOKE] === entered floor ", nf, " ===")

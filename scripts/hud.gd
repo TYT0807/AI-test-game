@@ -57,6 +57,7 @@ var _modifier_icon: TextureRect
 var _resonance_label: Label
 var _tag_labels := {}
 var _theme_label: Label
+var _floor_sign_label: Label   # Sprint 16 C：层签（主题+灾祸常驻只读标签）
 var _minimap_panel: PanelContainer
 var _meta_panel: PanelContainer
 var _compact := false
@@ -490,6 +491,14 @@ func _build_meta_ui(root: Control) -> void:
 	_theme_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_theme_label.add_theme_constant_override("outline_size", 4)
 	vb.add_child(_theme_label)
+	# Sprint 16 C：层签常驻只读标签（主题+灾祸 2 项默认；set_room_info 同通道持久显示，不用 banner）
+	_floor_sign_label = Label.new()
+	_floor_sign_label.text = ""
+	_floor_sign_label.visible = false
+	_floor_sign_label.add_theme_font_size_override("font_size", _fs(12))
+	_floor_sign_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
+	_floor_sign_label.add_theme_constant_override("outline_size", 4)
+	vb.add_child(_floor_sign_label)
 
 
 ## 静默层主题：小地图整块隐藏
@@ -570,6 +579,12 @@ func set_room_info(floor_num: int, kind: String) -> void:
 	var kind_text: String = {"start": "", "combat": "", "elite": " · 精英", "treasure": " · 宝箱",
 		"shop": " · 商店", "boss": " · BOSS", "super_secret": " · 超级秘密"}.get(kind, "")
 	_wave_label.text = "第 %d 层%s" % [floor_num, kind_text]
+
+
+## Sprint 16 C：层签（本层组合签常驻只读显示——主题+灾祸 2 项默认；纯文本零 rng）
+func set_floor_sign(text: String) -> void:
+	_floor_sign_label.text = text
+	_floor_sign_label.visible = text != ""
 
 
 ## F2/A 反应词缀行：附着变化时重绘（词缀名·所属遗物名）

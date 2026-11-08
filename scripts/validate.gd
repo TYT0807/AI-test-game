@@ -256,6 +256,10 @@ func _check_codex() -> void:
 			problems.append("誓约缺印记对应条目：%s" % sid)
 		elif (Data.OATH_CONDITIONS[sid]["watched"] as Array).is_empty():
 			problems.append("誓约 %s 无监听事件" % sid)
+	# Sprint 16 D：FLAVOR 覆盖三主题 Boss（防「表写了没接上」——文案不入分母/白名单）
+	for bid in Data.CODEX_BOSS_NAMES:
+		if not Data.FLAVOR.has("bosses/" + bid):
+			problems.append("FLAVOR 缺主题 Boss 手记：%s" % bid)
 
 
 ## 启动期全脚本编译扫描：load() 即编译，解析错误在此点名。

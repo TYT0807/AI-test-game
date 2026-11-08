@@ -362,6 +362,22 @@ const OATH_CONDITIONS := {
 	"scholar": {"name": "兼修并蓄", "desc": "既进圣所，又让词缀共鸣 1 次", "watched": ["shrine_visits", "suffix_fires"], "need": 1},
 }
 
+## Sprint 16 D：地窖低语文案表（键 "kind/id"；基调=废弃矿窟的实用主义——克制、功能性矿工手记，
+## 不臆造设定，只覆盖已存在条目）。首发现播报用，重复登记天然不播；不入任何分母/白名单
+const FLAVOR := {
+	"bosses/prism_warden": "守望者。别站在光缝里，砸它的核。",
+	"bosses/pyrothalassian": "熔潮。弹匣留一半，给它变红的时候用。",
+	"bosses/third_boss": "玄渊之主。深处的老住户，比熔潮慢半拍，比守望者狠。",
+	"themes/vein": "矿脉层。多捡点，反射值钱。",
+	"themes/toxic": "毒巢。云别硬踩，绕着走。",
+	"themes/pressure": "高压层。子弹会拐弯，贴墙打。",
+	"themes/silent": "静默层。听不见脚步，多看小地图。",
+	"themes/magma": "岩浆层。地板本身就是敌人。",
+	"themes/ice": "冰面。刹车提前半秒。",
+	"themes/swamp": "毒沼。慢是慢了点，稳当。",
+	"themes/vines": "藤蔓。烧掉，或者绕路。",
+}
+
 
 ## 图鉴 bosses 分母：ENEMIES 内真 Boss 数 + 主题 Boss 专用 id 数（菜单与探针同源，防 6/4 错位）
 func codex_bosses_total() -> int:

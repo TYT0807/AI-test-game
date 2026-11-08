@@ -325,6 +325,11 @@ func mark_codex(kind: String, id: String) -> void:
 		return
 	arr.append(id)
 	save_codex()
+	# Sprint 16 D：地窖低语——首发现播报（重复登记在上方 return，天然只播一次；查表未命中则静默）
+	if main != null and is_instance_valid(main) and is_instance_valid(main.hud):
+		var fv: String = String(Data.FLAVOR.get(kind + "/" + id, ""))
+		if fv != "":
+			main.hud.flash_toast("矿工手记 · " + fv)
 
 
 ## 上局复盘摘要（_settle_meta 结算时快照 _run_stats——STATS_KEYS 内五项，不新增统计源；负数钳制）

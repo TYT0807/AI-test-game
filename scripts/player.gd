@@ -162,6 +162,8 @@ func _ready() -> void:
 		_third_boss_probe.call_deferred()
 	if OS.get_environment("SMOKE_OATH") != "" or OS.get_environment("SMOKE_ECHO_CHAIN") != "":
 		_oath_probe.call_deferred()
+	if OS.get_environment("SMOKE_FLOOR_SIGN") != "" or OS.get_environment("SMOKE_FLAVOR") != "":
+		_floor_sign_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -1135,6 +1137,53 @@ func _oath_probe() -> void:
 				echo_shown = true
 	Dev.check(oath_shown and echo_shown, "oath", "复盘页渲染誓约+回声行")
 	print("[SMOKE-OATH] done")
+
+
+## SMOKE_FLOOR_SIGN / SMOKE_FLAVOR：层签 + 地窖低语断言（Sprint 16 C/D）
+func _floor_sign_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	# 探针间 floor 互相影响（shrine 探针临时置 5）——本探针自设语境，结束还原
+	var bak_floor: int = Game.floor_num
+	Game.floor_num = 1   # 无主题语境
+	# C：层签内容与实值一致（1-2 层无主题 → 「无主题」；灾祸空 → 无）
+	gm._calamity = ""
+	gm.update_floor_sign()
+	var sign: String = Game.main.hud._floor_sign_label.text
+	Dev.check(sign.contains("无主题") and sign.contains("灾祸：无"), "floor_sign",
+		"层签与实值一致（无主题/无灾祸）：%s" % sign)
+	# C：灾祸实值反映
+	gm._calamity = "frail"
+	gm.update_floor_sign()
+	sign = Game.main.hud._floor_sign_label.text
+	Dev.check(sign.contains("虚弱"), "floor_sign", "层签反映灾祸实值：%s" % sign)
+	gm._calamity = ""
+	# C：刷新零 rng 消费（state 前后不变——零抽取自证）
+	var rng_state = Game.rng.state
+	gm.update_floor_sign()
+	Dev.check(Game.rng.state == rng_state, "floor_sign", "层签刷新零 Game.rng 消费")
+	var fx_state = Game.fx_rng.state
+	gm.update_floor_sign()
+	Dev.check(Game.fx_rng.state == fx_state, "floor_sign", "层签刷新零 fx_rng 消费")
+	# D：首发现播报（清条目 → mark → toast 文本含手记；重复 mark → 文本不变）
+	(Game.codex["themes"] as Array).erase("vein")
+	Game.mark_codex("themes", "vein")
+	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记"), "flavor",
+		"首发现播报：%s" % String(Game.main.hud._toast.text))
+	var toast_after_dup: String = Game.main.hud._toast.text
+	Game.mark_codex("themes", "vein")
+	Dev.check(Game.main.hud._toast.text == toast_after_dup, "flavor", "重复登记不再播报")
+	# D：分母不受影响（文案不入分母）
+	Dev.check(Data.codex_bosses_total() == 7, "flavor", "分母仍 7（手记不入分母）")
+	# D：图鉴手记行渲染（真调 _build_codex 扫描）
+	Game.main.menu._build_codex()
+	var note_shown := false
+	for c in Game.main.menu._rows.get_children():
+		if c is Label and String(c.text).contains("手记"):
+			note_shown = true
+	Dev.check(note_shown, "flavor", "图鉴渲染手记行")
+	Game.floor_num = bak_floor
+	print("[SMOKE-FLOOR-SIGN] done")
 
 
 func _nearest_enemy() -> Node2D:

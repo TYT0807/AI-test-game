@@ -400,6 +400,19 @@ func _codex_section(kind: String, title: String, total: int, name_of: Callable) 
 	body.add_theme_color_override("font_color",
 		Color(0.78, 0.82, 0.9) if parts.size() > 0 else Color(0.5, 0.52, 0.58))
 	_rows.add_child(body)
+	# Sprint 16 D：地窖低语展开（已发现条目附矿工手记，纯文本零 rng）
+	var flavor := ""
+	for id2 in arr:
+		flavor += String(Data.FLAVOR.get(kind + "/" + String(id2), ""))
+	if flavor != "":
+		var fl_l := Label.new()
+		fl_l.text = "　手记：" + flavor
+		fl_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fl_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		fl_l.custom_minimum_size = Vector2(560, 0)
+		fl_l.add_theme_font_size_override("font_size", 12)
+		fl_l.add_theme_color_override("font_color", Color(0.62, 0.66, 0.72))
+		_rows.add_child(fl_l)
 
 
 func _build_settings() -> void:
