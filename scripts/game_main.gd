@@ -21,6 +21,7 @@ const UpgradePanelScript := preload("res://scripts/upgrade_panel.gd")
 const ShrinePanelScript := preload("res://scripts/shrine_panel.gd")
 const PrismWardenScript := preload("res://scripts/boss.gd")
 const Boss2Script := preload("res://scripts/boss2.gd")
+const Boss3Script := preload("res://scripts/boss3.gd")
 const AllyScript := preload("res://scripts/ally.gd")
 
 var _ally: Node2D = null  # kindred 印记的协战水晶（每局重生成）
@@ -975,6 +976,12 @@ func _is_sovereign_floor(n: int) -> bool:
 	return n > 4 and (n - 4) % 16 == 15
 
 
+## Sprint 15 A：第三 Boss 层（F2 解绑）——每 32 层一次，落在首领层且避开主权层
+## （23%8=7 是 warden 层、23%16=7≠15 非 sovereign）；纯函数零 rng。命中 n=27/59…
+func _is_third_floor(n: int) -> bool:
+	return n > 4 and (n - 4) % 32 == 23
+
+
 func _pick_spawn_pos() -> Vector2:
 	for i in 10:
 		var p := player.global_position + Vector2.from_angle(Game.rng.randf() * TAU) * Game.rng.randf_range(230, 320)
@@ -1087,10 +1094,21 @@ func _enter_room(coord: Vector2i, arrive_dir: Vector2i) -> void:
 					d.set_locked(false)
 			elif kind == "boss":
 				room_state = "combat"
-				# 表外测试钩：SMOKE_FORCE_SOVEREIGN=1 强制当前 Boss 房出熔潮主宰（低层即可验证）
+				# 表外测试钩：SMOKE_FORCE_THIRD_BOSS=1 / SMOKE_FORCE_SOVEREIGN=1 强制低层验证
+				var third := _is_third_floor(Game.floor_num) \
+					or OS.get_environment("SMOKE_FORCE_THIRD_BOSS") != ""
 				var sovereign := _is_sovereign_floor(Game.floor_num) \
 					or OS.get_environment("SMOKE_FORCE_SOVEREIGN") != ""
-				if sovereign:
+				if third:
+					# Sprint 15 A：第三 Boss 层（每 32 层收尾）——优先链最高：third > sovereign > warden > 常规
+					_room_budget = 1
+					var boss3 := Boss3Script.new()
+					boss3.position = _arena_center() - Vector2(0, 120)
+					entities.add_child(boss3)
+					boss3.setup(Game.floor_num)
+					if _smoke:
+						print("[SMOKE-THIRD-BOSS] third floor boss replaced: floor=%d" % Game.floor_num)
+				elif sovereign:
 					# 主权层（每 16 层）：熔潮主宰优先（与守望者错开，Sprint 12 C）
 					_room_budget = 1
 					var boss2 := Boss2Script.new()

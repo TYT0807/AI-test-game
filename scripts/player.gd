@@ -158,6 +158,8 @@ func _ready() -> void:
 		_codex_probe.call_deferred()
 	if OS.get_environment("SMOKE_CODEX_BOON") != "":
 		_codex_boon_probe.call_deferred()
+	if OS.get_environment("SMOKE_THIRD_BOSS") != "":
+		_third_boss_probe.call_deferred()
 
 
 # ---------------- 武器 ----------------
@@ -933,7 +935,7 @@ func _codex_probe() -> void:
 	Dev.check(not Game._codex_id_valid("bosses", "rusher"), "codex", "B1: 非 Boss 敌人 id 被白名单拒绝")
 	Dev.check(Game._codex_id_valid("bosses", "boss"), "codex", "旧档兼容: 巨岩虫之王键仍合法")
 	# ③ 分母与显示名单源（防 6/4 错位与英文 id 直出）
-	Dev.check(Data.codex_bosses_total() == 6, "codex", "A: bosses 分母 = 6（ENEMIES 真 Boss + 2 主题）")
+	Dev.check(Data.codex_bosses_total() == 7, "codex", "A: bosses 分母 = 7（ENEMIES 真 Boss + 3 主题——Sprint 15 A 起）")
 	Dev.check(String(Data.CODEX_BOSS_NAMES["prism_warden"]) == "棱镜守望者"
 		and String(Data.CODEX_BOSS_NAMES["pyrothalassian"]) == "熔潮主宰", "codex", "A: 显示名中文映射")
 	# ---------------- Sprint 14 B 批加固 ----------------
@@ -1031,6 +1033,31 @@ func _codex_boon_probe() -> void:
 		and is_equal_approx(Game.calamity_speed_mult, sp0), "codex_boon",
 		"§5.4: 全局倍率载体零命中（apply 前后不变）")
 	print("[SMOKE-CODEX-BOON] done")
+
+
+## SMOKE_THIRD_BOSS=1：第三 Boss 断言——层判定 / 优先链前提 / 三件套单源红利（Sprint 15 A）
+func _third_boss_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	Dev.check(Game.main._is_third_floor(27) and Game.main._is_third_floor(59),
+		"third_boss", "层判定: 27/59 命中")
+	Dev.check(not Game.main._is_third_floor(26) and not Game.main._is_third_floor(43)
+		and not Game.main._is_third_floor(11), "third_boss", "层判定: 26/43/11 不命中")
+	Dev.check(not Game.main._is_sovereign_floor(27) and Game.main._is_warden_floor(27),
+		"third_boss", "优先链前提: 27 是首领层且避开主权层")
+	Dev.check(Data.codex_bosses_total() == 7, "third_boss", "分母单源: 7（ENEMIES 真 Boss + 3 主题）")
+	Dev.check(String(Data.CODEX_BOSS_NAMES["third_boss"]) == "玄渊之主"
+		and Game._codex_id_valid("bosses", "third_boss"), "third_boss", "表+校验器: third_boss 合法")
+	# 击杀登记路径单元证据：构造 boss3 实例直调 on_slug_killed——与 boss.gd _die :338 同一入口；
+	# 自动驾驶在小图布局下进 boss 房的运气不稳定（kill2/3/4 实录），真实流程证据由
+	# 全量回归的 FORCE_THIRD_BOSS 生成打印 + 本单元路径共同构成
+	var b3: PrismWarden = load("res://scripts/boss3.gd").new()
+	Dev.check(String(b3.codex_id) == "third_boss", "third_boss", "boss3 默认 codex_id 正确")
+	Game.main.on_slug_killed(b3)
+	Dev.check((Game.codex["bosses"] as Array).has("third_boss"), "third_boss",
+		"on_slug_killed 走 codex_id 登记 third_boss（非 variant 回退）")
+	Dev.check(not (Game.codex["bosses"] as Array).has("boss"), "third_boss", "无 \"boss\" 假阳性登记")
+	b3.free()
+	print("[SMOKE-THIRD-BOSS] done")
 
 
 func _nearest_enemy() -> Node2D:

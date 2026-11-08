@@ -333,7 +333,8 @@ const ECHO_TUNING := {"mirror_time": 2.5, "cycle": 3.0, "chase_mult": 1.5,
 ## Sprint 14 A：两个主题 Boss 的图鉴专用 id（不在 ENEMIES 表——避免与「巨岩虫之王」的
 ## variant="boss" 撞名误登记，§3.2）。登记三件套的数据层单源：
 ## 白名单（game_state._codex_id_valid）/ UI 分母（codex_bosses_total）/ 显示名都从这里派生
-const CODEX_BOSS_NAMES := {"prism_warden": "棱镜守望者", "pyrothalassian": "熔潮主宰"}
+const CODEX_BOSS_NAMES := {"prism_warden": "棱镜守望者", "pyrothalassian": "熔潮主宰",
+	"third_boss": "玄渊之主"}
 
 ## Sprint 14 C：图鉴发现度 → 开局被动（data 驱动阈值与数值，调优只改这里）。
 ## 载体硬约束（草案 §5.4）：只允许一次性起始状态——shield/diamonds/max_hp/suffix；

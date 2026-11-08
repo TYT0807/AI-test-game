@@ -7,6 +7,11 @@ extends PrismWarden
 var _theme_offset := 4
 
 
+func _init() -> void:
+	# Sprint 15 A 补强：默认值在 setup 之前就正确（.new() 即生效，防 setup 异常落回基类默认）
+	codex_id = "pyrothalassian"
+
+
 func setup(floor_num: int) -> void:
 	# 核验 #5 修复：身份补齐（此前 DUMP/结算残留守望者字段）
 	boss_name = "熔潮主宰"
