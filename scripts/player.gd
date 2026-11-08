@@ -665,6 +665,8 @@ func _fire_relic_suffixes(relic_id: String, trigger: String, pos: Vector2) -> Di
 
 
 ## SMOKE_SUFFIX=1：词缀链路自测（附着 → 触发 → 冷却拦截），表外不进 E1
+## 【Sprint 17 B 断言盘点】全为「验效果型」：触发返回字典的真值 / 冷却拦截 / trigger 不匹配空返回 /
+## 护盾层数差值。无恒过守卫、无「只验标志」（shield_charges 是数值断言）。
 func _suffix_probe() -> void:
 	await get_tree().create_timer(0.8, true).timeout
 	attach_suffix("s_frostburst")
@@ -682,6 +684,8 @@ func _suffix_probe() -> void:
 
 
 ## SMOKE_SIGIL_COVERAGE=1：9 枚印记逐枚覆盖断言（核验 #1 修复批：每枚验证可观察效果）
+## 【Sprint 17 B 断言盘点】全为「验效果型」：每枚验可观察数值/状态差值（max_hp / diamond_mult /
+## mag_cap_mult / frail 削减与还原），非标志位；结束恢复印记存档现场。
 func _sigil_coverage_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var bak := {"shards": int(Game.sigils["shards"]), "unlocked": (Game.sigils["unlocked"] as Array).duplicate(),
@@ -774,6 +778,9 @@ func _sigil_coverage_probe() -> void:
 
 
 ## SMOKE_SHRINE=1：圣所断言——三卡确定性 / 效果+代价逐条 / 置灰 / 实开面板全链（Sprint 13 A）
+## 【Sprint 17 B 断言盘点】以「验效果型」为主：代价数值（20→12 源石 / 5→4 上限 / 40 源石）、
+## 面板可见状态、cleared 回写、暂停态。两条限时 buff 已由 Sprint 15 收口批从「只验标志」
+## 升级为 mult=1.25/1.3 + t>0 + 分数的数值断言；其余无「只验标志」绿灯。
 func _shrine_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
@@ -894,6 +901,9 @@ func _shrine_ids(offers: Array) -> Array:
 
 ## SMOKE_CODEX=1：图鉴断言——隔离档 / 未知 id 忽略 / 读写往返 / 负数钳制（Sprint 13 C）+
 ## Sprint 14 A 登记三件套 + B 批加固断言
+## 【Sprint 17 B 断言盘点】多数为「验效果型」：未知 id 忽略 / 记录→存盘→读回 / 负数钳制 0 /
+## B3 越界键 / B5 同层幂等 / B6 空 clear 保留 saved / P0-3.2 现场恢复；
+## 分母与显示名比对为「表一致性门 + 常量自比较」（已单行标注），B2 读档钳制属验效果型。
 func _codex_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
@@ -947,6 +957,8 @@ func _codex_probe() -> void:
 	Dev.check(not Game._codex_id_valid("bosses", "rusher"), "codex", "B1: 非 Boss 敌人 id 被白名单拒绝")
 	Dev.check(Game._codex_id_valid("bosses", "boss"), "codex", "旧档兼容: 巨岩虫之王键仍合法")
 	# ③ 分母与显示名单源（防 6/4 错位与英文 id 直出）
+	# 【Sprint 17 B 断言性质】分母比对属「表一致性门」（扩表漂移会红，有效）；
+	# 下一行显示名比对属「常量自比较」：自己定义自己读，防错字/表被改，非行为断言 → 建议下批补渲染断言。
 	Dev.check(Data.codex_bosses_total() == 7, "codex", "A: bosses 分母 = 7（ENEMIES 真 Boss + 3 主题——Sprint 15 A 起）")
 	Dev.check(String(Data.CODEX_BOSS_NAMES["prism_warden"]) == "棱镜守望者"
 		and String(Data.CODEX_BOSS_NAMES["pyrothalassian"]) == "熔潮主宰", "codex", "A: 显示名中文映射")
@@ -997,6 +1009,8 @@ func _codex_probe() -> void:
 
 
 ## SMOKE_CODEX_BOON=1：图鉴发现度被动断言——阈值边界 / 派生确定性 / 起始状态落地 / 载体零命中（Sprint 14 C）
+## 【Sprint 17 B 断言盘点】阈值边界 / 起始状态四项落地 / §5.4 倍率零命中为「验效果型」；
+## 「派生确定性」为「常量自比较」，「P0 派生不变」为「前提守卫型恒过」（二者已单行标注）。
 func _codex_boon_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
@@ -1020,6 +1034,8 @@ func _codex_boon_probe() -> void:
 		Game.mark_codex("themes", tid)
 	var boons: Dictionary = Game.codex_boons()
 	Dev.check(boons.size() == 4, "codex_boon", "全四档生效: %s" % str(boons.keys()))
+	# 【Sprint 17 B 断言性质：常量自比较】同档连读两次纯派生必然相等；只防「派生被改成有状态」，
+	# 不是行为断言、无真实差值 → 建议下批改为「改档前后差值」或删除，勿冒充验效果型。
 	Dev.check(Game.codex_boons() == Game.codex_boons(), "codex_boon", "派生确定性（同档两次逐字一致）")
 	# 起始状态实际落地（验数值，不只验返回字典——「只验标志」根因防线）
 	shield_charges = 0
@@ -1032,6 +1048,9 @@ func _codex_boon_probe() -> void:
 	var sp0: float = Game.calamity_speed_mult
 	# Sprint 15 P0：自激切断真差值断言——送词缀回写图鉴（suffixes 分类增长）后，
 	# boon 派生必须逐字不变（判据端切链：无 suffixes 阈值则回写不影响判定）
+	# 【Sprint 17 B 断言性质订正：前提守卫型恒过，非「真差值」】当前 codex_boons() 不读 suffixes，
+	# 前后必然相等；真防线是 validate._check_codex() 的启动期判据门。价值在「未来误加 suffixes
+	# 阈值 / 误把 boon 回写图鉴」时报错。订正 Sprint 15 交付文档措辞，本批不改断言逻辑。
 	var boons_before: Dictionary = Game.codex_boons()
 	gm._apply_codex_boons()
 	Dev.check(Game.codex_boons() == boons_before, "codex_boon", "P0: 送词缀回写后派生不变（自激已切断）")
@@ -1057,6 +1076,7 @@ func _third_boss_probe() -> void:
 	Dev.check(not Game.main._is_sovereign_floor(27) and Game.main._is_warden_floor(27),
 		"third_boss", "优先链前提: 27 是首领层且避开主权层")
 	Dev.check(Data.codex_bosses_total() == 7, "third_boss", "分母单源: 7（ENEMIES 真 Boss + 3 主题）")
+	# 【Sprint 17 B 复核】维持「前半常量自比较 / 后半真校验门」分类，建议下批补菜单显示名渲染断言。
 	# 【断言性质：前半为常量自比较守卫（防表被误改/错字，非行为断言）；后半 _codex_id_valid 是真校验门】
 	Dev.check(String(Data.CODEX_BOSS_NAMES["third_boss"]) == "玄渊之主"
 		and Game._codex_id_valid("bosses", "third_boss"), "third_boss", "表+校验器: third_boss 合法")
@@ -1074,6 +1094,9 @@ func _third_boss_probe() -> void:
 
 
 ## SMOKE_OATH / SMOKE_ECHO_CHAIN：地窖誓约 + 抉择回声断言（Sprint 16 A/B）
+## 【Sprint 17 B 断言盘点】本探针以「验效果型」为主：计数器增量 / 阈值 2→3 边界 /
+## 多条件取最小 / 落盘读回逐字段 / 复盘页渲染扫描；A2 为「验效果型·负向构造」。
+## 表结构 size 比对属表一致性门（常量自比较类），非行为断言；无「只验标志」绿灯。
 func _oath_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
@@ -1096,6 +1119,14 @@ func _oath_probe() -> void:
 	Game.equip_sigil("scholar")
 	f = gm.oath_fulfillment()
 	Dev.check(int(f.get("cur", 99)) == 0, "oath", "多条件取最小")
+	# 【Sprint 17 A2 / B：验效果型·负向构造】空 watched 必须命中早退返回空字典。
+	# 若无早退，cur 保持 999 → done 恒真、返回非空 → 本断言红。删守卫即失效，是真差值断言。
+	var empty_watched: Dictionary = {"name": "t", "desc": "t", "watched": [], "need": 1}
+	var empty_res: Dictionary = gm.oath_fulfillment(empty_watched)
+	Dev.check(empty_res.is_empty(), "oath",
+		"A2: 空 watched 返回空字典（原 cur:=999 会误判 done=true）")
+	# 表外探针落地证据：Dev.check 只在失败时打印，显式留一行成功证据
+	print("[SMOKE-OATH] A2: empty_watched result_empty=%s" % str(empty_res.is_empty()))
 	# B：抉择链 + 主导代价标签
 	gm._echo_choices.clear()
 	gm._echo_costs.clear()
@@ -1140,6 +1171,8 @@ func _oath_probe() -> void:
 
 
 ## SMOKE_FLOOR_SIGN / SMOKE_FLAVOR：层签 + 地窖低语断言（Sprint 16 C/D）
+## 【Sprint 17 B 断言盘点】全为「验效果型」：层签文本包含实值 / rng.state 与 fx_rng.state 前后相等 /
+## toast 文本与重复登记不变 / 分母不变 / 图鉴手记行渲染扫描；A1 跳层断言另见 game_main.start_run。
 func _floor_sign_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main

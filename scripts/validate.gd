@@ -217,6 +217,7 @@ func _check_shrine() -> void:
 		# B4【断言性质：前提守卫型恒过】shrine 恒非起点房——_enter_room 早于 _roll_calamity
 		# 的时序不对称当前无害依赖此条；生成规则不变则本断言恒过，其价值在「前提被破坏时
 		# 当场报错」而非每日回归信号。未来放宽房型/分配规则时在此报错（锁前提，不改时序 → 零 E1 漂移）
+		# 【Sprint 17 B 复核】维持「前提守卫型恒过」分类，不需补强；本批只补标注，不改断言逻辑。
 		for c in d.rooms:
 			if String(d.rooms[c].get("kind", "")) == "shrine" and c == Vector2i.ZERO:
 				problems.append("floor %d 的 shrine 落在起点房 Vector2i.ZERO（B4 前提被破坏）" % fn)
@@ -242,6 +243,9 @@ func _check_codex() -> void:
 	# 图标登记断言：PNG 已生成但 GEN_NAMES 漏登记 = Assets.g() 返回 null → 静默白框（核验 🟡 修复）
 	if Assets.g("icon_codex") == null:
 		problems.append("icon_codex 已生成但未登记 GEN_NAMES（Assets.g 返回 null → 主菜单图鉴按钮静默白框）")
+	# 【Sprint 17 B 断言性质：前提守卫型恒过】当前 CODEX_BOONS 四档 kind 均非 suffixes（data.gd），
+	# 本遍历门恒过；价值在「未来扩表误把 suffixes 当阈值」时启动期当场报错，不是每日回归信号。
+	# 真防线是本门（判据端切链）；player.gd SMOKE_CODEX_BOON「派生不变」断言同属前提守卫型。
 	# Sprint 15 P0 红线（判据端切链）：CODEX_BOONS.kind 不得为 "suffixes"——
 	# 否则「送词缀 → mark_codex → 发现度上升 → 更多 boon」正反馈自激。
 	# 若产品确需 suffixes 阈值，须改用「不回写图鉴的内部绑定路径」（草案 §3.1 备选）并重做此门

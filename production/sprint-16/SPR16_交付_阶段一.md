@@ -33,5 +33,5 @@
 
 ## 还剩什么
 
-- **阶段二 C 层签 + D 地窖低语**：`hud.set_room_info()` 同通道常驻标签两调用点（start_run roll+theme 后 / enter 前；next_floor roll 后 / drop_pickup 前，**不移动任何 roll**）、默认 2 项可展开、`FLAVOR` 文案表（废弃矿窟实用主义）+ 首发现播报（`mark_codex` 新增时查表 toast）+ 图鉴展开
+- **阶段二 C 层签 + D 地窖低语**：与 `set_room_info` 同容器的独立常驻只读标签 `set_floor_sign()`（hud.gd:585）两调用点（start_run roll+theme 后 / enter 前；next_floor roll 后 / drop_pickup 前，**不移动任何 roll**）、默认 2 项可展开、`FLAVOR` 文案表（废弃矿窟实用主义）+ 首发现播报（`mark_codex` 新增时查表 toast）+ 图鉴展开
 - 主理人并行：E 断言盘点、文档整理批

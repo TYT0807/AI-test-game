@@ -372,7 +372,26 @@ func start_run() -> void:
 	var jump_env := OS.get_environment("SMOKE_JUMP_FLOOR")
 	if _smoke and jump_env != "":
 		Game.floor_num = int(jump_env)
+		# Sprint 17 A1：跳层后重刷层签——原先只有 :370 刷一次（floor=1 的「无主题」），
+		# 跳层后若不补刷，层签文本与实际层不符。update_floor_sign() 纯只读拼装，
+		# 零 Game.rng / fx_rng / 零抽取；不移动任何 roll（E1 顺序不变）。
+		var rs_before = Game.rng.state
+		var fs_before = Game.fx_rng.state
 		_apply_floor_theme()
+		update_floor_sign()
+		if OS.get_environment("SMOKE_FLOOR_SIGN") != "":
+			var jt: Dictionary = Data.theme_for_floor(Game.floor_num)
+			var jtext := String(hud._floor_sign_label.text)
+			# 无主题层（<4）没有可比对的主题名，跳过文本断言，避免 contains("") 恒过假绿灯
+			if not jt.is_empty():
+				Dev.check(jtext.contains(String(jt.get("name", ""))), "floor_sign",
+					"A1: 跳层后层签含第 %d 层主题名（%s）" % [Game.floor_num, jtext])
+			Dev.check(Game.rng.state == rs_before and Game.fx_rng.state == fs_before,
+				"floor_sign", "A1: 跳层重刷零 Game.rng / fx_rng 消费")
+			# 表外探针落地证据：Dev.check 只在失败时打印，故显式留一行成功证据（零 rng、不进指纹）
+			print("[SMOKE-FLOOR-SIGN] A1: floor=%d sign=%s theme=%s rng_same=%s fx_same=%s" % [
+				Game.floor_num, jtext, String(jt.get("name", "")),
+				str(Game.rng.state == rs_before), str(Game.fx_rng.state == fs_before)])
 	if _smoke:
 		var kinds := {}
 		for c in dungeon.rooms:
@@ -2107,10 +2126,17 @@ func oath_count(key: String, n := 1) -> void:
 
 ## 誓约兑现度派生（纯只读）：装备印记 → {id, name, desc, done, cur, need}
 ## 多条件（watched 多键）取最小计数，全达标才兑现；kills 直接读既有全局计数
-func oath_fulfillment() -> Dictionary:
+## def_override 仅为 SMOKE 负向断言提供测试缝：默认空字典走既有表，
+## 既有全部调用（_write_codex_replay / _oath_probe）零参数调用 → 零行为变化。
+## Data.OATH_CONDITIONS 是 const（含内嵌 Array 运行时只读，Godot 4.7.2 实测），不能靠探针改表注入。
+func oath_fulfillment(def_override: Dictionary = {}) -> Dictionary:
 	var equipped: String = String(Game.sigils.get("equipped", ""))
-	var def: Dictionary = Data.OATH_CONDITIONS.get(equipped, {})
+	var def: Dictionary = def_override if not def_override.is_empty() else Data.OATH_CONDITIONS.get(equipped, {})
 	if def.is_empty():
+		return {}
+	# Sprint 17 A2：空 watched 早退——原 cur := 999 会使 done = 999 >= need 恒真。
+	# validate 启动期已挡空 watched（无实害），此处补运行期防线；正常数据下零行为变化。
+	if (def["watched"] as Array).is_empty():
 		return {}
 	var cur := 999
 	for w in def["watched"]:
