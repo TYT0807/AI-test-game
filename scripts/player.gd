@@ -933,11 +933,20 @@ func _shrine_probe() -> void:
 			break
 	if found:
 		shield_charges = 0
+		# Sprint 19 终审查修：④ 强制可支付语境——池扩到 10 条后派生三卡可能全为积分/源石代价卡，
+		# 而 ③ 的 score=10 残留 + 余额未知会让 autopick 无卡可选 → 面板不关（审查实录）。
+		# ④ 测的是面板链路不是置灰逻辑，故把余额置足并测后还原
+		var dia_bak: int = Game.diamonds
+		var score_bak: int = Game.score
+		Game.diamonds = 50
+		Game.score = 500
 		gm._open_shrine(cur)
 		Dev.check(gm.shrine_panel._root.visible, "shrine", "面板已打开（三卡渲染）")
 		await get_tree().create_timer(1.4, true).timeout   # autopick 0.5s + 执行收尾
 		Dev.check(not gm.shrine_panel._root.visible, "shrine", "选择后面板关闭")
 		Dev.check(bool(gm.dungeon.rooms[cur]["cleared"]), "shrine", "选择后 cleared 回写（重进不再扣/发）")
+		Game.diamonds = dia_bak
+		Game.score = score_bak
 		# 核验 #2 补断言：ore_upgrade 全链（圣所面板 autopick → _pick → 升级面板）暂停交接不丢失
 		Game.diamonds = 20
 		gm._shrine_offers = [gm._shrine_entry("ore_upgrade")]
