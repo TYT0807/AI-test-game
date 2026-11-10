@@ -424,6 +424,10 @@ func _build_codex() -> void:
 		theme_names[String(Data.FLOOR_THEMES[k]["rule"])] = String(Data.FLOOR_THEMES[k]["name"])
 	_codex_section("themes", "已历主题", Data.FLOOR_THEMES.size(),
 		func(id: String) -> String: return String(theme_names.get(id, id)))
+	# Sprint 19 A：第六类「已行抉择」——分母单源取 SHRINE_OFFERS 表长（不硬编码 10），
+	# 显示名取 name 字段并 .get 兜底（防未知 id 直出英文）。灰字恒显逻辑与此处零耦合。
+	_codex_section("shrine", "已行抉择", Data.SHRINE_OFFERS.size(),
+		func(id: String) -> String: return String(Data.SHRINE_OFFERS.get(String(id), {}).get("name", id)))
 
 
 func _codex_section(kind: String, title: String, total: int, name_of: Callable) -> void:

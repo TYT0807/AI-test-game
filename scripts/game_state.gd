@@ -274,10 +274,10 @@ func save_sigils() -> void:
 
 
 ## ---------------- Sprint 13 C：地窖图鉴（局外只读沉淀，codex.cfg 双档） ----------------
-## 记录已遇敌人 / 遗物 / 词缀 / 主题 / 已击败 Boss + 上局复盘摘要；纯登记零 rng（E1 零影响）。
+## 记录已遇敌人 / 遗物 / 词缀 / 主题 / 已击败 Boss / 已行圣所抉择 + 上局复盘摘要；纯登记零 rng（E1 零影响）。
 ## 不碰 meta.gd UNLOCKS（冻结规格 v2.10）——平行只读数据，只增不减。
-const CODEX_KINDS := ["enemies", "relics", "suffixes", "themes", "bosses"]
-var codex := {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "last_run": {}}
+const CODEX_KINDS := ["enemies", "relics", "suffixes", "themes", "bosses", "shrine"]
+var codex := {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "shrine": [], "last_run": {}}
 
 
 func codex_path() -> String:
@@ -311,6 +311,9 @@ func _codex_id_valid(kind: String, id: String) -> bool:
 				if String(Data.FLOOR_THEMES[k]["rule"]) == id:
 					return true
 			return false
+		"shrine":
+			# Sprint 19 A：第六类发现集——id 必须命中 SHRINE_OFFERS（与 suffixes:308 同型）
+			return Data.SHRINE_OFFERS.has(id)
 	return false
 
 
@@ -346,7 +349,7 @@ func set_codex_last_run(stats: Dictionary) -> void:
 
 
 func load_codex() -> void:
-	codex = {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "last_run": {}}
+	codex = {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "shrine": [], "last_run": {}}
 	var cfg := ConfigFile.new()
 	if cfg.load(codex_path()) != OK:
 		return

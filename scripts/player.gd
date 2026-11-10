@@ -1151,6 +1151,23 @@ func _codex_boon_probe() -> void:
 	Dev.check(is_equal_approx(gm.diamond_mult, dm0) and is_equal_approx(mag_cap_mult, mc0)
 		and is_equal_approx(Game.calamity_speed_mult, sp0), "codex_boon",
 		"§5.4: 全局倍率载体零命中（apply 前后不变）")
+	# Sprint 19 §九-1 配套（验效果型·真差值断言）：shrine 三态 0 / 1 / 10 条下派生逐字相等。
+	# 真差值来自「输入确实变了」，若 _codex_boon_suffix() 漏掉 continue 则三态输出各异 → 本条转红。
+	var shrine_bak: Array = (Game.codex["shrine"] as Array).duplicate()
+	(Game.codex["shrine"] as Array).clear()
+	var sfx_empty: String = gm._codex_boon_suffix()
+	(Game.codex["shrine"] as Array).append("blood_relic")
+	var sfx_one: String = gm._codex_boon_suffix()
+	(Game.codex["shrine"] as Array).clear()
+	for oid19 in Data.SHRINE_OFFERS:
+		(Game.codex["shrine"] as Array).append(String(oid19))
+	var n_full: int = (Game.codex["shrine"] as Array).size()
+	var sfx_full: String = gm._codex_boon_suffix()
+	Dev.check(n_full == Data.SHRINE_OFFERS.size(), "codex_boon",
+		"S19: 三态输入样本确为 0 / 1 / %d 条（非恒定输入）" % n_full)
+	Dev.check(sfx_empty != "" and sfx_empty == sfx_one and sfx_one == sfx_full, "codex_boon",
+		"S19: _codex_boon_suffix 三态逐字相等：%s / %s / %s" % [sfx_empty, sfx_one, sfx_full])
+	Game.codex["shrine"] = shrine_bak
 	print("[SMOKE-CODEX-BOON] done")
 
 

@@ -376,10 +376,10 @@ const FLAVOR := {
 	"themes/ice": "冰面。刹车提前半秒。",
 	"themes/swamp": "毒沼。慢是慢了点，稳当。",
 	"themes/vines": "藤蔓。烧掉，或者绕路。",
-	# Sprint 18 阶段二 D：圣所熟客呼应 10 条（键 shrine/<offer_id>，与 SHRINE_OFFERS 一一对应）。
-	# **只作 Data.FLAVOR.get("shrine/"+id) 直查**给 shrine_panel 三卡灰字用；**不喂 mark_codex**
-	# （CODEX_KINDS 五类不含 shrine，喂了会被 :319 的 codex.has(kind) 守卫直接拒绝）→ 不进任何
-	# 发现集 / 分母 / 首发现播报。显示条件为**恒显**（不读发现状态），内容随三卡派生而变。
+	# Sprint 18 阶段二 D 写入 / Sprint 19 阶段一续用：圣所熟客呼应 10 条（键 shrine/<offer_id>）。
+	# 同时供两路直查：shrine_panel 三卡灰字（恒显、不读发现状态），以及 Sprint 19 起
+	# `mark_codex("shrine", id)` 的首发现播报（mark_codex 拼键 kind + "/" + id 命中本表）。
+	# 显示条件仍为**恒显**（不读发现状态），内容随三卡派生而变；灰字层与发现集彼此独立、互不耦合。
 	"shrine/blood_relic": "血祭。地窖里最不缺的就是血。",
 	"shrine/ore_upgrade": "源石淬炼。矿里人管这叫喂石头。",
 	"shrine/purify": "净化。这层的脏，散得掉。",

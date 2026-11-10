@@ -2141,6 +2141,10 @@ func _on_shrine_chosen(index: int) -> void:
 		return   # 置灰卡不生效（面板已拦，此处双保险）
 	_shrine_execute(offer)
 	dungeon.rooms[_shrine_coord]["cleared"] = true   # 重进置 skip_loot，不重复扣/发
+	# Sprint 19 A：shrine 第六类发现集——只登记「实际交换过」的选项。
+	# 时序：_shrine_affordable() 双保险在前（置灰卡不算），_shrine_execute() 成功返回在后（执行链早退不算）；
+	# 与 _echo_choices 同源同序，零新增事件源 / 零 rng / 零计时。纯局外登记，不进 _smoke_fingerprint。
+	Game.mark_codex("shrine", String(offer["id"]))
 	# Sprint 16 B：抉择链登记（offer 依时间序 + 代价类型分布——只增，局末落 last_run 平行字段）
 	_echo_choices.append(String(offer["id"]))
 	var ck := String(offer.get("cost_kind", ""))
@@ -2247,6 +2251,11 @@ func _codex_boon_suffix() -> String:
 	sids.sort()
 	var key := ""
 	for k in Game.CODEX_KINDS:
+		# Sprint 19 §九-1：跳过 shrine —— 本批只加「发现集」这一层关系，不得让 shrine 发现度
+		# 改变既有 boon 的开局铭刻词缀派生（否则老档 key 平白多 "shrine=|" → 跨版本基线漂移）。
+		# 图鉴档是局外输入，该漂移不属 E1 违规，但属无意的既得结果变化，主动切断。
+		if String(k) == "shrine":
+			continue
 		key += "%s=%s|" % [String(k), ",".join(Game.codex[k])]
 	return String(sids[Game.stable_hash(key) % sids.size()])
 
