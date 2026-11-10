@@ -1122,7 +1122,9 @@ func _codex_probe() -> void:
 	# ③ kind 写成复数则播报键查不到（单数 shrine 的存在依据——icon_codex 同型静默坑的负向对照）
 	Dev.check(Data.FLAVOR.has("shrine/blood_relic") and not Data.FLAVOR.has("shrines/blood_relic"),
 		"codex", "S19③: FLAVOR 键为单数 shrine（复数键必查不到——负向对照）")
-	# ④ 旧 codex.cfg 无 shrine 键 → load_codex 给空数组且不报错（快照全部分类，测后恢复）
+	# ④ 旧 codex.cfg 无 shrine 键 → load_codex 给空数组且不报错（快照全部分类+last_run，测后恢复
+	# ——S19 子代理低危观察①：last_run 不恢复的话，未来在本探针之后新增依赖 last_run 现场的断言会静默踩空）
+	var lr_b4: Dictionary = (Game.codex["last_run"] as Dictionary).duplicate()
 	var sets_b4 := {}
 	for k in Game.CODEX_KINDS:
 		sets_b4[k] = (Game.codex[k] as Array).duplicate()
@@ -1135,6 +1137,7 @@ func _codex_probe() -> void:
 		"S19④: 旧档无 shrine 键 → 空数组且不报错")
 	for k in Game.CODEX_KINDS:
 		Game.codex[k] = sets_b4[k]   # 恢复内存（P0-3.2 写法）
+	Game.codex["last_run"] = lr_b4
 	Game.save_codex()
 	Game.load_codex()
 	# ⑤ 渲染：图鉴含「已行抉择」标题与 n / 10 分母、已知条目显中文名不直出英文 id
