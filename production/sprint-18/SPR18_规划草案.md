@@ -1,3 +1,5 @@
+> Sprint 19 增补注记：S19 已新增 `shrine` 第六类发现集（实际交换过才登记），本文「五类不含 shrine」的依据已过期；D 灰字恒显与发现集互不耦合的结论仍成立。
+
 # Sprint 18 规划草案（主理人定稿）
 
 > 基线：HEAD `e16d39a`，34 个 `.gd`，冻结 `production/sprint-7/SPR7-FROZEN-4.md5` 34/34，工作树干净，`origin` 已指向 `github.com/TYT0807/AI-test-game`。
