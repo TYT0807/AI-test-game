@@ -328,8 +328,11 @@ func mark_codex(kind: String, id: String) -> void:
 		return
 	arr.append(id)
 	save_codex()
-	# Sprint 16 D：地窖低语——首发现播报（重复登记在上方 return，天然只播一次；查表未命中则静默）
-	if main != null and is_instance_valid(main) and is_instance_valid(main.hud):
+	# Sprint 16 D：地窖低语——首发现播报（重复登记在上方 return，天然只播一次；查表未命中则静默）。
+	# Sprint 20 A：加播报白名单——enemies/relics/suffixes 首发现只入图鉴不播 toast（防开局刷屏），
+	# themes/bosses/shrine 维持播报（S16 D 口径不变）
+	if main != null and is_instance_valid(main) and is_instance_valid(main.hud) \
+			and (Data.FLAVOR_BROADCAST_KINDS as Array).has(kind):
 		var fv: String = String(Data.FLAVOR.get(kind + "/" + id, ""))
 		if fv != "":
 			main.hud.flash_toast("矿工手记 · " + fv)

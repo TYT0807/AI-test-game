@@ -1499,6 +1499,26 @@ func _floor_sign_probe() -> void:
 		if c is Label and String(c.text).contains("手记"):
 			note_shown = true
 	Dev.check(note_shown, "flavor", "图鉴渲染手记行")
+	# ---------------- Sprint 20 A：手记扩容到全六类 ----------------
+	Dev.check(Data.FLAVOR.size() == 74, "flavor", "手记 74 条（全六类覆盖：29 敌+12 遗+8 词+8 题+7 Boss+10 圣所）")
+	Dev.check(not (Data.FLAVOR_BROADCAST_KINDS as Array).has("enemies"), "flavor",
+		"enemies 不在播报白名单（防开局刷屏——S20 裁定）")
+	# 播报白名单负向：enemies 首发现入图鉴但 toast 不变（撤销既有发现保证首发现路径可测）
+	var had_rusher: bool = (Game.codex["enemies"] as Array).has("rusher")
+	(Game.codex["enemies"] as Array).erase("rusher")
+	var t_en_b4: String = Game.main.hud._toast.text
+	Game.mark_codex("enemies", "rusher")
+	Dev.check((Game.codex["enemies"] as Array).has("rusher") and Game.main.hud._toast.text == t_en_b4,
+		"flavor", "enemies 首发现入图鉴但不播 toast（白名单负向）")
+	if not had_rusher:
+		(Game.codex["enemies"] as Array).erase("rusher")
+	# 渲染：enemies 分区手记行含特征句（真调 _build_codex 扫描）
+	Game.main.menu._build_codex()
+	var enemy_note := false
+	for c in Game.main.menu._rows.get_children():
+		if c is Label and String(c.text).contains("成群来"):
+			enemy_note = true
+	Dev.check(enemy_note, "flavor", "图鉴 enemies 手记行渲染（含机制应对句）")
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 

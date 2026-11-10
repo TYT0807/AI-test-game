@@ -246,6 +246,17 @@ func _check_codex() -> void:
 		problems.append("codex 校验器误拒合法圣所 id：blood_relic")
 	if Game._codex_id_valid("shrine", "no_such_offer"):
 		problems.append("codex 校验器接受了未知圣所 id")
+	# Sprint 20 A：FLAVOR 全六类覆盖门——每个可发现 id 都要有手记，缺一条即「表不齐」
+	# （与 icon_codex 同根的防漏门；计数按 "/" 前缀分桶）
+	var fcount := {}
+	for fk in Data.FLAVOR:
+		fcount[String(fk).split("/")[0]] = int(fcount.get(String(fk).split("/")[0], 0)) + 1
+	var fexpect := {"enemies": Data.ENEMIES.size(), "relics": Relics.POOL.size(),
+		"suffixes": Data.RELIC_SUFFIXES.size(), "themes": Data.FLOOR_THEMES.size(),
+		"bosses": Data.codex_bosses_total(), "shrine": Data.SHRINE_OFFERS.size()}
+	for fk in fexpect:
+		if int(fcount.get(fk, 0)) != int(fexpect[fk]):
+			problems.append("FLAVOR %s 覆盖不全：%d/%d" % [fk, int(fcount.get(fk, 0)), int(fexpect[fk])])
 	# 图标登记断言：PNG 已生成但 GEN_NAMES 漏登记 = Assets.g() 返回 null → 静默白框（核验 🟡 修复）
 	if Assets.g("icon_codex") == null:
 		problems.append("icon_codex 已生成但未登记 GEN_NAMES（Assets.g 返回 null → 主菜单图鉴按钮静默白框）")
