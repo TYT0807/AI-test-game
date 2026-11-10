@@ -33,7 +33,7 @@ Sprint 18 D 原设计是「三卡中已发现的条目才显示手记」，但 `
 | `data.gd:313-325` | `SHRINE_OFFERS` 10 条含 `name`，`min_floor` 分层 3/5/7；10 个 name 与 `FLAVOR` 手记首短句逐字一致 |
 | `data.gd:379-392` | S18 D 已写入 10 条 `shrine/<id>` 手记；上方 4 行注释写着「**不喂 mark_codex**」，扩类后与实现冲突（A1 必改） |
 
-`CODEX_KINDS` 全库引用实测 **8 处**：`game_main.gd:2249`、`game_state.gd:353/373`、`player.gd:1012/1022/1092/1228/1243`、`validate.gd:229`。
+`CODEX_KINDS` 全库引用实测 **12 处**（Sprint 19 定稿时写 8 处，S17/18 后续批次新增后过期——引用计数以 grep 实时为准）：声明 `game_state.gd:279` + `game_state.gd` load/save 2 处 + `game_main.gd` boon 派生 1 处 + `player.gd` 探针 7 处 + `validate.gd` `_check_codex` 1 处。
 
 ## 二、两处前置 · 最终裁定（采纳 design-s16 实稿）
 

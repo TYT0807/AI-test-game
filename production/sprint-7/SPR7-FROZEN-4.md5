@@ -1,4 +1,5 @@
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
+29c108678c3a6ff26e6df81db8d7290b *scripts/player.gd
 2f157b417097d412f0c9f7c25fd03401 *scripts/boss2.gd
 3ac9cac7af3a833f538964f7ca53a39c *scripts/boss3.gd
 4394ead7af0a5178be49575d5a9bcf25 *scripts/game_main.gd
@@ -8,7 +9,6 @@
 62ee71f72346ef28cc42c9dbb5f644c7 *scripts/validate.gd
 63b716c5fd064f93bcd7bb5b3391d2f1 *scripts/shop_stand.gd
 6a17cd2898825541876254240b392381 *scripts/pickup.gd
-770b15ddd4346f118fc53cb6f2c72a0b *scripts/player.gd
 7d9672c16817d21ebc97b3ec4689a6ce *scripts/menu.gd
 7eeafed26f5f0478aaef5025bb2a7057 *scripts/secret_wall.gd
 84d93d4bdd3403d83cc5583e7b7a4e8d *scripts/bullet.gd

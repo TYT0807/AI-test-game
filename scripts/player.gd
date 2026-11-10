@@ -1140,18 +1140,20 @@ func _codex_probe() -> void:
 	Game.codex["last_run"] = lr_b4
 	Game.save_codex()
 	Game.load_codex()
-	# ⑤ 渲染：图鉴含「已行抉择」标题与 n / 10 分母、已知条目显中文名不直出英文 id
+	# ⑤ 渲染：图鉴含「已行抉择」标题与动态分母（S20 附限定①：分母读 SHRINE_OFFERS.size()，
+	# 不硬编码 "/ 10"——SHRINE_OFFERS 扩到 11 时本断言不假红）、已知条目显中文名不直出英文 id
 	Game.main.menu._build_codex()
 	var shrine_title := false
 	var shrine_name := false
+	var shrine_denom: int = Data.SHRINE_OFFERS.size()
 	for c in Game.main.menu._rows.get_children():
 		if c is Label:
-			if String(c.text).contains("已行抉择") and String(c.text).contains("/ 10"):
+			if String(c.text).contains("已行抉择") and String(c.text).contains("/ %d" % shrine_denom):
 				shrine_title = true
 			if String(c.text).contains("血祭"):
 				shrine_name = true
 	Dev.check(shrine_title and shrine_name, "codex",
-		"S19⑤: 图鉴渲染「已行抉择 n / 10」+ 中文名（不直出英文 id）")
+		"S19⑤: 图鉴渲染「已行抉择 n / %d」+ 中文名（不直出英文 id）" % shrine_denom)
 	print("[SMOKE-CODEX] done")
 
 
