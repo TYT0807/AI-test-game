@@ -241,6 +241,11 @@ func _check_codex() -> void:
 		var some_sid: String = String(Data.RELIC_SUFFIXES.keys()[0])
 		if not Game._codex_id_valid("suffixes", some_sid):
 			problems.append("codex 校验器误拒合法词缀 id：%s" % some_sid)
+	# Sprint 19 A：shrine 第六类白名单正反两向（合法 id = SHRINE_OFFERS 键集）
+	if not Game._codex_id_valid("shrine", "blood_relic"):
+		problems.append("codex 校验器误拒合法圣所 id：blood_relic")
+	if Game._codex_id_valid("shrine", "no_such_offer"):
+		problems.append("codex 校验器接受了未知圣所 id")
 	# 图标登记断言：PNG 已生成但 GEN_NAMES 漏登记 = Assets.g() 返回 null → 静默白框（核验 🟡 修复）
 	if Assets.g("icon_codex") == null:
 		problems.append("icon_codex 已生成但未登记 GEN_NAMES（Assets.g 返回 null → 主菜单图鉴按钮静默白框）")
@@ -253,6 +258,12 @@ func _check_codex() -> void:
 	for bid in Data.CODEX_BOONS:
 		if String(Data.CODEX_BOONS[bid].get("kind", "")) == "suffixes":
 			problems.append("CODEX_BOONS.%s 以 suffixes 为阈值（boon 自激正反馈——P0 红线）" % bid)
+	# Sprint 19 §九-2 P0 防线：CODEX_BOONS.kind 不得为 "shrine"——防「交换 → 加 boon → 更易交换」
+	# 正反馈（与上面 suffixes 禁令同型）。shrine 是第六类发现集，不是阈值类别。
+	# 【断言性质：前提守卫型恒过】当前四档 kind 均非 shrine，价值在「未来扩表误把 shrine 当阈值」时报错。
+	for bid in Data.CODEX_BOONS:
+		if String(Data.CODEX_BOONS[bid].get("kind", "")) == "shrine":
+			problems.append("CODEX_BOONS.%s 以 shrine 为阈值（交换→boon 正反馈——P0 红线）" % bid)
 	# Sprint 16 A：誓约表与印记一一对应（锚点即装备印记）
 	if Data.OATH_CONDITIONS.size() != Data.SIGILS.size():
 		problems.append("OATH_CONDITIONS 应与 SIGILS 一一对应（%d vs %d）" % [Data.OATH_CONDITIONS.size(), Data.SIGILS.size()])

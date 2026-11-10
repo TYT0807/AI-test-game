@@ -49,6 +49,11 @@ var core: Sprite2D
 var shards: Array = []
 var _hit_cd := 0.0
 var _hit_flash := 0.0
+# Sprint 19 收口批·范围外缺陷修复：PrismWarden 从未定义 apply_slow——慢速弹（bullet.gd:124）
+# 与友方云（toxic_cloud.gd:80）打到 Boss 时每 tick 报错且减速静默失效（既有缺陷，本轮全量回归
+# 因 boon 派生词缀落在减速类而显形）。镜像 Slug.apply_slow 语义，计时走 _tick 的 FIXED_DT（E6）。
+var _slow_mult := 1.0
+var _slow_t := 0.0
 
 
 ## 三阶段主题纯函数（零 rng）：k=0/1/2 → FLOOR_THEMES 键（4–11）
@@ -117,6 +122,9 @@ func _physics_process(_delta: float) -> void:
 func _tick(dt: float) -> void:
 	phase_t += dt
 	_hit_cd = maxf(0.0, _hit_cd - dt)
+	_slow_t = maxf(0.0, _slow_t - dt)
+	if _slow_t <= 0.0:
+		_slow_mult = 1.0
 	if _hit_flash > 0.0:
 		_hit_flash = maxf(0.0, _hit_flash - dt)
 		if _hit_flash <= 0.0 and core != null:
@@ -152,7 +160,7 @@ func _tick_combat(dt: float) -> void:
 	if _strafe_t <= 0.0:
 		_strafe_t = 2.5
 		_strafe_dir = Vector2.from_angle(Game.rng.randf() * TAU)
-	velocity = (dir + _strafe_dir * 0.45).normalized() * speed
+	velocity = (dir + _strafe_dir * 0.45).normalized() * speed * _slow_mult
 
 	# 签名脉冲：每 skill_interval 按当前阶段主题从 Boss 位置扩环（复用 F4 机制）
 	boss_cd_accum += dt
@@ -308,6 +316,12 @@ func take_damage(amount: float, from_dir: Vector2, crit: bool) -> void:
 	if hp <= 0.0:
 		hp = 0.0
 		_die()
+
+
+## Sprint 19 收口批：镜像 Slug.apply_slow——慢速弹/友方云命中 Boss 时不再报错，减速实际生效
+func apply_slow(mult: float, dur: float) -> void:
+	_slow_mult = mult
+	_slow_t = dur
 
 
 func _die() -> void:

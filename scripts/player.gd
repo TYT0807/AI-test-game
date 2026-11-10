@@ -1081,18 +1081,65 @@ func _codex_probe() -> void:
 	# B2：读档路径钳制（手工写负数 → load_codex → 归 0）——「实现保证」升级为「断言覆盖」；
 	# 放最后：会覆盖 last_run 现场
 	var cfgf := ConfigFile.new()
-	cfgf.load(Game.codex_path())   # Sprint 15 P0-3.2：先读回原档再改——否则 save() 抹掉五类发现集（非隔离环境会清玩家图鉴）
+	cfgf.load(Game.codex_path())   # Sprint 15 P0-3.2：先读回原档再改——否则 save() 抹掉六类发现集（非隔离环境会清玩家图鉴）
 	cfgf.set_value("codex", "last_run", {"max_floor": -9, "time": -2.5})
 	cfgf.save(Game.codex_path())
 	Game.load_codex()
 	Dev.check(int(Game.codex["last_run"].get("max_floor", -1)) == 0
 		and int(Game.codex["last_run"].get("time", -1)) == 0, "codex", "B2: 读档负数钳制 → 0")
-	# P0-3.2 验收：B2 断言后五类发现集与探针执行前逐类一致（现场恢复，非隔离环境也不清档）
+	# P0-3.2 验收：B2 断言后六类发现集与探针执行前逐类一致（现场恢复，非隔离环境也不清档）
 	var sets_same := true
 	for k in Game.CODEX_KINDS:
 		if (Game.codex[k] as Array) != (snap[k] as Array):
 			sets_same = false
-	Dev.check(sets_same, "codex", "P0-3.2: B2 后五类发现集现场恢复")
+	Dev.check(sets_same, "codex", "P0-3.2: B2 后六类发现集现场恢复")
+	# ---------------- Sprint 19 A：shrine 第六类发现集（负向对照 ①-⑤ + 正向断言） ----------------
+	# ① 白名单正反两向：合法 id = SHRINE_OFFERS 键集，未知 id 被拒
+	Dev.check(not Game._codex_id_valid("shrine", "no_such_offer"), "codex",
+		"S19①: 未知圣所 id 被白名单拒绝")
+	Dev.check(Game._codex_id_valid("shrine", "blood_relic"), "codex",
+		"S19①: 合法圣所 id 通过白名单")
+	# ② 首发现登记 + toast 含手记句 + 重复登记幂等且不重复播报（先撤销既有发现，保证首发现路径可测）
+	(Game.codex["shrine"] as Array).erase("blood_relic")
+	Game.mark_codex("shrine", "blood_relic")
+	Dev.check((Game.codex["shrine"] as Array).has("blood_relic"), "codex", "S19②: 首发现登记成功")
+	Dev.check(String(Game.main.hud._toast.text).contains("血祭"), "codex",
+		"S19② 正向: toast 含手记句（FLAVOR shrine/blood_relic）")
+	var toast_at_first: String = Game.main.hud._toast.text
+	Game.mark_codex("shrine", "blood_relic")
+	Dev.check((Game.codex["shrine"] as Array).count("blood_relic") == 1
+		and Game.main.hud._toast.text == toast_at_first, "codex",
+		"S19②: 重复登记幂等且不重复播报")
+	# ③ kind 写成复数则播报键查不到（单数 shrine 的存在依据——icon_codex 同型静默坑的负向对照）
+	Dev.check(Data.FLAVOR.has("shrine/blood_relic") and not Data.FLAVOR.has("shrines/blood_relic"),
+		"codex", "S19③: FLAVOR 键为单数 shrine（复数键必查不到——负向对照）")
+	# ④ 旧 codex.cfg 无 shrine 键 → load_codex 给空数组且不报错（快照全部分类，测后恢复）
+	var sets_b4 := {}
+	for k in Game.CODEX_KINDS:
+		sets_b4[k] = (Game.codex[k] as Array).duplicate()
+	var old_cfg := ConfigFile.new()
+	old_cfg.set_value("codex", "enemies", ["goblin"])
+	old_cfg.save(Game.codex_path())
+	Game.load_codex()
+	Dev.check((Game.codex["shrine"] as Array).is_empty()
+		and (Game.codex["enemies"] as Array).has("goblin"), "codex",
+		"S19④: 旧档无 shrine 键 → 空数组且不报错")
+	for k in Game.CODEX_KINDS:
+		Game.codex[k] = sets_b4[k]   # 恢复内存（P0-3.2 写法）
+	Game.save_codex()
+	Game.load_codex()
+	# ⑤ 渲染：图鉴含「已行抉择」标题与 n / 10 分母、已知条目显中文名不直出英文 id
+	Game.main.menu._build_codex()
+	var shrine_title := false
+	var shrine_name := false
+	for c in Game.main.menu._rows.get_children():
+		if c is Label:
+			if String(c.text).contains("已行抉择") and String(c.text).contains("/ 10"):
+				shrine_title = true
+			if String(c.text).contains("血祭"):
+				shrine_name = true
+	Dev.check(shrine_title and shrine_name, "codex",
+		"S19⑤: 图鉴渲染「已行抉择 n / 10」+ 中文名（不直出英文 id）")
 	print("[SMOKE-CODEX] done")
 
 
@@ -1240,7 +1287,7 @@ func _oath_probe() -> void:
 	gm._echo_choices.append("greed_pact")
 	gm._echo_costs["max_hp"] = 2
 	Dev.check(String(gm._echo_tag()) == "血偿流", "echo", "构筑标签：主导代价 max_hp → 血偿流")
-	# A/B 落盘（真实入口 _write_codex_replay）：写 → load → 逐字段读回 + 五类发现集不被抹
+	# A/B 落盘（真实入口 _write_codex_replay）：写 → load → 逐字段读回 + 六类发现集不被抹
 	var sets_before := {}
 	for k in Game.CODEX_KINDS:
 		sets_before[k] = (Game.codex[k] as Array).duplicate()
@@ -1260,7 +1307,7 @@ func _oath_probe() -> void:
 	for k in Game.CODEX_KINDS:
 		if (Game.codex[k] as Array) != (sets_before[k] as Array):
 			sets_ok = false
-	Dev.check(sets_ok, "oath", "五类发现集不被抹（P0-3.2 写法）")
+	Dev.check(sets_ok, "oath", "六类发现集不被抹（P0-3.2 写法）")
 	# ③ 渲染验证：真调 menu._build_codex 扫描生成标签（验渲染非验字段）
 	Game.main.menu._build_codex()
 	var oath_shown := false
