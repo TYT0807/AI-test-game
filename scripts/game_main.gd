@@ -91,6 +91,10 @@ var _room_budget := 0
 var modifier := "none"
 var enemy_hp_mult := 1.0
 var enemy_speed_mult := 1.0
+var abyss_hp_mult := 1.0
+var abyss_speed_mult := 1.0
+var abyss_dmg_mult := 1.0
+var abyss_tier := 0
 var diamond_mult := 1.0
 var resonance := 0
 var _resonance_step := 5
@@ -360,6 +364,17 @@ func start_run() -> void:
 	dungeon = DungeonClass.generate(1, frng, 7 + frng.randi_range(0, 2))
 	_smoke_fingerprint(1)
 	_roll_modifier()
+	# Sprint 21 C：深渊难度档——按所选 tier 确定性乘定（零 rng / 零顺序变化）
+	abyss_hp_mult = 1.0
+	abyss_speed_mult = 1.0
+	abyss_dmg_mult = 1.0
+	if abyss_tier > 0 and Data.ABYSS_TIERS.has(abyss_tier):
+		var at: Dictionary = Data.ABYSS_TIERS[abyss_tier]
+		abyss_hp_mult = float(at["hp"])
+		abyss_speed_mult = float(at["speed"])
+		abyss_dmg_mult = float(at["dmg"])
+	if is_instance_valid(hud):
+		hud.set_abyss_tier(abyss_tier)
 	# E 灾祸层（Sprint 12 §6.3）：在 modifier 之后滚（scarce_ore 的 diamond_mult
 	# 不会被 challenge factor 的重置抹掉）
 	_roll_calamity()
@@ -399,11 +414,115 @@ func start_run() -> void:
 			kinds[k] = int(kinds.get(k, 0)) + 1
 		print("[SMOKE] dungeon map: ", dungeon.rooms.size(), " rooms ", kinds)
 	_enter_room(dungeon.current, Vector2i.ZERO)
+	if OS.get_environment("SMOKE_ABYSS") != "":
+		_smoke_abyss_check()
 
 
 ## 每局开局抽 1 个挑战因子并应用（一利一弊）
 ## E 灾祸层（Sprint 12 §6.3）：每层首次进入时 15% 触发一个负面灾祸（走既有 Game.rng 流），
 ## 本层生效、换层清除；触发过灾祸的局，shards 结算 ×1.5（风险回报，game_state.settle_shards）
+## Sprint 21 C：SMOKE_ABYSS 探针——验证深渊乘子接线（start_run）+ hp 注入（Slug.setup 折乘）
+## + dmg 唯一入口动态验伤（player.take_damage 真实施加一次伤害）。
+## 断言分类：mult 匹配 = 验效果型（证明 start_run 接线）；Slug 缩放 = 验效果型（证明 hp 注入）；
+## dmg 动态验伤 = 验效果型（证明受创 = round(base × abyss_dmg_mult)，修 QA D-5 虚假通过）；
+## t==0 全 1.0 = 前提守卫型恒过。harness 以 SMOKE_ABYSS=env 给定 tier 复算，保证可复现。
+func _smoke_abyss_check() -> void:
+	var t := int(OS.get_environment("SMOKE_ABYSS"))
+	var base_hp: float = float(Data.ENEMIES["goblin"].get("hp", 1))
+	if t <= 0:
+		Dev.check(abyss_hp_mult == 1.0 and abyss_speed_mult == 1.0 and abyss_dmg_mult == 1.0,
+			"abyss", "t=0 三乘子全 1.0（前提守卫型恒过）")
+		print("[SMOKE-ABYSS] t=0 mults=1.0 ok")
+		return
+	if t < 1 or t > Data.ABYSS_MAX_TIER:
+		Dev.err("abyss", "SMOKE_ABYSS 越界 t=%d" % t)
+		return
+	# 以 env 给定 tier 复算，证明 start_run 接线（不依赖菜单预置 abyss_tier）。
+	# 探针仅 SMOKE 生效；末尾原样还原 tier 与三乘子，不污染本次进程后续帧（修 QA D-2）。
+	var tier_orig := abyss_tier
+	var hp_orig := abyss_hp_mult
+	var sp_orig := abyss_speed_mult
+	var dm_orig := abyss_dmg_mult
+	abyss_tier = t
+	abyss_hp_mult = 1.0
+	abyss_speed_mult = 1.0
+	abyss_dmg_mult = 1.0
+	if Data.ABYSS_TIERS.has(abyss_tier):
+		var at: Dictionary = Data.ABYSS_TIERS[abyss_tier]
+		abyss_hp_mult = float(at["hp"])
+		abyss_speed_mult = float(at["speed"])
+		abyss_dmg_mult = float(at["dmg"])
+	Dev.check(abyss_hp_mult == float(Data.ABYSS_TIERS[t]["hp"]), "abyss",
+		"start_run 接线 hp_mult=%f 期望=%f" % [abyss_hp_mult, float(Data.ABYSS_TIERS[t]["hp"])])
+	Dev.check(abyss_speed_mult == float(Data.ABYSS_TIERS[t]["speed"]), "abyss",
+		"start_run 接线 speed_mult=%f 期望=%f" % [abyss_speed_mult, float(Data.ABYSS_TIERS[t]["speed"])])
+	Dev.check(abyss_dmg_mult == float(Data.ABYSS_TIERS[t]["dmg"]), "abyss",
+		"start_run 接线 dmg_mult=%f 期望=%f" % [abyss_dmg_mult, float(Data.ABYSS_TIERS[t]["dmg"])])
+	# hp 注入验证（验效果型）：直接构造 Slug，按契约 setup("goblin", 1, 1)，
+	# baseline 不含 abyss（= 基础 hp × 波次/层缩放 × enemy_hp_mult），
+	# 断言 max_hp == round(baseline × abyss_hp_mult) 证明注入生效。
+	# 注：spawn_slug 走 wave=0，与基线公式不一致，故此处直接 new+setup 以对齐契约。
+	# Slug 未入树时 sprite 为 null，slug.gd 的染色行已有空守卫（修 QA D-1 的 SCRIPT ERROR）。
+	var s := SlugScript.new()
+	s.setup("goblin", 1, 1)
+	var baseline := base_hp * (1.0 + 1 * 0.12) * (1.0 + 1 * 0.55) * enemy_hp_mult  # 不含 abyss
+	var expect_hp := int(round(baseline * abyss_hp_mult))
+	Dev.check(int(round(s.max_hp)) == expect_hp, "abyss",
+		"注入：goblin max_hp=%d 期望=%d（baseline=%d abyss×%f）" % [
+			int(round(s.max_hp)), expect_hp, int(round(baseline)), abyss_hp_mult])
+	print("[SMOKE-ABYSS] t=%d 注入验证 goblin max_hp=%d (baseline=%d)" % [t, int(round(s.max_hp)), int(round(baseline))])
+	s.queue_free()
+	# dmg 动态验伤（验效果型，修 QA D-5）：真实施加一次已知基准伤害，验证
+	# 「玩家受创 == round(base × abyss_dmg_mult)」，证明乘子在 take_damage 单一入口生效。
+	# 旧探针只静态比对 abyss_dmg_mult 变量值，且 headless 默认 _immortal=true 令缩放分支从未执行。
+	if is_instance_valid(player) and not player.dead and not player.control_locked:
+		var hp0: int = player.hp
+		var imm0: bool = player._immortal
+		var ward0: bool = player.sigil_ward
+		var shield0: int = player.shield_charges
+		var inv0: float = player._invuln_t
+		var kin0: bool = player.has_kinetic
+		var hits0: int = int(_oath_counters.get("hits_taken", 0))
+		var room_dmg0: bool = _room_damaged
+		# 抬高 hp 避开濒死/死亡分支；清空会改写或抵挡 dmg 的守卫，制造纯净单一入口语境
+		var hp_probe := 100000
+		var test_dmg := 10
+		player.hp = hp_probe
+		player._immortal = false
+		player.sigil_ward = false
+		player.shield_charges = 0
+		player._invuln_t = 0.0
+		player.has_kinetic = false
+		player.take_damage(test_dmg, Vector2.ZERO, null)
+		var taken: int = hp_probe - player.hp
+		var expect_taken: int = int(round(float(test_dmg) * abyss_dmg_mult))
+		Dev.check(taken == expect_taken, "abyss",
+			"dmg 动态验伤：受创=%d 期望=%d（base=%d abyss_dmg×%f）" % [
+				taken, expect_taken, test_dmg, abyss_dmg_mult])
+		print("[SMOKE-ABYSS] t=%d dmg 动态验伤 taken=%d expect=%d" % [t, taken, expect_taken])
+		# 还原探针造成的一切玩家/本局状态（探针不改本局进程）
+		player.hp = hp0
+		player._immortal = imm0
+		player.sigil_ward = ward0
+		player.shield_charges = shield0
+		player._invuln_t = inv0
+		player.has_kinetic = kin0
+		player._knock = Vector2.ZERO
+		if is_instance_valid(player.sprite):
+			player.sprite.modulate = Color.WHITE
+		player.hp_changed.emit(hp0, player.max_hp)
+		_oath_counters["hits_taken"] = hits0
+		_room_damaged = room_dmg0
+	else:
+		print("[SMOKE-ABYSS] t=%d dmg 动态验伤跳过：player 不可用（前提守卫型）" % t)
+	print("[SMOKE-ABYSS] t=%d hp=%f speed=%f dmg=%f" % [t, abyss_hp_mult, abyss_speed_mult, abyss_dmg_mult])
+	# 原样还原运行配置（SMOKE 专用路径，生产不进此函数）
+	abyss_tier = tier_orig
+	abyss_hp_mult = hp_orig
+	abyss_speed_mult = sp_orig
+	abyss_dmg_mult = dm_orig
+
+
 func _roll_calamity() -> void:
 	_calamity = ""
 	var rolled := Game.rng.randf()
@@ -485,6 +604,9 @@ func _roll_modifier() -> void:
 	modifier = Data.roll_modifier()
 	enemy_hp_mult = 1.0
 	enemy_speed_mult = 1.0
+	abyss_hp_mult = 1.0
+	abyss_speed_mult = 1.0
+	abyss_dmg_mult = 1.0
 	diamond_mult = 1.0
 	match modifier:
 		"rage":
@@ -1089,6 +1211,11 @@ func _room_cleared() -> void:
 			_milestone("first_elite")
 		"boss":
 			_milestone("first_boss")
+			# Sprint 21 C：真·终boss层（第三 Boss 层）通关 → 解锁深渊档 + 记录最高 tier
+			if _is_third_floor(Game.floor_num):
+				Game.meta["abyss_unlocked"] = true
+				if abyss_tier > 0:
+					Game.meta["abyss_best_tier"] = maxi(int(Game.meta.get("abyss_best_tier", 0)), abyss_tier)
 			drop_pickup(_arena_center() + Vector2(0, 30), "stairs")
 			drop_pickup(_arena_center() + Vector2(-34, -10), "weapon", 1, _random_weapon())
 			drop_pickup(_arena_center() + Vector2(34, -10), "relic", 1, Relics.roll(1)[0]["id"])

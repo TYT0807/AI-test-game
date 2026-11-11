@@ -83,13 +83,15 @@ func setup(id: String, wave: int, floor_num := 1, affix_id := "") -> void:
 	var ov: Dictionary = Data.AI_OVERRIDES.get(id, {})
 	for k in ov:
 		_cfg[k] = ov[k]
-	max_hp = float(_cfg["hp"]) * (1.0 + wave * 0.12) * (1.0 + floor_num * 0.55) * Game.main.enemy_hp_mult
+	max_hp = float(_cfg["hp"]) * (1.0 + wave * 0.12) * (1.0 + floor_num * 0.55) * Game.main.enemy_hp_mult * Game.main.abyss_hp_mult
 	if affix_id == "armored":
 		max_hp *= 1.15
 	hp = max_hp
-	speed = float(_cfg["speed"]) * (1.0 + floor_num * 0.05) * Game.main.enemy_speed_mult
+	speed = float(_cfg["speed"]) * (1.0 + floor_num * 0.05) * Game.main.enemy_speed_mult * Game.main.abyss_speed_mult
 	if affix_id == "swift":
 		speed *= float(Data.AFFIXES["swift"]["speed"])
+	# 敌人伤害属性保持基准值。abyss_dmg_mult 仅在 player.take_damage 单一入口生效，
+	# 避免与接触伤害路径（take_damage_from → take_damage）双重计数（base × abyss_t² 违例）。
 	dmg = int(_cfg["dmg"])
 	xp_value = int(_cfg["xp"])
 	score_value = int(_cfg["score"])
@@ -97,10 +99,12 @@ func setup(id: String, wave: int, floor_num := 1, affix_id := "") -> void:
 	if is_inside_tree() and sprite:
 		sprite.sprite_frames = _frames_for(id)
 		sprite.play("walk")
-	# 词缀染色 + 头顶标记
-	sprite.self_modulate = Color.WHITE
+	# 词缀染色 + 头顶标记（SMOKE_ABYSS 探针会构造未入树的 Slug 实例，sprite 为 null，故染色需空守卫）
+	if sprite:
+		sprite.self_modulate = Color.WHITE
 	if affix_id != "":
-		sprite.self_modulate = Data.AFFIXES[affix_id]["tint"]
+		if sprite:
+			sprite.self_modulate = Data.AFFIXES[affix_id]["tint"]
 		if affix_id == "shielded":
 			shield_hits = int(Data.AFFIXES["shielded"]["shield"])
 		if affix_id == "ranged":

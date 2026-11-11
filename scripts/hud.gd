@@ -59,6 +59,7 @@ var _tag_labels := {}
 var _theme_label: Label
 var _floor_sign_label: Label   # Sprint 16 C：层签（主题+灾祸常驻只读标签）
 var _floor_sign_sub_label: Label   # Sprint 18 B：层签第二行（形势+主题手记；sub 空则隐藏）
+var _abyss_tier_label: Label   # Sprint 21 C：深渊档指示（常驻只读，不用 banner）
 var _minimap_panel: PanelContainer
 var _meta_panel: PanelContainer
 var _compact := false
@@ -509,6 +510,14 @@ func _build_meta_ui(root: Control) -> void:
 	_floor_sign_sub_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
 	_floor_sign_sub_label.add_theme_constant_override("outline_size", 4)
 	vb.add_child(_floor_sign_sub_label)
+	# Sprint 21 C：深渊档指示（常驻只读，不用 banner 的瞬时 tween）
+	_abyss_tier_label = Label.new()
+	_abyss_tier_label.text = ""
+	_abyss_tier_label.visible = false
+	_abyss_tier_label.add_theme_font_size_override("font_size", _fs(12))
+	_abyss_tier_label.add_theme_color_override("font_outline_color", Color(0.1, 0.06, 0.08))
+	_abyss_tier_label.add_theme_constant_override("outline_size", 4)
+	vb.add_child(_abyss_tier_label)
 
 
 ## 静默层主题：小地图整块隐藏
@@ -599,6 +608,17 @@ func set_floor_sign(text: String, sub: String = "") -> void:
 	if _floor_sign_sub_label != null:
 		_floor_sign_sub_label.text = sub
 		_floor_sign_sub_label.visible = sub != ""
+
+
+## Sprint 21 C：深渊档指示（常驻只读，不用 banner 的瞬时 tween）
+func set_abyss_tier(t: int) -> void:
+	if _abyss_tier_label == null:
+		return
+	if t > 0:
+		_abyss_tier_label.text = "深渊 t%d" % t
+		_abyss_tier_label.visible = true
+	else:
+		_abyss_tier_label.visible = false
 
 
 ## F2/A 反应词缀行：附着变化时重绘（词缀名·所属遗物名）

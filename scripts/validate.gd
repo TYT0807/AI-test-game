@@ -52,6 +52,7 @@ func run() -> Array:
 	_check_suffixes()
 	_check_shrine()
 	_check_codex()
+	_check_abyss()
 	_check_daily()
 	_check_scripts_compile()
 	if OS.get_environment("SMOKE_V8") != "":
@@ -290,6 +291,42 @@ func _check_codex() -> void:
 
 
 ## Sprint 17 C：每日分享码格式/校验位 + DAILY_PATH 读档容错 + 主菜单显示文本（纯只读，不写盘）
+## Sprint 21 C：深渊难度档乘子表自洽门（tier 单调 / 乘子>0 / 无 NaN / 尺寸==ABYSS_MAX_TIER）
+func _check_abyss() -> void:
+	if not (Data.ABYSS_TIERS is Dictionary):
+		problems.append("ABYSS_TIERS 必须为 Dictionary")
+		return
+	if int(Data.ABYSS_MAX_TIER) <= 0:
+		problems.append("ABYSS_MAX_TIER 必须为正整数")
+	if Data.ABYSS_TIERS.size() != int(Data.ABYSS_MAX_TIER):
+		problems.append("ABYSS_TIERS 尺寸 %d 不等于 ABYSS_MAX_TIER %d" % [Data.ABYSS_TIERS.size(), int(Data.ABYSS_MAX_TIER)])
+	var prev_hp := 0.0
+	var prev_speed := 0.0
+	var prev_dmg := 0.0
+	for t in range(1, int(Data.ABYSS_MAX_TIER) + 1):
+		if not Data.ABYSS_TIERS.has(t):
+			problems.append("ABYSS_TIERS 缺 tier %d" % t)
+			continue
+		var row: Dictionary = Data.ABYSS_TIERS[t]
+		for k in ["hp", "speed", "dmg"]:
+			if not row.has(k):
+				problems.append("ABYSS_TIERS[%d] 缺 %s" % [t, k])
+				continue
+			var v: float = float(row[k])
+			if not is_finite(v) or v <= 0.0:
+				problems.append("ABYSS_TIERS[%d].%s 非法（%s）" % [t, k, str(v)])
+		if not (row.has("hp") and row.has("speed") and row.has("dmg")):
+			continue
+		var hp: float = float(row["hp"])
+		var speed: float = float(row["speed"])
+		var dmg: float = float(row["dmg"])
+		if t > 1 and (hp < prev_hp or speed < prev_speed or dmg < prev_dmg):
+			problems.append("ABYSS_TIERS tier %d 乘子非单调非减" % t)
+		prev_hp = hp
+		prev_speed = speed
+		prev_dmg = dmg
+
+
 func _check_daily() -> void:
 	var code := Game.daily_share_code()
 	if not code.begins_with(Game.daily_key() + "-"):

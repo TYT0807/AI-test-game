@@ -77,7 +77,7 @@ var _reso_pickups := 0
 ## 局外 meta 状态：余额 / 已解锁集合 / 累计统计（持久化在 user://meta.cfg）
 var meta := {
 	"version": 1, "crystals": 0, "unlocked": [], "boost": {},
-	"runs_played": 0, "best_floor": 0, "total_kills": 0,
+	"runs_played": 0, "best_floor": 0, "abyss_unlocked": false, "abyss_best_tier": 0,
 	"total_time": 0.0, "total_earned": 0, "last_played": 0, "saved_at": 0,
 }
 ## meta 是否已在本次进程初始化过（SMOKE 隔离档只在首次读取前删一次）
@@ -707,7 +707,7 @@ func meta_path() -> String:
 func _default_meta() -> Dictionary:
 	return {
 		"version": Meta.VERSION, "crystals": 0, "unlocked": [], "boost": {},
-		"runs_played": 0, "best_floor": 0, "total_kills": 0,
+		"runs_played": 0, "best_floor": 0, "abyss_unlocked": false, "abyss_best_tier": 0,
 		"total_time": 0.0, "total_earned": 0, "last_played": 0, "saved_at": 0,
 	}
 
@@ -788,6 +788,8 @@ func _read_meta(path: String) -> void:
 	meta["total_earned"] = maxi(0, int(cfg.get_value("meta", "total_earned", 0)))
 	meta["last_played"] = maxi(0, int(cfg.get_value("meta", "last_played", 0)))
 	meta["saved_at"] = maxi(0, int(cfg.get_value("meta", "saved_at", 0)))
+	meta["abyss_unlocked"] = bool(cfg.get_value("meta", "abyss_unlocked", false))
+	meta["abyss_best_tier"] = maxi(0, int(cfg.get_value("meta", "abyss_best_tier", 0)))
 
 
 ## SMOKE 探针：清空 / 强制给源石 / 强制解锁（只改内存，绝不落盘）

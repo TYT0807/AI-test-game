@@ -460,6 +460,24 @@ func codex_bosses_total() -> int:
 			n += 1
 	return n + CODEX_BOSS_NAMES.size()
 
+
+## Sprint 21 C · 深渊难度档：纯乘算因子阶梯（tier → 三围乘子）。
+## 仅缩放既有敌人属性，零新增 rng / 零机制 / 零实体。tier 0 = 关闭（全 1.0）。
+## 自检：validate._check_abyss 校验单调 / 乘子>0 / 无 NaN / 尺寸==ABYSS_MAX_TIER。
+const ABYSS_MAX_TIER := 10
+const ABYSS_TIERS := {
+	1:  {"hp": 1.10, "speed": 1.05, "dmg": 1.07},
+	2:  {"hp": 1.20, "speed": 1.10, "dmg": 1.14},
+	3:  {"hp": 1.30, "speed": 1.15, "dmg": 1.21},
+	4:  {"hp": 1.40, "speed": 1.20, "dmg": 1.28},
+	5:  {"hp": 1.50, "speed": 1.25, "dmg": 1.35},
+	6:  {"hp": 1.60, "speed": 1.30, "dmg": 1.42},
+	7:  {"hp": 1.70, "speed": 1.35, "dmg": 1.49},
+	8:  {"hp": 1.80, "speed": 1.40, "dmg": 1.56},
+	9:  {"hp": 1.90, "speed": 1.45, "dmg": 1.63},
+	10: {"hp": 2.00, "speed": 1.50, "dmg": 1.70},
+}
+
 const OBSTACLES := {
 	"pillar": {"hp": -1, "solid": true},
 	"barrel": {"hp": 1, "explode": 58.0},

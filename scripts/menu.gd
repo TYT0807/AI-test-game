@@ -150,6 +150,20 @@ func _build_main_page() -> void:
 	_add_main_button(right, "每日挑战", "icon_suffix", func() -> void:
 		Game.daily_mode = true
 		start_game(), false)
+	# Sprint 21 C：深渊档入口（通关解锁；未解锁禁用）
+	var _abyss_unlocked: bool = bool(Game.meta.get("abyss_unlocked", false))
+	var _abyss_t: int = 0
+	if _abyss_unlocked and Game.main != null and is_instance_valid(Game.main):
+		_abyss_t = int(Game.main.abyss_tier)
+	var _abyss_text: String = "深渊档 · 通关解锁"
+	if _abyss_unlocked:
+		_abyss_text = "深渊档 · 关" if _abyss_t <= 0 else "深渊档 · t%d" % _abyss_t
+	_add_main_button(right, _abyss_text, "icon_guard", func() -> void:
+		if bool(Game.meta.get("abyss_unlocked", false)):
+			show_page("abyss", "main"), false)
+	var _ab := right.get_child(right.get_child_count() - 1) as Button
+	if _ab != null:
+		_ab.disabled = not _abyss_unlocked
 	_add_main_button(right, "印记", "icon_suffix", func() -> void: show_page("sigils", "main"), false)
 	_add_main_button(right, "解锁", "icon_pierce", func() -> void: show_page("unlocks", "main"), false)
 	_add_main_button(right, "图鉴", "icon_codex", func() -> void: show_page("codex", "main"), false)
@@ -357,6 +371,10 @@ func show_page(page: String, back := "") -> void:
 		"codex":
 			_title.text = "地窖图鉴"
 			_build_codex()
+			_add_button("返回", func() -> void: show_page(_back_page))
+		"abyss":
+			_title.text = "深渊档"
+			_build_abyss()
 			_add_button("返回", func() -> void: show_page(_back_page))
 		_:
 			_title.text = ""
@@ -884,6 +902,36 @@ func _do_unlock(id: String) -> void:
 	else:
 		Game.sfx("pickup", 0.7, -6.0)
 	show_page("unlocks")
+
+
+## Sprint 21 C：深渊档选择页（逐档解锁；staircase：最高可选 best_tier+1）
+func _build_abyss() -> void:
+	var unlocked: bool = bool(Game.meta.get("abyss_unlocked", false))
+	if not unlocked:
+		var lock := Label.new()
+		lock.text = "通关（击败第三 Boss / 抵达终局层）后解锁"
+		lock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lock.add_theme_font_size_override("font_size", 18)
+		lock.add_theme_color_override("font_color", Color(0.72, 0.72, 0.76))
+		_rows.add_child(lock)
+		_add_button("返回", func() -> void: show_page(_back_page))
+		return
+	var sub := Label.new()
+	sub.text = "深渊档 · 逐档解锁（最高达 t%d）" % int(Game.meta.get("abyss_best_tier", 0))
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 16)
+	sub.add_theme_color_override("font_color", Color(0.72, 0.72, 0.76))
+	_rows.add_child(sub)
+	# staircase 门控（design 推荐）：最高可选 best_tier + 1；全开放 1..MAX 为待用户拍板备选
+	var max_sel: int = mini(Data.ABYSS_MAX_TIER, int(Game.meta.get("abyss_best_tier", 0)) + 1)
+	for t in range(0, max_sel + 1):
+		var label: String = "关闭（普通模式）" if t == 0 else "t%d" % t
+		var cb := func(tier: int) -> void:
+			if Game.main != null and is_instance_valid(Game.main):
+				Game.main.abyss_tier = tier
+			show_page("main")
+		_add_button(label, cb.bind(t))
+	_add_button("返回", func() -> void: show_page(_back_page))
 
 
 func _add_button(text: String, cb: Callable) -> void:

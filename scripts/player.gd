@@ -1753,6 +1753,9 @@ func take_damage(dmg: int, from_pos: Vector2, _from_node: Node = null) -> void:
 		return
 	if _immortal:
 		return
+	# Sprint 21 C：深渊受创倍率（唯一入口，覆盖接触/敌弹/Boss/AoE；不改 sigil_ward 分支）
+	if Game.main != null and is_instance_valid(Game.main):
+		dmg = int(round(float(dmg) * Game.main.abyss_dmg_mult))
 	# 守护印记：Boss 房受伤 -20%（round 取整：3→2 实际生效；保底 1）
 	if sigil_ward and Game.main and is_instance_valid(Game.main) \
 			and Game.main.dungeon.room(Game.main.dungeon.current).get("kind", "") == "boss":
