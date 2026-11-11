@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-**Sprint 21 实施完成，待提交。** 共 34 个 GDScript 脚本；本批终态冻结快照 `production/sprint-21/SPR21-FROZEN.md5` **34/34** 校验通过。历史 `production/sprint-7/SPR7-FROZEN-4.md5` 保持归档，对账为 **26 OK / 8 FAILED** —— 8 个 FAILED 恰为本批改动集，反而说明其余 26 个脚本逐字节未变。
+**Sprint 21 收官（提交 `2ca0440`）。** 共 34 个 GDScript 脚本；本批终态冻结快照 `production/sprint-21/SPR21-FROZEN.md5` **34/34** 校验通过。历史 `production/sprint-7/SPR7-FROZEN-4.md5` 保持归档，对账为 **26 OK / 8 FAILED** —— 8 个 FAILED 恰为本批改动集，反而说明其余 26 个脚本逐字节未变。
 
 Sprint 18 起的主题是**「加关系不加实体」**：不新增房型、不新增敌人、不新增资源、不新增输入动作，只让已有系统互相读取。Sprint 19 把圣所交换接进图鉴（第六类发现集），Sprint 20 把手记扩容到全六类 74 条，Sprint 21 接上通关后的长线目标「深渊难度档」。
 
