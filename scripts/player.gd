@@ -1553,6 +1553,22 @@ func _floor_sign_probe() -> void:
 	Game._flush_flavor_toast()
 	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层"), "flavor",
 		"S22 D: 单条首发现维持原格式（%s）" % String(Game.main.hud._toast.text))
+	# ---------------- Sprint 22 附限定①：deferred 生产调度路径常驻断言 ----------------
+	# 直调冲洗之外的 call_deferred 帧末调度由此获得覆盖：预置哨兵假 toast → 同帧 3 条白名单
+	# 首发现（清 pending 隔离其它探针残留）→ 不直调冲洗，仅靠帧界 deferred → 哨兵被覆盖即证
+	# 生产调度路径真实生效（×9 诊断暴露的时序不确定性由此获得常驻回归锁）
+	Game._flavor_pending.clear()
+	Game.main.hud.flash_toast("哨兵文本")
+	# 三条均先撤销既有发现（smoke 档可能已有）——保证首发现路径可测，否则 mark 早退不入缓冲
+	(Game.codex["themes"] as Array).erase("toxic")
+	(Game.codex["bosses"] as Array).erase("demon")
+	(Game.codex["shrine"] as Array).erase("ore_upgrade")
+	Game.mark_codex("themes", "toxic")
+	Game.mark_codex("bosses", "demon")
+	Game.mark_codex("shrine", "ore_upgrade")
+	await get_tree().process_frame
+	Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
+		"附限定①: deferred 生产路径聚合（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 

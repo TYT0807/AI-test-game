@@ -41,3 +41,11 @@
 - Sprint 22 锁定范围 **D 全部交付完毕**（B 否决 / E 挂起延续；跳层后层签未重刷、`oath_fulfillment cur:=999`、本地榜去重 → Sprint 23 技术收敛批）
 - `SPR22_规划草案.md` 未跟踪，待授权入库（随下批文档整理）
 - P2（origin/main 推送，需一次性 PAT）留发布侧待指令
+
+## 附限定收口批（主理人核验附限定①②，`cb82f06` 后续）
+
+> 日期：2026-11-14｜编程侧收口，单独 commit
+
+1. **附限定① deferred 生产调度路径常驻断言**：预置哨兵假 toast → 撤销 3 条既有发现 → 同帧 3 条白名单 mark（不直调冲洗）→ `await process_frame` → 断言 `_toast.text` 逐字 =「图鉴新发现 ×3」——哨兵被覆盖即证 `call_deferred` 帧末调度真实生效。首跑抓出探针数据新鲜度缺陷（toxic/ore_upgrade 已是既有发现 → mark 早退不入缓冲 → flush n=1 单条）——补 erase 后过。**「×9 诊断暴露的时序不确定性」就此获得常驻回归锁**。
+2. **附限定②开局清缓冲**：`start_run` 增 `Game._flavor_pending.clear()`——极端帧边界不把陈旧 pending 带进新局。
+- **验证**：SMOKE_FLOOR_SIGN/FLAVOR 定向 0 [ERR]（含新断言）；冻结双清单：本批快照 34 OK / 0 FAILED（player.gd/game_main.gd 重算），历史归档勿覆盖（11 FAILED 预期）。

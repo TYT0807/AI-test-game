@@ -342,6 +342,7 @@ func start_run() -> void:
 	_oath_counters = {}   # Sprint 16 A/B：誓约计数与抉择链按局归零
 	_echo_choices = []
 	_echo_costs = {}
+	Game._flavor_pending.clear()   # Sprint 22 附限定②：开局清聚合缓冲——极端帧边界不把陈旧 pending 带进新局
 	Game.floor_num = 1
 	# D 每日挑战（Sprint 12 §6.2）：daily 模式在 rng 首抽前覆盖 seed（E1 零漂移——
 	# 同日期派生同 seed，整局可复现；run_seed 随之等于 daily_seed，指纹自然一致）
