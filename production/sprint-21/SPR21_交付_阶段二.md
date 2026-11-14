@@ -86,6 +86,10 @@
 
 - **缺陷**：三 Boss `setup()` 的 `max_hp` 公式（boss.gd:73 / boss2.gd:28 / boss3.gd:32）未折入深渊乘子——普通敌人自 S21 起吃 `abyss_hp_mult`，Boss 不吃 → 高深渊档下 Boss 反而相对变脆。
 - **修复**：三处公式末尾折入 `* Game.main.abyss_hp_mult`（镜像 slug.gd:86 消费语义）。**红线遵守**：只接 abyss，不接 `enemy_hp_mult`（会动 E1 基线）；纯乘算零 rng。血条无需另改（`boss_hp_changed.emit` 在 `_ready()`，晚于 `setup()`，自动拿到缩放值）。
-- **SMOKE_ABYSS 验效果型断言**（player.gd）：真构造三 Boss 实例读 `max_hp`——基线（abyss=1.0 且 enemy_hp_mult=5.0 时 max_hp 仍为公式原值，证明 enemy_hp_mult 未被消费）+ 真差值（abyss=1.1 → 三 Boss ×1.1）。
-- **验证**：SMOKE_ABYSS 定向 0 [ERR]；全量 21 钩子 6000 帧 0 报错（10 done 含 SMOKE-ABYSS）；冻结重定 **34/34**（boss.gd/boss2.gd/boss3.gd/player.gd 四条目重算）。
+- **SMOKE_ABYSS 验效果型断言**（player.gd）：真构造三 Boss 实例读 `max_hp`——基线（abyss=1.0 且 enemy_hp_mult=5.0 时 max_hp 仍为公式原值，证明 enemy_hp_mult 未被消费）+ 真差值（abyss=1.1 → 三 Boss ×1.1）+ 订正批补档位（t=1 hp=1.10 / t=10 hp=2.00，读 `ABYSS_TIERS` 实表数值对照）。
+- **验证**：SMOKE_ABYSS 定向 0 [ERR]；全量 21 钩子 6000 帧 0 报错（10 done 含 SMOKE-ABYSS）。
+- **冻结双清单口径（主理人核验订正，替代本行旧表述「冻结重定 34/34（四条目重算）」）**：
+  - **本批快照** `production/sprint-21/SPR21-FROZEN.md5`：每批重算，收口批后 `md5sum -c` = **34 OK / 0 FAILED**
+  - **历史归档** `production/sprint-7/SPR7-FROZEN-4.md5`：已按订正单还原为 `457b38c` 字节态并**永久保持勿覆盖**——对当前工作树 `md5sum -c` = 23 OK / 11 FAILED（4 个为本批真内容变更，7 个为工作树 CRLF↔LF 行尾翻转：`core.autocrlf` 下 git diff 不可见、md5 可见——slug.gd 三哈希实证：blob `d9f447ee` / 归档 `e02b98d5` / 现工作树 `acba7808`）。归档是历史基线证据，不要求对当前树全绿
+- **G2/G3 证据（订正批补录）**：G2 指纹同 seed（`SMOKE_SEED=12345`，禁 SMOKE_DAILY）`[SMOKE-META] fingerprint` 行 md5 = `3125e2b2…`（与 Sprint 13 起基线逐字同值）；G3 收口批 diff `grep '^+' | grep -iE 'Game\.rng|fx_rng|delta'` = **0 行**
 - **附限定①就此关闭**，质量门 CONCERNS 依据消除。P2（origin/main 推送，需 PAT）仍属发布侧待用户指令。

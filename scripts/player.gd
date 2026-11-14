@@ -1901,6 +1901,22 @@ func _abyss_probe() -> void:
 	Dev.check(is_equal_approx(w1.max_hp, base_w * 1.1) and is_equal_approx(b21.max_hp, base_b * 1.1)
 		and is_equal_approx(b31.max_hp, base_b * 1.1), "abyss",
 		"abyss_hp_mult=1.1 → 三 Boss max_hp ×1.1（%.1f/%.1f/%.1f）" % [w1.max_hp, b21.max_hp, b31.max_hp])
+	# Sprint 21 订正批补档位：t=1 / t=10 读 ABYSS_TIERS 实表数值对照（主理人核验附限定③）
+	gm.abyss_hp_mult = float(Data.ABYSS_TIERS[1]["hp"])
+	var w_t1: PrismWarden = boss_s.new()
+	w_t1.setup(11)
+	Dev.check(is_equal_approx(w_t1.max_hp, base_w * 1.1), "abyss",
+		"t=1（hp=1.10）warden %.1f" % w_t1.max_hp)
+	w_t1.free()
+	gm.abyss_hp_mult = float(Data.ABYSS_TIERS[10]["hp"])
+	var w_t10: PrismWarden = boss_s.new()
+	w_t10.setup(11)
+	var b_t10: PrismWarden = boss2_s.new()
+	b_t10.setup(11)
+	Dev.check(is_equal_approx(w_t10.max_hp, base_w * 2.0) and is_equal_approx(b_t10.max_hp, base_b * 2.0),
+		"abyss", "t=10（hp=2.00）warden/boss2 ×2.0（%.1f/%.1f）" % [w_t10.max_hp, b_t10.max_hp])
+	w_t10.free()
+	b_t10.free()
 	gm.abyss_hp_mult = hp_mult_bak
 	gm.enemy_hp_mult = ehp_bak
 	w0.free()

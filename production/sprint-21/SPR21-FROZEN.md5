@@ -1,9 +1,9 @@
 86c9466a751c0b932db142ae2626c891 *scripts/ally.gd
 fc39f9622db5ce44971f713b53891aaa *scripts/assets.gd
 fa7acbc36e849a88aad52b2b084a6986 *scripts/bomb.gd
-b5a685bc9679295b3d7f76cfde0e6709 *scripts/boss.gd
-2f157b417097d412f0c9f7c25fd03401 *scripts/boss2.gd
-3ac9cac7af3a833f538964f7ca53a39c *scripts/boss3.gd
+110eb28ce9b3abf5ed7d6a42a0e715bd *scripts/boss.gd
+8ad6222d81e9e86153fd0890627f56ed *scripts/boss2.gd
+f91cc17f81aaef2cc6e399260bdc8c2f *scripts/boss3.gd
 84d93d4bdd3403d83cc5583e7b7a4e8d *scripts/bullet.gd
 dd4d872610243243f50b5b638581866f *scripts/crate.gd
 9471342c788384264785ed407387d76e *scripts/data.gd
@@ -19,7 +19,7 @@ f37dbdc03d829d350a4bcf61f23b447d *scripts/menu.gd
 92242d0669a7eadbf2aec2376928e6a3 *scripts/merchant.gd
 f1ea5536bbd550e09e9d5e89d64f57fb *scripts/meta.gd
 6a17cd2898825541876254240b392381 *scripts/pickup.gd
-2a2666851f1fea47646b32399724d9c4 *scripts/player.gd
+46d36e09ed004660669e28df2cad0df8 *scripts/player.gd
 c29161dba5fef897a5a69d11935090c6 *scripts/prop.gd
 dae73db19770c0a8fb3c53fe8bed8cd3 *scripts/relics.gd
 7eeafed26f5f0478aaef5025bb2a7057 *scripts/secret_wall.gd
