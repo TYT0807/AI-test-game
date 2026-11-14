@@ -2339,12 +2339,39 @@ func _echo_tag() -> String:
 
 ## A/B 平行字段落盘：写入 codex["last_run"] 的 oath / echo 键并再存一次盘。
 ## 不改 set_codex_last_run 本体、不扩 STATS_KEYS（字段若塞进 stats 会被其白名单静默丢弃——§2.3）
-func _write_codex_replay() -> void:
+## Sprint 23 B：可选参数 prev_streak——>=0 时连绩写回（f(S,H,D) 三态，H/D 取自**本次刚写回的**
+## last_run["oath"]，与 oath 同一次落盘防撕裂 T3）；**-1 哨兵跳过连绩写入**——player.gd 无参直调
+## 零回归、SMOKE 隔离档不污染。注意陷阱：oath_streak 塞进 stats 会被 set_codex_last_run 的
+## STATS_KEYS 白名单静默丢弃（n3 实证），故只能走本函数的平行字段
+func _write_codex_replay(prev_streak := -1) -> void:
 	var echo := {"choices": _echo_choices.duplicate(), "costs": _echo_costs.duplicate(),
 		"tag": _echo_tag(), "count": _echo_choices.size()}
 	Game.codex["last_run"]["oath"] = oath_fulfillment()
 	Game.codex["last_run"]["echo"] = echo
+	if prev_streak >= 0:
+		var o: Dictionary = Game.codex["last_run"]["oath"]
+		var H := 0 if o.is_empty() else 1
+		var D := 1 if (H == 1 and bool(o.get("done", false))) else 0
+		Game.codex["last_run"]["oath_streak"] = next_oath_streak(prev_streak, H, D)
 	Game.save_codex()
+
+
+## Sprint 23 B：连绩读侧（纯读内存态 last_run，零 IO/零 rng/零计时）——
+## 旧档无键 → .get 默认 0；坏档非数值 → 类型守卫归 0（实稿三道防线，不迁移不补写不改 load_codex）
+func _read_oath_streak() -> int:
+	var v = Game.codex["last_run"].get("oath_streak", 0)
+	if v is int or v is float:
+		return maxi(int(v), 0)
+	return 0
+
+
+## Sprint 23 B：连绩状态转移 f（纯函数 static，零全局态读取——实稿 §一 1.2）
+## f(S,H,D) = S+1 若 H=1 且 D=1（兑现续一局）；= 0 若 H=1 且 D=0（立誓未兑现 → 断）；
+## = S 若 H=0（未立誓不计入、不断绩——§七① 拍板）
+static func next_oath_streak(prev: int, H: int, D: int) -> int:
+	if H == 0:
+		return prev
+	return prev + 1 if D == 1 else 0
 
 
 ## ---------------- Sprint 14 C：图鉴发现度被动（开局一次性起始状态） ----------------
@@ -2553,8 +2580,12 @@ func _settle_meta() -> String:
 	if _smoke:
 		print("[SMOKE-SIGIL] shards +%d balance=%d" % [shard_gain, int(Game.sigils["shards"])])
 	var stats := _run_stats()
+	# Sprint 23 (B)：覆盖前连绩快照——纯读内存态（零 IO/零 rng），必须在覆盖式 set_codex_last_run
+	# 抹掉 last_run 之前读（代价 1 实测：stats 只有 5 个 STATS_KEYS 键，oath_streak 塞进 stats
+	# 会被白名单静默丢弃——实稿 §五 V3/n3）
+	var prev_streak := _read_oath_streak()
 	Game.set_codex_last_run(stats)   # Sprint 13 C：上局复盘快照（codex.cfg 持久化）
-	_write_codex_replay()   # Sprint 16 A/B：誓约+抉择平行字段落盘（set_codex_last_run 自带一次写盘，此处第二次——两次写盘为既定代价 §2.3）
+	_write_codex_replay(prev_streak)   # Sprint 16 A/B + 23 B：誓约+抉择+连绩同一次写盘（防撕裂 T3；两次写盘为既定代价）
 	var r := Game.meta_settle_run(stats)
 	_boost_ticked = true   # meta_settle_run 内部已递减一次引导加成
 	var pay := int(r.get("payout", 0))

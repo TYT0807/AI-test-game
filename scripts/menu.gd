@@ -408,6 +408,20 @@ func _build_codex() -> void:
 		ol.add_theme_color_override("font_color",
 			Color(0.6, 0.95, 0.7) if bool(oath.get("done", false)) else Color(0.72, 0.75, 0.82))
 		_rows.add_child(ol)
+	# Sprint 23 B：连绩行（H=1 的局才创建——沿用「oath 空 → 行不创建」范式；键缺失/坏值不创建）。
+	# 前缀「连绩 · 」不复用既有「本局誓约 / 上局誓约」（T1 用词区分）；I1/I2 由 f 保证：
+	# done=true ⇒ streak ≥ 1 显「N 局」；done=false ⇒ streak == 0 显「断了」
+	var streak_v = lr.get("oath_streak", null)
+	if not oath.is_empty() and streak_v != null and (streak_v is int or streak_v is float):
+		var s_done := bool(oath.get("done", false))
+		var s_next := maxi(int(streak_v), 0)
+		var sl := Label.new()
+		sl.text = ("连绩 · %d 局" % s_next) if s_done else "连绩 · 断了"
+		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sl.add_theme_font_size_override("font_size", 14)
+		sl.add_theme_color_override("font_color",
+			Color(0.6, 0.95, 0.7) if s_done else Color(0.72, 0.75, 0.82))
+		_rows.add_child(sl)
 	var echo: Dictionary = lr.get("echo", {})
 	if int(echo.get("count", 0)) > 0:
 		var names := []
@@ -667,6 +681,19 @@ func _build_sigils() -> void:
 		ol.add_theme_color_override("font_color",
 			Color(0.6, 0.95, 0.7) if odone else Color(0.72, 0.75, 0.82))
 		_rows.add_child(ol)
+	# Sprint 23 B：上局连绩（印记页决策位——与「上局誓约」同源同规则；词族 T1 区分，
+	# 绝不复用「上局誓约」前缀）。连绩纯展示、零数值回注、不入任何分母（S22 boon 红线延续）
+	var sigil_streak = Game.codex.get("last_run", {}).get("oath_streak", null)
+	if not last_oath.is_empty() and sigil_streak != null and (sigil_streak is int or sigil_streak is float):
+		var s2_done := bool(last_oath.get("done", false))
+		var s2_next := maxi(int(sigil_streak), 0)
+		var sl2 := Label.new()
+		sl2.text = ("上局连绩 · %d 局" % s2_next) if s2_done else "上局连绩 · 断了"
+		sl2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		sl2.add_theme_font_size_override("font_size", 14)
+		sl2.add_theme_color_override("font_color",
+			Color(0.6, 0.95, 0.7) if s2_done else Color(0.72, 0.75, 0.82))
+		_rows.add_child(sl2)
 	var eq_name := "无"
 	if String(Game.sigils["equipped"]) != "" and Data.SIGILS.has(String(Game.sigils["equipped"])):
 		eq_name = String(Data.SIGILS[String(Game.sigils["equipped"])]["name"])

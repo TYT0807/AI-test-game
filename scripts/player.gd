@@ -168,6 +168,8 @@ func _ready() -> void:
 		_floor_sign_probe.call_deferred()
 	if OS.get_environment("SMOKE_ABYSS") != "":
 		_abyss_probe.call_deferred()
+	if OS.get_environment("SMOKE_STREAK") != "":
+		_streak_probe.call_deferred()
 	if OS.get_environment("SMOKE_DAILY_SHARE") != "":
 		_daily_share_probe.call_deferred()
 	if OS.get_environment("SMOKE_LAYOUT") != "":
@@ -741,11 +743,13 @@ func _sigil_coverage_probe() -> void:
 	Game.main._clear_calamity_effects()
 	Dev.check(max_hp == pre + 1, "sigil_cov", "frail 还原保成长: max_hp=%d" % max_hp)
 	var dm: float = Game.main.diamond_mult
+	Game.main.diamond_mult = 1.0   # Sprint 23 附带：确定性基线——多探针并发下 dm 可能已被其它灾祸路径削减到 ≤0.7，相对断言会间歇假红（stash 实证）
 	Game.main._calamity = "scarce_ore"
 	Game.main._apply_calamity()
-	Dev.check(Game.main.diamond_mult < dm, "sigil_cov", "scarce_ore 削减")
+	Dev.check(Game.main.diamond_mult < 1.0, "sigil_cov", "scarce_ore 削减")
 	Game.main._clear_calamity_effects()
-	Dev.check(Game.main.diamond_mult == dm, "sigil_cov", "scarce_ore 还原")
+	Dev.check(Game.main.diamond_mult == 1.0, "sigil_cov", "scarce_ore 还原")
+	Game.main.diamond_mult = dm   # 还原探针前现场
 	# 终审补·层流程①：无灾祸层 clear 完全不碰倍率（modifier 全局倍率不得被换层抹掉）
 	Game.main._calamity = ""
 	var dm0: float = Game.main.diamond_mult
@@ -1566,9 +1570,11 @@ func _floor_sign_probe() -> void:
 	Game.mark_codex("themes", "toxic")
 	Game.mark_codex("bosses", "demon")
 	Game.mark_codex("shrine", "ore_upgrade")
-	await get_tree().process_frame
+	# 直调生产冲洗入口（与 call_deferred 调度的是同一函数——引擎保证 deferred 必然执行它）；
+	# 不用 await process_frame：SMOKE 下其恢复点早于 deferred 执行（定向绿/全量红的实录），非确定时序
+	Game._flush_flavor_toast()
 	Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
-		"附限定①: deferred 生产路径聚合（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
+		"附限定①: 聚合冲洗生产入口（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 
@@ -1972,3 +1978,110 @@ func _abyss_probe() -> void:
 	b30.free()
 	b31.free()
 	print("[SMOKE-ABYSS] done")
+
+
+## SMOKE_STREAK=1：Sprint 23 誓约连绩断言（V1/V2/V3/V4/V5/V6/V7 + n3/n8——实稿 §六口径；
+## V10 静态核对 / V11 链路确认 / V12 前提守卫型如实单列不计绿灯——主理人裁定）
+func _streak_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	# V1 纯函数四态真差值（先断言输入互不相同——四态断言的前提）
+	Dev.check([0, 1, 1] != [3, 1, 1] and [3, 1, 1] != [3, 1, 0] and [3, 1, 0] != [3, 0, 1], "streak",
+		"V1 前提: 四组输入互不相同")
+	Dev.check(gm.next_oath_streak(0, 1, 1) == 1 and gm.next_oath_streak(3, 1, 1) == 4
+		and gm.next_oath_streak(3, 1, 0) == 0 and gm.next_oath_streak(3, 0, 1) == 3, "streak",
+		"V1: f 四态 (0,1,1)=1 / (3,1,1)=4 / (3,1,0)=0 / (3,0,1)=3")
+	# V7 一致性不变量（I1/I2/I3——f 的性质复述，T2）
+	Dev.check(gm.next_oath_streak(3, 1, 1) >= 1, "streak", "V7 I1: D=1 ⇒ streak ≥ 1")
+	Dev.check(gm.next_oath_streak(3, 1, 0) == 0, "streak", "V7 I2: H=1,D=0 ⇒ 0")
+	Dev.check(gm.next_oath_streak(5, 0, 0) == 5, "streak", "V7 I3: H=0 ⇒ S_prev")
+	# V2 落盘往返（★专打代价 1：覆盖式 set_codex_last_run 抹键 → (B) 覆盖前快照 → 第二次写盘还原）
+	Game.equip_sigil("vigor")
+	gm._oath_counters["hits_taken"] = 3   # vigor watched=[hits_taken] need=3 → done=true
+	Game.codex["last_run"]["oath_streak"] = 3   # 置 S_prev=3（模拟已持久化）
+	var prev: int = gm._read_oath_streak()
+	Dev.check(prev == 3, "streak", "V2 前置: 覆盖前快照 prev=3")
+	var stats: Dictionary = gm._run_stats()
+	Game.set_codex_last_run(stats)
+	Dev.check(not (Game.codex["last_run"] as Dictionary).has("oath_streak"), "streak",
+		"V2 代价 1 实证: 覆盖式 set_codex_last_run 抹掉 streak 键")
+	gm._write_codex_replay(prev)   # (B) 第二次写盘：连绩与 oath 同次落盘（T3 无撕裂）
+	Game.load_codex()
+	Dev.check(int(Game.codex["last_run"].get("oath_streak", -1)) == 4, "streak",
+		"V2: prev=3 → 真调覆盖+写回 → load 读回 4")
+	Dev.check(int((Game.codex["last_run"].get("oath", {}) as Dictionary).get("cur", -1)) == 3, "streak",
+		"V2 T3: oath 与 streak 同次写回（无撕裂）")
+	# D=0 → 断绩 0
+	gm._oath_counters["hits_taken"] = 2
+	gm._write_codex_replay(prev)
+	Game.load_codex()
+	Dev.check(int(Game.codex["last_run"].get("oath_streak", -1)) == 0, "streak",
+		"V2: D=0 → 断绩 0")
+	# n3 数据级负向：oath_streak 塞进 stats → STATS_KEYS 白名单静默丢弃（不改代码即证）
+	var stats_n3: Dictionary = gm._run_stats()
+	stats_n3["oath_streak"] = 3
+	Game.set_codex_last_run(stats_n3)
+	Game.load_codex()
+	Dev.check(not (Game.codex["last_run"] as Dictionary).has("oath_streak"), "streak",
+		"n3: 塞进 stats 被白名单静默丢弃")
+	# V4 渲染真差值：真调 show_page("codex")——连绩行文本随 streak 4→7 跟变
+	gm._oath_counters["hits_taken"] = 3
+	Game.codex["last_run"]["oath"] = gm.oath_fulfillment()
+	Game.codex["last_run"]["oath_streak"] = 4
+	Game.main.menu.show_page("codex")
+	Dev.check(_scan_codex_label("连绩 · ") == "连绩 · 4 局", "streak",
+		"V4: streak=4 渲染「连绩 · 4 局」（%s）" % _scan_codex_label("连绩 · "))
+	Game.codex["last_run"]["oath_streak"] = 7
+	Game.main.menu.show_page("codex")
+	Dev.check(_scan_codex_label("连绩 · ") == "连绩 · 7 局", "streak",
+		"V4 真差值: streak=7 渲染「连绩 · 7 局」（%s）" % _scan_codex_label("连绩 · "))
+	# V6 T1 用词区分：新前缀 + 既有「本局誓约」一字不变
+	Dev.check(_scan_codex_label("本局誓约") != "", "streak", "V6: 既有「本局誓约」行仍在（一字未改）")
+	# V5：H=0（oath 空）→ 连绩行不创建（即便 streak 键存在——I3 后半）。
+	# 走 show_page（清场+重建，queue_free 旧标签）而非直调 _build_codex（不清 _rows 会累积）
+	(Game.codex["last_run"] as Dictionary)["oath"] = {}
+	Game.main.menu.show_page("codex")
+	Dev.check(_scan_codex_label("连绩 · ") == "", "streak", "V5: H=0 → 连绩行不创建")
+	# 印记页：真调 show_page("sigils")——上局连绩 + 既有「上局誓约」一字不变（V6）
+	Game.codex["last_run"]["oath"] = gm.oath_fulfillment()
+	Game.codex["last_run"]["oath_streak"] = 7
+	Game.main.menu.show_page("sigils")
+	Dev.check(_scan_codex_label("上局连绩 · ") == "上局连绩 · 7 局", "streak",
+		"V6: 印记页「上局连绩 · 7 局」")
+	Dev.check(_scan_codex_label("上局誓约") != "", "streak", "V6: 既有「上局誓约」行仍在")
+	# V3：旧档无键 + 坏档非数值 → 读侧归 0（三道防线之一；不迁移不补写不改 load_codex）
+	Game.codex["last_run"].erase("oath_streak")
+	Dev.check(gm._read_oath_streak() == 0, "streak", "V3a: 旧档无键 → 读侧 0")
+	var bad_cfg := ConfigFile.new()
+	# 坏值必须嵌进 last_run 字典（load_codex 读的是 codex/last_run 键；写在 codex 节顶层
+	# 会被静默忽略——首跑真空转实证）。非数值 String 走 int() 强转仍归 0（弱靶）；
+	# 布尔 true 是强靶：无守卫 int(true)=1 ≠ 守卫后 0（n4 变异靶点）
+	bad_cfg.set_value("codex", "last_run", {"oath": {}, "oath_streak": "not_a_number"})
+	bad_cfg.save(Game.codex_path())
+	Game.load_codex()
+	Dev.check(gm._read_oath_streak() == 0, "streak", "V3b: 坏档非数值 → 类型守卫归 0")
+	bad_cfg.set_value("codex", "last_run", {"oath": {}, "oath_streak": true})
+	bad_cfg.save(Game.codex_path())
+	Game.load_codex()
+	Dev.check(gm._read_oath_streak() == 0, "streak", "V3c: 坏档布尔 → 类型守卫归 0")
+	# V3 后清场：oath_streak 键归零态——n8 断言前提（防 V3c 布尔跨节残留误伤）
+	Game.codex["last_run"].erase("oath_streak")
+	Game.save_codex()
+	Game.load_codex()
+	# n8 哨兵负向：无参直调（prev=-1）不写 streak 键——哨兵语义常驻回归锁
+	Game._flavor_pending.clear()
+	Game.codex["last_run"]["oath"] = {}
+	gm._write_codex_replay()
+	Game.load_codex()
+	Dev.check(not (Game.codex["last_run"] as Dictionary).has("oath_streak"), "streak",
+		"n8: 无参直调（哨兵 -1）不写 streak 键")
+	print("[SMOKE-STREAK] done")
+
+
+func _scan_codex_label(prefix: String) -> String:
+	for c in Game.main.menu._rows.get_children():
+		# is_queued_for_deletion 过滤：show_page 清场走 queue_free（帧末才真正释放），
+		# 不跳过的话同帧重建后扫描会命中旧标签（V4/V5 首跑实录）
+		if c is Label and not c.is_queued_for_deletion() and String(c.text).begins_with(prefix):
+			return String(c.text)
+	return ""
