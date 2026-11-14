@@ -87,7 +87,7 @@
 - **缺陷**：三 Boss `setup()` 的 `max_hp` 公式（boss.gd:73 / boss2.gd:28 / boss3.gd:32）未折入深渊乘子——普通敌人自 S21 起吃 `abyss_hp_mult`，Boss 不吃 → 高深渊档下 Boss 反而相对变脆。
 - **修复**：三处公式末尾折入 `* Game.main.abyss_hp_mult`（镜像 slug.gd:86 消费语义）。**红线遵守**：只接 abyss，不接 `enemy_hp_mult`（会动 E1 基线）；纯乘算零 rng。血条无需另改（`boss_hp_changed.emit` 在 `_ready()`，晚于 `setup()`，自动拿到缩放值）。
 - **SMOKE_ABYSS 验效果型断言**（player.gd）：真构造三 Boss 实例读 `max_hp`——基线（abyss=1.0 且 enemy_hp_mult=5.0 时 max_hp 仍为公式原值，证明 enemy_hp_mult 未被消费）+ 真差值（abyss=1.1 → 三 Boss ×1.1）+ 订正批补档位（t=1 hp=1.10 / t=10 hp=2.00，读 `ABYSS_TIERS` 实表数值对照）。
-- **验证**：SMOKE_ABYSS 定向 0 [ERR]；全量 21 钩子 6000 帧 0 报错（10 done 含 SMOKE-ABYSS）。订正批（含探针档位扩展）SMOKE_ABYSS 定向回归已跑：exit 0 / **0 [ERR]** / `done` 落地（日志 `_tools/spr21_correct.log`）。
+- **验证**：SMOKE_ABYSS 定向 0 [ERR]；全量 21 钩子 6000 帧 0 报错（10 done 含 SMOKE-ABYSS）。订正批（含探针档位扩展）SMOKE_ABYSS 定向回归已跑：exit 0 / **0 [ERR]** / `done` 落地（日志 `_tools/spr21_correct.log`——**本地日志、未入库**：_tools 被 .gitignore 忽略；关键三行 exit 0 / 0 [ERR] / done 落地已贴于本节）。
 - **冻结双清单口径（主理人核验订正，替代本行旧表述「冻结重定 34/34（四条目重算）」）**：
   - **本批快照** `production/sprint-21/SPR21-FROZEN.md5`：每批重算，收口批后 `md5sum -c` = **34 OK / 0 FAILED**
   - **历史归档** `production/sprint-7/SPR7-FROZEN-4.md5`：已还原为 `457b38c` 提交中的字节态并永久保持勿覆盖。该归档记录的是 `dc15efe`（S20 收官）时点的工作树字节，属历史基线证据，**不要求对当前树全绿**；当前对账 23 OK / 11 FAILED，11 项全部为内容差异（S21 主提交 8 文件 + 收口批 3 个 boss 文件），与行尾无关。工作树行尾自 S20 起稳定为 8 CRLF / 26 LF、无单文件内部混排。（主理人复核订正：编程侧初稿「行尾翻转」归因不成立——slug.gd 全时点哈希反算 `e02b98d5`=dc15efe blob 转 CRLF、`d9f447ee`=S21 blob LF、`acba7808`=当前工作树 CRLF 归一化即 `d9f447ee`，行尾从未翻转；`.gitattributes eol=lf` 提议已裁定**驳回**——重规范 34 个 `.gd` 触发 E1 全量重定，风险大于收益，登记明确不做。）

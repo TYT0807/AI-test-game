@@ -1111,8 +1111,12 @@ func _codex_probe() -> void:
 	Dev.check(Game._codex_id_valid("shrine", "blood_relic"), "codex",
 		"S19①: 合法圣所 id 通过白名单")
 	# ② 首发现登记 + toast 含手记句 + 重复登记幂等且不重复播报（先撤销既有发现，保证首发现路径可测）
+	# Sprint 22 D：首发现走帧末聚合冲洗——探针用「清 pending + 直调冲洗」确定性驱动同一入口
+	# （不赌帧边界：多探针同帧 mark 会互相聚合，直调冲洗净化时序）
 	(Game.codex["shrine"] as Array).erase("blood_relic")
+	Game._flavor_pending.clear()
 	Game.mark_codex("shrine", "blood_relic")
+	Game._flush_flavor_toast()
 	Dev.check((Game.codex["shrine"] as Array).has("blood_relic"), "codex", "S19②: 首发现登记成功")
 	Dev.check(String(Game.main.hud._toast.text).contains("血祭"), "codex",
 		"S19② 正向: toast 含手记句（FLAVOR shrine/blood_relic）")
@@ -1487,8 +1491,11 @@ func _floor_sign_probe() -> void:
 	Game.floor_num = 1   # 还原本探针自设语境（后续 D 段在 1 层跑）
 	gm.update_floor_sign()
 	# D：首发现播报（清条目 → mark → toast 文本含手记；重复 mark → 文本不变）
+	# Sprint 22 D：清 pending + 直调冲洗（确定性；防其它探针同帧 mark 的聚合串扰）
 	(Game.codex["themes"] as Array).erase("vein")
+	Game._flavor_pending.clear()
 	Game.mark_codex("themes", "vein")
+	Game._flush_flavor_toast()
 	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记"), "flavor",
 		"首发现播报：%s" % String(Game.main.hud._toast.text))
 	var toast_after_dup: String = Game.main.hud._toast.text
@@ -1523,6 +1530,29 @@ func _floor_sign_probe() -> void:
 		if c is Label and String(c.text).contains("成群来"):
 			enemy_note = true
 	Dev.check(enemy_note, "flavor", "图鉴 enemies 手记行渲染（含机制应对句）")
+	# ---------------- Sprint 22 D：同帧首发现聚合（合并语义，验渲染非验标志） ----------------
+	# 构造同帧三条白名单首发现（先撤销既有发现保证首发现路径可测）+ 一条非白名单对照；
+	# 清 pending 防其它探针残留串扰，mark 后直调冲洗（与 call_deferred 同一入口，确定性时序）
+	(Game.codex["themes"] as Array).erase("swamp")
+	(Game.codex["bosses"] as Array).erase("dragon")
+	(Game.codex["shrine"] as Array).erase("shard_pact")
+	Game._flavor_pending.clear()
+	Game.mark_codex("themes", "swamp")
+	Game.mark_codex("bosses", "dragon")
+	Game.mark_codex("shrine", "shard_pact")
+	Game.mark_codex("enemies", "rusher")   # 非白名单：不进聚合
+	Game._flush_flavor_toast()
+	Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
+		"S22 D: 同帧 3 条白名单首发现渲染为一条聚合 toast，非白名单不计入（%s）" % String(Game.main.hud._toast.text))
+	Dev.check(is_equal_approx(Game.main.hud._toast.modulate.a, 1.0), "flavor",
+		"S22 D: 聚合 toast 可见（modulate.a=1）")
+	# 单条回归：清 pending 后单条首发现维持「矿工手记 ·」原格式
+	(Game.codex["themes"] as Array).erase("magma")
+	Game._flavor_pending.clear()
+	Game.mark_codex("themes", "magma")
+	Game._flush_flavor_toast()
+	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层"), "flavor",
+		"S22 D: 单条首发现维持原格式（%s）" % String(Game.main.hud._toast.text))
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 

@@ -278,6 +278,7 @@ func save_sigils() -> void:
 ## 不碰 meta.gd UNLOCKS（冻结规格 v2.10）——平行只读数据，只增不减。
 const CODEX_KINDS := ["enemies", "relics", "suffixes", "themes", "bosses", "shrine"]
 var codex := {"enemies": [], "relics": [], "suffixes": [], "themes": [], "bosses": [], "shrine": [], "last_run": {}}
+var _flavor_pending: Array = []   # Sprint 22 D：同帧白名单首发现聚合缓冲（帧末 call_deferred 冲洗为一条 toast）
 
 
 func codex_path() -> String:
@@ -331,11 +332,29 @@ func mark_codex(kind: String, id: String) -> void:
 	# Sprint 16 D：地窖低语——首发现播报（重复登记在上方 return，天然只播一次；查表未命中则静默）。
 	# Sprint 20 A：加播报白名单——enemies/relics/suffixes 首发现只入图鉴不播 toast（防开局刷屏），
 	# themes/bosses/shrine 维持播报（S16 D 口径不变）
-	if main != null and is_instance_valid(main) and is_instance_valid(main.hud) \
-			and (Data.FLAVOR_BROADCAST_KINDS as Array).has(kind):
+	# Sprint 22 D：同帧聚合——白名单类首发现入缓冲，帧末（call_deferred，非 delta 计时）合并为
+	# 一条「图鉴新发现 ×N」；hud.flash_toast 通用语义不变（护盾/博学/挑战提示不合并）
+	if main != null and is_instance_valid(main) and (Data.FLAVOR_BROADCAST_KINDS as Array).has(kind):
 		var fv: String = String(Data.FLAVOR.get(kind + "/" + id, ""))
 		if fv != "":
-			main.hud.flash_toast("矿工手记 · " + fv)
+			_flavor_pending.append(fv)
+			call_deferred("_flush_flavor_toast")
+
+
+## Sprint 22 D：同帧首发现聚合冲洗（call_deferred 帧末执行，零 delta 计时、零 rng）。
+## 单条（N=1）维持「矿工手记 ·」原格式（既有探针与玩家认知兼容）；多条合并为
+## 「图鉴新发现 ×N」——细节在图鉴页可查。单例 2.2s tween 复用，不加队列状态。
+## hud.flash_toast 通用语义不变：仅 mark_codex 白名单首发现走此聚合通道
+func _flush_flavor_toast() -> void:
+	if _flavor_pending.is_empty():
+		return
+	var n := _flavor_pending.size()
+	if main != null and is_instance_valid(main) and is_instance_valid(main.hud):
+		if n == 1:
+			main.hud.flash_toast("矿工手记 · " + String(_flavor_pending[0]))
+		else:
+			main.hud.flash_toast("图鉴新发现 ×%d" % n)
+	_flavor_pending.clear()
 
 
 ## 上局复盘摘要（_settle_meta 结算时快照 _run_stats——STATS_KEYS 内五项，不新增统计源；负数钳制）
