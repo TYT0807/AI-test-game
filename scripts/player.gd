@@ -1570,17 +1570,14 @@ func _floor_sign_probe() -> void:
 	Game.mark_codex("themes", "toxic")
 	Game.mark_codex("bosses", "demon")
 	Game.mark_codex("shrine", "ore_upgrade")
-	# Sprint 22 附限定①（主理人订正处方 1 恢复）：检查回调经 call_deferred 排入**同一 deferred
-	# 队列尾部**——FIFO 保证必排在 3 次 _flush_flavor_toast 冲洗之后：断言留在真实生产调度路径上
-	# （哨兵被覆盖即证 call_deferred 帧末调度真实生效），且不受 await process_frame 恢复点早于
-	# deferred 执行的时序影响（S23 全量红/定向绿实录——曾误改直调致回归锁撤销，此处恢复）
-	var check_box: Array = [""]
+	# Sprint 22 附限定①（主理人订正处方 1 + 竞态终解）：断言**移进回调体内**——回调经
+	# call_deferred 排入同一 deferred 队列尾部（FIFO 保证排在 3 次 _flush_flavor_toast 冲洗
+	# 之后），断言在真实生产调度路径上原地执行；零 await、零恢复点竞态（×9 诊断与 S23
+	# 三次跑绿 2 红 1 的实录证明 await process_frame 恢复点与帧末冲洗存在竞态）
 	var check_cb: Callable = func() -> void:
-		check_box[0] = String(Game.main.hud._toast.text)
+		Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
+			"附限定①: deferred 生产路径聚合（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
 	check_cb.call_deferred()
-	await get_tree().process_frame
-	Dev.check(check_box[0] == "图鉴新发现 ×3", "flavor",
-		"附限定①: deferred 生产路径聚合（哨兵被覆盖，%s）" % check_box[0])
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 
