@@ -1570,11 +1570,17 @@ func _floor_sign_probe() -> void:
 	Game.mark_codex("themes", "toxic")
 	Game.mark_codex("bosses", "demon")
 	Game.mark_codex("shrine", "ore_upgrade")
-	# 直调生产冲洗入口（与 call_deferred 调度的是同一函数——引擎保证 deferred 必然执行它）；
-	# 不用 await process_frame：SMOKE 下其恢复点早于 deferred 执行（定向绿/全量红的实录），非确定时序
-	Game._flush_flavor_toast()
-	Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
-		"附限定①: 聚合冲洗生产入口（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
+	# Sprint 22 附限定①（主理人订正处方 1 恢复）：检查回调经 call_deferred 排入**同一 deferred
+	# 队列尾部**——FIFO 保证必排在 3 次 _flush_flavor_toast 冲洗之后：断言留在真实生产调度路径上
+	# （哨兵被覆盖即证 call_deferred 帧末调度真实生效），且不受 await process_frame 恢复点早于
+	# deferred 执行的时序影响（S23 全量红/定向绿实录——曾误改直调致回归锁撤销，此处恢复）
+	var check_box: Array = [""]
+	var check_cb: Callable = func() -> void:
+		check_box[0] = String(Game.main.hud._toast.text)
+	check_cb.call_deferred()
+	await get_tree().process_frame
+	Dev.check(check_box[0] == "图鉴新发现 ×3", "flavor",
+		"附限定①: deferred 生产路径聚合（哨兵被覆盖，%s）" % check_box[0])
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 
