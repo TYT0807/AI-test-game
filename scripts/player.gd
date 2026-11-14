@@ -166,6 +166,8 @@ func _ready() -> void:
 		_oath_probe.call_deferred()
 	if OS.get_environment("SMOKE_FLOOR_SIGN") != "" or OS.get_environment("SMOKE_FLAVOR") != "":
 		_floor_sign_probe.call_deferred()
+	if OS.get_environment("SMOKE_ABYSS") != "":
+		_abyss_probe.call_deferred()
 	if OS.get_environment("SMOKE_DAILY_SHARE") != "":
 		_daily_share_probe.call_deferred()
 	if OS.get_environment("SMOKE_LAYOUT") != "":
@@ -1862,3 +1864,49 @@ func _tick_timers(delta: float) -> void:
 		sprite.visible = fmod(_invuln_t, 0.2) > 0.1
 	else:
 		sprite.visible = true
+
+
+## SMOKE_ABYSS=1：深渊档 Boss 血量缩放断言（Sprint 21 收口批·验效果型——真构造 Boss 读 max_hp）
+func _abyss_probe() -> void:
+	await get_tree().create_timer(0.6, true).timeout
+	var gm: Node = Game.main
+	var boss_s: GDScript = load("res://scripts/boss.gd")
+	var boss2_s: GDScript = load("res://scripts/boss2.gd")
+	var boss3_s: GDScript = load("res://scripts/boss3.gd")
+	var hp_mult_bak: float = gm.abyss_hp_mult
+	var ehp_bak: float = gm.enemy_hp_mult
+	var base_w: float = 320.0 * (1.0 + (11 - 4) * 0.12)
+	var base_b: float = 360.0 * (1.0 + (11 - 4) * 0.12)
+	# 基线：abyss=1.0 且 enemy_hp_mult=5.0 —— Boss max_hp 必须与 enemy_hp_mult 无关（P1 红线：只接 abyss）
+	gm.abyss_hp_mult = 1.0
+	gm.enemy_hp_mult = 5.0
+	var w0: PrismWarden = boss_s.new()
+	w0.setup(11)
+	var b20: PrismWarden = boss2_s.new()
+	b20.setup(11)
+	var b30: PrismWarden = boss3_s.new()
+	b30.setup(11)
+	Dev.check(is_equal_approx(w0.max_hp, base_w), "abyss",
+		"warden 基线（enemy_hp_mult=5 不影响）%.1f" % w0.max_hp)
+	Dev.check(is_equal_approx(b20.max_hp, base_b) and is_equal_approx(b30.max_hp, base_b), "abyss",
+		"boss2/boss3 基线 %.1f/%.1f" % [b20.max_hp, b30.max_hp])
+	# 真差值：abyss_hp_mult 1.0 → 1.1，三 Boss max_hp 同步 ×1.1
+	gm.abyss_hp_mult = 1.1
+	var w1: PrismWarden = boss_s.new()
+	w1.setup(11)
+	var b21: PrismWarden = boss2_s.new()
+	b21.setup(11)
+	var b31: PrismWarden = boss3_s.new()
+	b31.setup(11)
+	Dev.check(is_equal_approx(w1.max_hp, base_w * 1.1) and is_equal_approx(b21.max_hp, base_b * 1.1)
+		and is_equal_approx(b31.max_hp, base_b * 1.1), "abyss",
+		"abyss_hp_mult=1.1 → 三 Boss max_hp ×1.1（%.1f/%.1f/%.1f）" % [w1.max_hp, b21.max_hp, b31.max_hp])
+	gm.abyss_hp_mult = hp_mult_bak
+	gm.enemy_hp_mult = ehp_bak
+	w0.free()
+	w1.free()
+	b20.free()
+	b21.free()
+	b30.free()
+	b31.free()
+	print("[SMOKE-ABYSS] done")

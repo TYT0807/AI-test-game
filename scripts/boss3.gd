@@ -29,7 +29,8 @@ func setup(floor_num: int) -> void:
 		var key := 4 + posmod(floor_num - 4 + _theme_offset + k, 8)
 		_phase_rules.append(String(Data.FLOOR_THEMES[key]["rule"]))
 		_phase_tints.append(Data.FLOOR_THEMES[key]["tint"])
-	max_hp = 360.0 * (1.0 + (floor_num - 4) * 0.12)
+	# Sprint 21 收口批：折入深渊档乘子（只接 abyss，不接 enemy_hp_mult——同 boss.gd 红线）
+	max_hp = 360.0 * (1.0 + (floor_num - 4) * 0.12) * Game.main.abyss_hp_mult
 	hp = max_hp
 	skill_interval = 2.6   # 脉冲密度介于守望者与熔潮之间（§4.3）
 	if core != null:

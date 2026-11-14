@@ -79,3 +79,13 @@
 - 8 个 `.gd` 修改 + `production/sprint-21/` 新增文档与快照，**未 commit**。
 - 提交 message 建议：`Sprint 21 深渊难度档：隔离乘子 + 阶梯解锁 + 菜单/HUD/validate 门 + SMOKE_ABYSS 动态验伤探针 + 冻结 34/34`。
 - **提交须用户显式授权。**
+
+## 七、收口批补记（主理人任务单 P0 · Boss HP 深渊缩放）
+
+> 日期：2026-11-11｜编程侧收口批，单独 commit。上节「未 commit / 须授权」状态已过期——S21 主体已于 `2ca0440` 入库。
+
+- **缺陷**：三 Boss `setup()` 的 `max_hp` 公式（boss.gd:73 / boss2.gd:28 / boss3.gd:32）未折入深渊乘子——普通敌人自 S21 起吃 `abyss_hp_mult`，Boss 不吃 → 高深渊档下 Boss 反而相对变脆。
+- **修复**：三处公式末尾折入 `* Game.main.abyss_hp_mult`（镜像 slug.gd:86 消费语义）。**红线遵守**：只接 abyss，不接 `enemy_hp_mult`（会动 E1 基线）；纯乘算零 rng。血条无需另改（`boss_hp_changed.emit` 在 `_ready()`，晚于 `setup()`，自动拿到缩放值）。
+- **SMOKE_ABYSS 验效果型断言**（player.gd）：真构造三 Boss 实例读 `max_hp`——基线（abyss=1.0 且 enemy_hp_mult=5.0 时 max_hp 仍为公式原值，证明 enemy_hp_mult 未被消费）+ 真差值（abyss=1.1 → 三 Boss ×1.1）。
+- **验证**：SMOKE_ABYSS 定向 0 [ERR]；全量 21 钩子 6000 帧 0 报错（10 done 含 SMOKE-ABYSS）；冻结重定 **34/34**（boss.gd/boss2.gd/boss3.gd/player.gd 四条目重算）。
+- **附限定①就此关闭**，质量门 CONCERNS 依据消除。P2（origin/main 推送，需 PAT）仍属发布侧待用户指令。

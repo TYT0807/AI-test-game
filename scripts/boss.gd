@@ -69,8 +69,9 @@ func setup(floor_num: int) -> void:
 		var key := phase_theme_index(floor_num, k)
 		_phase_rules.append(String(Data.FLOOR_THEMES[key]["rule"]))
 		_phase_tints.append(Data.FLOOR_THEMES[key]["tint"])
-	# Boss 血量随层数成长（11 层首遇 ≈ 422）
-	max_hp = 320.0 * (1.0 + (floor_num - 4) * 0.12)
+	# Boss 血量随层数成长（11 层首遇 ≈ 422）。Sprint 21 收口批：折入深渊档乘子
+	# （只接 abyss_hp_mult——enemy_hp_mult 是普通敌人缩放，接进来会动 E1 基线，红线不接）
+	max_hp = 320.0 * (1.0 + (floor_num - 4) * 0.12) * Game.main.abyss_hp_mult
 	hp = max_hp
 
 
