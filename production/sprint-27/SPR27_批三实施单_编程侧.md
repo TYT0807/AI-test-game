@@ -63,16 +63,30 @@ func _modifier_mult_pair(m: String) -> Vector2:
 
 覆盖全集实读（`data.gd:271-278`）：`none / rage / barren / overload / glass / swarm`，共 6 个，无第 7 个。`none` 权重 4（`MODIFIER_WEIGHTS :279`）是最常见一档，正因如此它最容易掉进默认分支而无人发现——⑯4 必须显式验它。
 
-### 2.3 改 `_roll_modifier()`（`:1206`）
+### 2.3 新增接线函数（把「接错变量」也变成可测的）
 
-插在 `:1213 diamond_mult = 1.0` 之后、`match modifier:`（`:1214`）之前：
+纯函数只解决「映射表对不对」，不解决「返回值有没有接错变量」。所以再抽一层**只做赋值**的小函数：
 
 ```gdscript
-	var pair := _modifier_mult_pair(modifier)
+## S27 批三：把纯函数结果落到 _mod_* 与 live 两处。零 rng、零副作用（只写 4 个倍率字段）。
+## 单独抽出来的唯一目的：让探针能在不调 _roll_modifier()（会抽 rng）的前提下，
+## 确定性地验到 _mod_* 与 live 的接线——包括 pair.x/pair.y 接反这种错误。
+func _apply_modifier_mult(m: String) -> void:
+	var pair := _modifier_mult_pair(m)
 	_mod_enemy_speed_mult = pair.x             # 先落 _mod_*
 	_mod_diamond_mult = pair.y
 	enemy_speed_mult = _mod_enemy_speed_mult    # live 再从 _mod_* 读
 	diamond_mult = _mod_diamond_mult
+```
+
+**为什么值得多抽一层**：只抽纯函数的话，「`pair.x` / `pair.y` 接反」这类错误编译不报、运行不崩，只是两个倍率互换；⑯ 直调纯函数看不见接线，⑨ 每局只覆盖 1/6 档 → **这个失败面只能靠运气撞见**。多抽一个函数（6 行）就把它变成确定性可见。这是本单唯一的「为可测性多改一处」，值得。
+
+### 2.4 改 `_roll_modifier()`（`:1206`）
+
+插在 `:1213 diamond_mult = 1.0` 之后、`match modifier:`（`:1214`）之前：
+
+```gdscript
+	_apply_modifier_mult(modifier)
 ```
 
 🔴 **然后必须删掉 `match` 里这三行**（是「必须删」，不是「可以删」）：
@@ -85,16 +99,16 @@ func _modifier_mult_pair(m: String) -> Vector2:
 
 「先写 `_mod_*`、live 再从 `_mod_*` 读」这个顺序也不是风格偏好：这样 live 值没有第二个可写来源。
 
-**以下副作用全部留在 `_roll_modifier()` 原位，禁止搬进纯函数**（搬进去就把副作用面也扩大了）：
+**以下副作用全部留在 `_roll_modifier()` 原位，禁止搬进纯函数或 `_apply_modifier_mult()`**（搬进去就把副作用面也扩大了，且会让 `_apply_modifier_mult` 不再是零副作用，⑯ 就不能调它了）：
 
 - `:1217 rage → enemy_hp_mult = 0.85`
 - `:1220 barren → Game.add_diamonds(10)`
 - `:1222-1224 overload → skill_cd_mult / max_hp / hp 夹取`
 - `:1226-1227 glass → crit_chance / speed_base`
 
-**diff 形状应为：新增 1 函数（6 行）+ 1 处插块（5 行）+ 3 行删除。**展开多于这个形状就说明你动到了不该动的地方。
+**diff 形状应为：新增 2 函数（6 行 + 7 行）+ `_roll_modifier()` 内加 1 行调用 + 3 行删除。**展开多于这个形状就说明你动到了不该动的地方。
 
-### 2.4 改 `_apply_floor_theme()`（`:1455`）
+### 2.5 改 `_apply_floor_theme()`（`:1455`）
 
 插在 `:1457 _theme_t = 0.0` 之后、`:1458 var th := ...` 之前：
 
@@ -175,7 +189,7 @@ C1 之后，无 pressure 分支的层（如第 7 层 silent）把 `diamond_mult`
 | ⑫ | 无主题层早退 | 1 |
 | ⑬ | C2 四路径 | 4 |
 | ⑭ | C2 零回归（聚合） | 1 |
-| ⑯ | modifier 映射覆盖（纯函数直调 6 档） | 4 |
+| ⑯ | modifier 映射与接线覆盖（`_apply_modifier_mult()` 直调 6 档） | 4 |
 | **合计** | | **103** |
 
 逐行加一遍：76 → 78（⑮²）→ 86（⑧8）→ 87（⑨1）→ 90（⑩3）→ 93（⑪3）→ 94（⑫1）→ 98（⑬4）→ 99（⑭1）→ **103（⑯4）**。
@@ -214,25 +228,29 @@ C1 之后，无 pressure 分支的层（如第 7 层 silent）把 `diamond_mult`
 **⑭（1，聚合）**——csm 恒 1.0 下把 `Game.enemy_speed_mult` 从 1.0 切到 1.25，⑬ 的四处读数（⑬1–⑬4）各自也必须恰好放大 1.25。证明补 csm 时没碰坏既有的 `enemy_speed_mult` / `_slow_mult` 因子。任一不满足 → `bad` 表非空。
 （注意：`speed` 在 `setup()` 时已烘焙，live 改 `Game.enemy_speed_mult` 不会改 `speed`，所以比值只有显式那一项贡献 = 1.25，不会出现平方。）
 
-**⑯（4）**——`var pair: Vector2 = _modifier_mult_pair(<modifier>)`，**只读返回值**，不碰 `player` / `Game` / rng，所以**不属于**下面的禁调项（禁的是 `_roll_modifier()`）。
+**⑯（4）**——`_apply_modifier_mult(<modifier>)` 后**读 live 两值**（`enemy_speed_mult` / `diamond_mult`）断言，**同时在同一 `and` 链里断 `_mod_*` 两值**（零额外条数）。
 
-| # | 入参 | 期望 |
-|---|---|---|
-| ⑯1 | `"rage"` | `(1.25, 1.0)` |
-| ⑯2 | `"barren"` | `(1.0, 0.7)` |
-| ⑯3 | `"swarm"` | `(1.0, 1.5)` |
-| ⑯4 | `"none"` / `"overload"` / `"glass"` **逐个过一遍**（1 条聚合） | 三者均 `(1.0, 1.0)` |
+这个构造是**有意的**：只调纯函数看不见接线；调 `_apply_modifier_mult()` 才能同时覆盖「映射表」与「`pair.x`/`pair.y` 接反、`_mod_diamond_mult` 写成 `pair.x`」这一整类错误——它们编译不报、运行不崩，只让两个倍率互换。⑯ 不碰 `player` / `Data` / rng，所以**不属于**下面的禁调项（禁的是 `_roll_modifier()`）。
 
-**⑯ 必需而 ⑨ 替代不了**：⑨ 每局只看得到抽中的那 1 个 modifier（`none` 最常见），⑯ 一次覆盖全部 6 档且不依赖随机。**诚实边界：⑯ 验映射表、验不到「`_roll_modifier()` 有没有调用它」，那一层由 ⑨ 兜——两者合起来才闭环，各自单独都不完整。**
+| # | 入参 | `enemy_speed_mult` / `_mod_enemy_speed_mult` | `diamond_mult` / `_mod_diamond_mult` |
+|---|---|---|---|
+| ⑯1 | `"rage"` | `1.25` | `1.0` |
+| ⑯2 | `"barren"` | `1.0` | `0.7` |
+| ⑯3 | `"swarm"` | `1.0` | `1.5` |
+| ⑯4 | `"none"` / `"overload"` / `"glass"` **逐个过一遍**（1 条聚合） | `1.0` | `1.0` |
+
+🔴 **每档必须两个值都断，不许只断一个**——只断一个的话，接反有一半概率蒙对。⑯4 的三档读数用 `[SMOKE-CAL-THEME] pair m=%s got=(%.2f,%.2f)` 前缀，**禁用 `#NN`**。
+
+**⑯ 必需而 ⑨ 替代不了**：⑨ 每局只看得到抽中的那 1 个 modifier（`none` 最常见），⑯ 一次覆盖全部 6 档且不依赖随机。**诚实边界：⑯ 验映射表与接线、验不到「`_roll_modifier()` 有没有调用 `_apply_modifier_mult()`」，那一层由 ⑨ 兜——两者合起来才闭环，各自单独都不完整。**
 
 ### 5.3 探针纪律（沿用批一 + 本批四条）
 
 1. **无条件打点**：入口 `[SMOKE-CAL-THEME] entry ...`；每条断言后 `#NN`；末尾 `done checked=%d declared=%d` 并 `Dev.check(checked == declared)`。
 2. 🔴 **扫描 / 多值打印行不许用 `#NN`**：⑧ 的 8 组、⑬ 的成对读数、⑯4 的三档、`bad` 表一律用 `[SMOKE-CAL-THEME] v ...` / `... pair ...` 前缀。批一踩过：混用后 `grep -c` 会把从属行算进断言数，自校验永久假绿。
-3. 🔴 **探针禁止调 `_roll_modifier()`**：它内部走 `Data.roll_modifier()` → `Game.rng.randi_range` → **消耗 rng**，一调就撞 ⑤5 的 `Game.rng.state` 不变断言（`:972`）。要构造 modifier 场景，⑩/⑪ **直接写 `_mod_*` 两字段**、⑯ **直接调纯函数**——两条合规路径，不要绕道图省事。
+3. 🔴 **探针禁止调 `_roll_modifier()`**：它内部走 `Data.roll_modifier()` → `Game.rng.randi_range` → **消耗 rng**，一调就撞 ⑤5 的 `Game.rng.state` 不变断言（`:972`）。要构造 modifier 场景，⑩/⑪ **直接写 `_mod_*` 两字段**、⑯ **直接调 `_apply_modifier_mult()`**（零 rng、零副作用）——两条合规路径，不要绕道图省事。
 4. 🔴 **`v0 == 0` 一律判红，不许 if 包裹断言**（见 ⑬）。
 5. **`_apply_floor_theme()` 有副作用**：每次都 `Game.mark_codex("themes", rule)`（`:1465`）。探针已多次在调（④/13 号格/⑥），会往图鉴登记主题——**既有行为，非批三引入**，但别据此认为「探针无副作用」。
-6. **出口还原**：⑬ 新建的 slug、`"bombs"` 组里的假炸弹、`player.trail` 注入点、`_mod_*` 两字段，都必须进既有出口还原块（`:1181` 起）。`_mod_*` 的还原值取**探针入口快照**，别还原成 1.0。
+6. **出口还原**：⑬ 新建的 slug、`"bombs"` 组里的假炸弹、`player.trail` 注入点、`_mod_*` 两字段、以及 ⑯ 调 `_apply_modifier_mult()` 改动的 **live 两值**，都必须进既有出口还原块（`:1181` 起）。**还原值一律取探针入口快照，不许还原成 1.0** —— 那会污染本局真实 modifier，属于静默改状态。⑯ 尤其危险：它连 live 值都改了，忘了还原的话后面所有读 `diamond_mult` 的段都会读到最后一个测的 `"glass"` 的 `1.0`。
 
 ### 5.4 分类闭合（须在报告里重算一遍）
 
@@ -258,7 +276,7 @@ PASS = `grep -c "^\[SMOKE-CAL-THEME\] #"` == **103** **且** `grep -c "\[ERR\] c
 
 **E1 是越界探针，不是预期重定。** C2 只改移动表达式、不抽 rng，指纹（`rooms=` 坐标 + `kinds=`）**理论上必须逐字不变**。基线取法：`git checkout ece249d -- scripts/` → 跑 → `git checkout HEAD -- scripts/`。**若指纹出现任何差异 → 说明 C1/C2 越界动了 rng 或地图生成，按红处理，不许写成「预期重定」。**
 
-### 6.2 六把刀（🔴 一律替换目标行，不许新增行）
+### 6.2 七把刀（🔴 一律替换目标行，不许新增行）
 
 批一教训：**新增行会被复位行盖回去**。例如把复位「加在」`_apply_floor_theme()` 尾部，前面的 `= _mod_*` 仍生效 → 变异不生效、探针全绿 → 假绿。每刀改完 `git diff` 应看到**对应行被改**而不是新增。
 
@@ -269,10 +287,12 @@ PASS = `grep -c "^\[SMOKE-CAL-THEME\] #"` == **103** **且** `grep -c "\[ERR\] c
 | **C · pressure 改乘法** | `:1473` → `diamond_mult = _mod_diamond_mult * 1.5` | **⑩ barren + ⑩ swarm 2 条**（1.05 / 2.25） |
 | **D · C2 各去一个乘子** | `:216` / `:298` / `:304` 各删 `* Game.calamity_speed_mult`（**三刀分开做**） | 各 **⑬ 对应 1 条**；⑭ 应仍绿 |
 | **E · 纯函数映射写错** | `"rage": return Vector2(1.25, 1.0)` → `Vector2(1.0, 1.0)` | **⑯1 必红**；⑨ 仅当本局 modifier 恰为 rage 时附带红；⑪ 全绿 |
-| **F · 调用点漏接线** | `_mod_enemy_speed_mult = pair.x` → `= 1.0`（替换该行，**不要删行**） | **⑨ 1 条**（且仅当本局 modifier 命中 rage）；⑯ 全绿、⑪ 全绿 |
+| **F · 调用点漏接线** | `_mod_enemy_speed_mult = pair.x` → `= 1.0`（替换该行，**不要删行**） | **⑨ 1 条**（且仅当本局 modifier 命中 rage）；⑯1 也会红（因 ⑯ 读 live）；⑪ 全绿 |
+| **G · 接错变量** | `_mod_diamond_mult = pair.y` → `= pair.x`（替换该行） | **⑯1 + ⑯2 + ⑯3 三条红**（rage 时 diamond 变 1.25、barren 变 1.0、swarm 变 1.0）；⑨ 视本局 modifier 而定；⑪ 全绿 |
 
-**刀 E / 刀 F 分别对应两层，缺一层就有盲区：**
+**刀 E / 刀 F / 刀 G 分别对应三层，缺一层就有盲区：**
 - **刀 E → ⑯ 必红**，⑪ 全绿——因为 ⑪ 用探针自己写的 `_mod_*`，根本不经映射表。这是「⑪ 再强也测不到映射表」的实证。
+- **刀 G → ⑯ 必红且确定性**（不依赖本局抽签）——这是「把调用点收进 `_apply_modifier_mult()`」换来的唯一好处，**没有这一层，接错变量只能靠 ⑨ 的 1/6 概率撞见**。
 - **刀 F → 只有 ⑨ 红**，⑯ 绿（纯函数没动）、⑪ 绿（探针自写字段）。**跑刀 F 前先用固定 seed 确认本局 modifier 是 rage**，否则这一刀砍下去可能全绿，会误判成「变异无效」。
 
 ### 6.3 负向对照
@@ -299,7 +319,7 @@ PASS = `grep -c "^\[SMOKE-CAL-THEME\] #"` == **103** **且** `grep -c "\[ERR\] c
 ## 8. 交付形态
 
 1. 一个提交，消息写清 `S27 批三：C1 主题倍率回落（_mod_* 分离）+ C2 狂乱四路径接全 + 探针 103 条`。
-2. 报告须含：五门实测表、六把刀实测红集合（与上表逐刀比对，**不一致处如实说明哪条断言结构上抓不到**）、103 条分类闭合、`checked/declared` 实测值。
+2. 报告须含：五门实测表、**七把刀**实测红集合（与上表逐刀比对，**不一致处如实说明哪条断言结构上抓不到**）、103 条分类闭合、`checked/declared` 实测值。
 3. 报告须含 E1 三跑对照的指纹逐字比对结果（**不是「一致」两个字，要贴出三行指纹**）。
 4. 报告须写明：`:815` 与 `:1053` 是**同一次提交内同时改**的，不是分批。
 
