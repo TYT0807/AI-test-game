@@ -120,6 +120,7 @@ var _calamity_frail_cut := 0
 var _calamity_saved_diamond_mult := 1.0
 var _calamity_saved_mag_cap_mult := 1.0
 var _calamity_theme_rule := ""     # S27 复合变体身份：施加瞬间快照主题派生结果，clear 只读它（禁现查 floor_num——陷阱 1：换层时 floor_num 已先自增）
+const _OG_TOAST_TAG := "誓约遗赠"   # S27 批二：遗赠 toast 首词（D01 锚点；探针侧 _OG_TAG 须与本值逐字一致）
 var _calamity_frail_ratio := 0.2   # S27：本层实际虚弱比例（文案按实值显示，见 _calamity_name / _frail_ratio）
 var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
 
@@ -246,6 +247,8 @@ func _ready() -> void:
 			_smoke_meta_probe()
 		if OS.get_environment("SMOKE_CAL_THEME") != "":
 			_smoke_cal_theme_probe()
+		if OS.get_environment("SMOKE_OATH_GRANT") != "":
+			_test_oath_grant()
 
 
 func _process(delta: float) -> void:
@@ -361,6 +364,7 @@ func start_run() -> void:
 	# Sprint 14 C：图鉴发现度被动——开局一次性起始状态（复用既有接口，载体硬约束草案 §5.4）。
 	# 注入在契约同段之后、rng 首抽之前：只改起始状态不改 rng 消耗顺序（E1 零漂移，同上口径）
 	_apply_codex_boons()
+	_oath_grant()   # S27 批二：誓约遗赠（连兑现 → 开局残响）——必须在契约（purse 是赋值会抹前置注入）之后、rng 首抽前（零 rng 纪律）
 	# 每层地图用「由 (run_seed, 层号) 派生」的独立 rng：第 N 层地图只由 (run_seed, N)
 	# 决定，与帧数 / 战斗节奏 / 解锁内容完全无关（解锁档与默认档地图逐字一致）
 	Game.run_seed = Game.rng.seed
@@ -2986,6 +2990,39 @@ static func next_oath_streak(prev: int, H: int, D: int) -> int:
 	return prev + 1 if D == 1 else 0
 
 
+## Sprint 27 批二：连绩档位 → 开局残响回流值（纯函数，零全局读取，零 rng）
+## 封顶 8 < 12（共鸣契约价）：回流单靠自己换不到契约，必须继续打。
+static func _oath_grant_amount(s: int) -> int:
+	if s <= 0:
+		return 0
+	if s == 1:
+		return 3
+	if s == 2:
+		return 5
+	return 8
+
+
+## Sprint 27 批二：誓约遗赠——把上一局的连兑现折成本局开局残响。
+## 载体只能是 Game.diamonds 直写：走既有发放接口会污染 run_diamonds_earned /
+## diamonds_picked（自激「满载而归」）/ _reso_pickups（白送共鸣），三条实读确认。
+## 零 rng、零计时、零新实体。daily 模式一律不发（榜单可比性）。
+func _oath_grant() -> void:
+	if Game.daily_mode:
+		return
+	# 🔴 上局未立誓 → 不发。streak 在 H=0 时永不衰减（next_oath_streak 既定语义），
+	# 若不守这一条，玩家达成 S=3 后「永不再装印记」即可每局白拿 +8 且零风险 → 单向棘轮。
+	if (Game.codex["last_run"].get("oath", {}) as Dictionary).is_empty():
+		return
+	var s := _read_oath_streak()   # 只读一次，档位与文案共用（C08 静态门：读侧恰 3 行）
+	var n := _oath_grant_amount(s)
+	if n <= 0:
+		return
+	Game.diamonds += n
+	Game.diamonds_changed.emit(Game.diamonds)
+	if is_instance_valid(hud):
+		hud.flash_toast("%s · 连兑现 %d 局，开局残响 +%d" % [_OG_TOAST_TAG, s, n])
+
+
 ## ---------------- Sprint 14 C：图鉴发现度被动（开局一次性起始状态） ----------------
 
 ## 落地 boons：shield/diamonds/max_hp/suffix 四类一次性增量。
@@ -3247,3 +3284,561 @@ func _scan_all(n: Node, depth: int) -> void:
 			(sf.get_frame_count(n.animation) if sf else "NULL")])
 	for c in n.get_children():
 		_scan_all(c, depth + 1)
+
+
+## ============================================================================
+## Sprint 27 批二 探针：誓约遗赠（SMOKE_OATH_GRANT=1）
+## 43 条断言，declared 字面量 43。每条后无条件打印 #NN + 实测值。
+## 唯一授予入口 _og_grant()：内部经字符串 call，故全仓授予符号的
+## 带括号字面调用点仍恰 1 处（start_run 内那行）——C08 静态门依赖这一点。
+## 🔴 本段代码内一律只写 `_oath_grant`（不带括号）；带括号的字面量只由 _OG_SYM_GRANT 拼接产生，
+##    否则 C08 全仓扫描会把探针自己的注释/字符串数进去 → 读成 2+ 而假红。
+## 本条探针绝不写盘：不调 Game.save_codex() / set_codex_last_run()。
+## ============================================================================
+
+const _OG_DECLARED := 43
+const _OG_SENTINEL := "__OG_SENTINEL__"
+const _OG_PLAIN_SEED := 12345      # 实测该 seed 不走 barren（口径 §0.4 实验 D：默认档开局 3）
+const _OG_E2E_SEED := 777          # 实测该 seed 掷出 modifier=barren（口径 §0.4 实验 E：13）
+
+var _og_checked := 0
+var _og_sig_cnt := 0               # diamonds_changed 触发次数
+var _og_sig_last := -999999        # 末次实参
+var _og_wire_fail := 0             # 探针是否接上授予函数（字符串 call 无静态检查，必须运行期自证）
+var _og_src: PackedStringArray = []   # game_main.gd 源码行（C08/E04/E05 用）
+var _og_body := Vector2i(-1, -1)      # start_run 函数体 [首行, 末行]（1-based）；E04/E05 只在此范围定位
+var _og_snap := {}
+
+const _OG_SYM_GRANT := "_oath" + "_grant()"   # 值即授予符号的带括号形式，但源码里不构成字面调用
+const _OG_TAG := "誓约遗赠"          # 必须等于生产常量 _OG_TOAST_TAG 的字面值
+
+
+func _test_oath_grant() -> void:
+	_og_snap = _og_snapshot()
+	_og_load_src()
+	Game.diamonds_changed.connect(_og_on_diamonds)
+	print("[SMOKE-OATH-GRANT] entry diamonds=%d last_run_oath=%s streak=%s daily=%s has_grant=%s has_amount=%s" % [
+		Game.diamonds,
+		"empty" if (Game.codex["last_run"].get("oath", {}) as Dictionary).is_empty() else "nonempty",
+		str(Game.codex["last_run"].get("oath_streak", "<none>")),
+		str(Game.daily_mode),
+		str(has_method("_oath_grant")), str(has_method("_oath_grant_amount"))])
+	if not has_method("_oath_grant") or not has_method("_oath_grant_amount"):
+		print("[SMOKE-OATH-GRANT] FATAL 授予函数不存在 → 43 条全部 measured=MISSING 且 ok=false")
+	_og_group_a()
+	_og_group_b()
+	_og_group_c()
+	_og_group_g()
+	_og_group_d()
+	_og_group_f()
+	_og_group_e()          # 🔴 必须最后
+	Game.diamonds_changed.disconnect(_og_on_diamonds)
+	_og_restore()
+	Dev.check(_og_checked == _OG_DECLARED, "oath_grant",
+		"自校验失败: checked(%d) != declared(%d)" % [_og_checked, _OG_DECLARED])
+	Dev.check(_og_wire_fail == 0, "oath_grant",
+		"探针未接上授予函数：字符串 call 无静态检查，_oath_grant 不存在或名字写错（wire_fail=%d）" % _og_wire_fail)
+	print("[SMOKE-OATH-GRANT] done checked=%d declared=%d" % [_og_checked, _OG_DECLARED])
+
+
+# ---------------------------------------------------------------- 基础设施
+
+func _og_on_diamonds(n: int) -> void:
+	_og_sig_cnt += 1
+	_og_sig_last = n
+
+
+func _og_sig_reset() -> void:
+	_og_sig_cnt = 0
+	_og_sig_last = -999999
+
+
+## 每条断言唯一出口：先计数、再 Dev.check、最后无条件 print（顺序不许换）
+func _og_assert(ok: bool, nn: String, what: String, measured, expect) -> void:
+	_og_checked += 1
+	var msg := "%s %s | measured=%s expect=%s" % [nn, what, str(measured), str(expect)]
+	Dev.check(ok, "oath_grant", msg)
+	print("[SMOKE-OATH-GRANT] #%02d %s measured=%s expect=%s ok=%s" % [
+		_og_checked, nn + " " + what, str(measured), str(expect), str(ok)])
+
+
+## 唯一授予漏斗：探针不许直接写授予符号的带括号字面调用（C08 全仓只许 1 处）
+## 🔴 字符串 call 绕过静态检查，函数名写错只在运行期炸 → 必须 has_method 硬检查，不成立判红、不许静默
+func _og_grant() -> void:
+	if not has_method("_oath_grant"):
+		_og_wire_fail += 1
+		print("[SMOKE-OATH-GRANT] wire_fail 探针未接上授予函数（字符串 call 无此方法）")
+		return
+	call(&"_oath_grant")
+
+
+func _og_amount(s: int) -> int:
+	if not has_method("_oath_grant_amount"):
+		return -9999
+	return _oath_grant_amount(s)
+
+
+func _og_oath_ne() -> Dictionary:
+	# oath 非空：B01-B06/B08-B10、C、D、E 全部用它，把「未立誓」这一维留给 B07 独占
+	return {"id": "untouched", "name": "不受伤", "desc": "probe",
+		"done": true, "cur": 9, "need": 9}
+
+
+func _og_set_last_run(oath: Dictionary, streak, with_key: bool) -> void:
+	var lr: Dictionary = Game.codex["last_run"]
+	lr["oath"] = oath.duplicate(true)
+	if with_key:
+		lr["oath_streak"] = streak
+	else:
+		lr.erase("oath_streak")
+	Game.codex["last_run"] = lr
+
+
+## 拉平基线：三通道 + 信号计数 + 哨兵文本。绝不调 _roll_modifier/Data.roll_modifier（抽 rng 撞 F 组）
+func _og_flat(baseline: int = 0) -> void:
+	Game.diamonds = baseline
+	Game.run_diamonds_earned = 0
+	_oath_counters.clear()
+	Game._reso_pickups = 0
+	resonance = 0
+	Game.daily_mode = false
+	if is_instance_valid(hud):
+		hud._toast.text = _OG_SENTINEL
+	_og_sig_reset()
+
+
+func _og_toast() -> String:
+	return hud._toast.text if is_instance_valid(hud) else "<no-hud>"
+
+
+func _og_label() -> String:
+	return hud._diamond_label.text if is_instance_valid(hud) else "<no-hud>"
+
+
+## 只取标签里的数字串——本批 HUD 写法是纯 str(n)（hud.gd:300），按「文本是否等于 str(n)」判，
+## 取不到就打印原文，由核验方看清是格式问题还是数值问题。
+func _og_label_num() -> String:
+	var t := _og_label()
+	var digits := ""
+	for i in t.length():
+		var c := t[i]
+		if c >= "0" and c <= "9":
+			digits += c
+		elif digits != "":
+			break
+	return digits if digits != "" else t
+
+
+# ---------------------------------------------------------------- A 组（9，纯函数）
+
+func _og_group_a() -> void:
+	_og_assert(_og_amount(0) == 0, "A01", "amount(0)=0", _og_amount(0), 0)
+	_og_assert(_og_amount(1) == 3, "A02", "amount(1)=3", _og_amount(1), 3)
+	_og_assert(_og_amount(2) == 5, "A03", "amount(2)=5", _og_amount(2), 5)
+	_og_assert(_og_amount(3) == 8, "A04", "amount(3)=8", _og_amount(3), 8)
+	_og_assert(_og_amount(4) == 8, "A05", "amount(4)=8", _og_amount(4), 8)
+	_og_assert(_og_amount(99) == 8, "A06", "amount(99)=8", _og_amount(99), 8)
+	_og_assert(_og_amount(-1) == 0, "A07", "amount(-1)=0", _og_amount(-1), 0)
+	# A08：13 点手写期望（禁公式）。旁证行不带 #NN
+	var pts := [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	var want := [0, 0, 0, 3, 5, 8, 8, 8, 8, 8, 8, 8, 8]
+	var bad := 0
+	var got_line: Array = []
+	for i in pts.size():
+		var got := _og_amount(int(pts[i]))
+		got_line.append("s=%d→%d" % [int(pts[i]), got])
+		if got != int(want[i]):
+			bad += 1
+	print("[SMOKE-OATH-GRANT] a08 detail: %s" % " ".join(got_line))
+	_og_assert(bad == 0, "A08", "13 点逐点全等", "%d 点错" % bad, "0 点错")
+	# A09：去重集合恰 {0,3,5,8}
+	var seen := {}
+	for s in range(-2, 13):
+		seen[_og_amount(int(s))] = true
+	var keys := seen.keys()
+	keys.sort()
+	var set_ok := keys.size() == 4 and keys.has(0) and keys.has(3) and keys.has(5) and keys.has(8)
+	print("[SMOKE-OATH-GRANT] a09 detail: distinct=%s" % str(keys))
+	_og_assert(set_ok, "A09", "取值集合=={0,3,5,8}", str(keys), "[0, 3, 5, 8]")
+
+
+# ---------------------------------------------------------------- B 组（10，基线探针手工置）
+
+func _og_group_b() -> void:
+	# B01 无 oath_streak 键（oath 非空！）
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 0, false); _og_grant()
+	_og_assert(Game.diamonds == 0, "B01", "无 streak 键→不发", Game.diamonds, 0)
+	# B02 字符串 "3"
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), "3", true); _og_grant()
+	print("[SMOKE-OATH-GRANT] b02 detail: naive_int=%d (必须 3，用来证明不能用朴素 int())" % int("3"))
+	_og_assert(Game.diamonds == 0, "B02", "streak=\"3\"→不发", Game.diamonds, 0)
+	# B03 float 2.9 → 截断 2 → +5
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 2.9, true); _og_grant()
+	_og_assert(Game.diamonds == 5, "B03", "streak=2.9→+5", Game.diamonds, 5)
+	# B04 bool true
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), true, true); _og_grant()
+	_og_assert(Game.diamonds == 0, "B04", "streak=true→不发", Game.diamonds, 0)
+	# B05 负数
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), -5, true); _og_grant()
+	_og_assert(Game.diamonds == 0, "B05", "streak=-5→不发", Game.diamonds, 0)
+	# B06 null
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), null, true); _og_grant()
+	_og_assert(Game.diamonds == 0, "B06", "streak=null→不发", Game.diamonds, 0)
+	# B07 🔴 棘轮：oath 缺键 + streak=3 → 必须 0
+	_og_flat(0); _og_set_last_run({}, 3, true); _og_grant()
+	_og_assert(Game.diamonds == 0, "B07", "oath 空+streak3→不发(棘轮)", Game.diamonds, 0)
+	# B08 oath 非空 + streak=0 → 0 且不扣成负
+	_og_flat(7); _og_set_last_run(_og_oath_ne(), 0, true); _og_grant()
+	_og_assert(Game.diamonds == 7 and Game.diamonds >= 0, "B08",
+		"未兑现→0 且不扣负", Game.diamonds, "7 且 >=0")
+	# B09 基线 7 + streak 3 → 15（唯一抓覆盖式写法）
+	_og_flat(7); _og_set_last_run(_og_oath_ne(), 3, true); _og_grant()
+	_og_assert(Game.diamonds == 15, "B09", "7+8=15 叠加非覆盖", Game.diamonds, 15)
+	# B10 purse 真实路径：X / Y 差值
+	var x10 := _og_purse_case(0)
+	var y10 := _og_purse_case(3)
+	print("[SMOKE-OATH-GRANT] b10 detail: X=%d Y=%d" % [x10, y10])
+	_og_assert(y10 - x10 == 8 and x10 >= 15, "B10", "purse Δ=8 且 X>=15",
+		"X=%d Y=%d Δ=%d" % [x10, y10, y10 - x10], "X>=15 且 Δ=8")
+
+
+## purse 真实路径（走 _apply_sigil_contract，不是手工置 15）
+func _og_purse_case(streak: int) -> int:
+	Game.sigils["equipped"] = "purse"
+	_og_flat(0)
+	_apply_sigil_contract()                      # ← 真实分支：Game.diamonds = 15
+	_og_set_last_run(_og_oath_ne(), streak, true)
+	_og_grant()
+	return Game.diamonds
+
+
+# ---------------------------------------------------------------- C 组（9）
+
+func _og_group_c() -> void:
+	# C01 信号：次数 + 末次实参（只断信号侧；HUD 侧由 G01 单独断）
+	_og_flat(7); _og_set_last_run(_og_oath_ne(), 3, true); _og_grant()
+	print("[SMOKE-OATH-GRANT] c01 detail: sigcnt=%d lastarg=%d diamonds=%d" % [
+		_og_sig_cnt, _og_sig_last, Game.diamonds])
+	_og_assert(_og_sig_cnt >= 1 and _og_sig_last == Game.diamonds, "C01",
+		"信号触发且末参==总值", "cnt=%d last=%d d=%d" % [_og_sig_cnt, _og_sig_last, Game.diamonds], "cnt>=1 last==d")
+	# C02 run_diamonds_earned Δ
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 3, true)
+	var e0 := Game.run_diamonds_earned
+	_og_grant()
+	_og_assert(Game.run_diamonds_earned - e0 == 0, "C02", "run_diamonds_earned Δ=0",
+		Game.run_diamonds_earned - e0, 0)
+	# C03 diamonds_picked Δ
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 3, true)
+	var o0: int = int(_oath_counters.get("diamonds_picked", 0))
+	_og_grant()
+	var o1: int = int(_oath_counters.get("diamonds_picked", 0))
+	_og_assert(o1 - o0 == 0, "C03", "diamonds_picked Δ=0", o1 - o0, 0)
+	# C04 _reso_pickups Δ + resonance Δ（has_resocore=true 才触发该通路）
+	var keep_core: bool = player.has_resocore
+	player.has_resocore = true
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 3, true)
+	var rp0 := Game._reso_pickups
+	var rs0 := resonance
+	_og_grant()
+	var rp1 := Game._reso_pickups
+	var rs1 := resonance
+	player.has_resocore = keep_core
+	_og_assert(rp1 - rp0 == 0 and rs1 - rs0 == 0, "C04", "_reso_pickups Δ=0 且 resonance Δ=0",
+		"resoΔ=%d resonanceΔ=%d" % [rp1 - rp0, rs1 - rs0], "0 且 0")
+	# C05 daily=true → 不发、无 toast
+	_og_flat(7); _og_set_last_run(_og_oath_ne(), 3, true)
+	Game.daily_mode = true
+	_og_grant()
+	var d05 := Game.diamonds
+	var t05 := _og_toast()
+	Game.daily_mode = false
+	_og_assert(d05 == 7 and t05 == _OG_SENTINEL, "C05", "daily 不发且无 toast",
+		"d=%d toast=%s" % [d05, t05], "d=7 toast=" + _OG_SENTINEL)
+	# C06 daily=false → 正常发
+	_og_flat(7); _og_set_last_run(_og_oath_ne(), 3, true); _og_grant()
+	_og_assert(Game.diamonds == 15, "C06", "daily=false 正常 +8", Game.diamonds, 15)
+	# C07 两次完整 start_run 幂等（rng seed+state 双还原；本批唯一未实测项，飘了如实报）
+	var r := _og_e2e_raw(3, "", _OG_E2E_SEED)
+	var r2 := _og_e2e_raw(3, "", _OG_E2E_SEED)
+	print("[SMOKE-OATH-GRANT] c07 detail: run1=%d run2=%d" % [int(r["diamonds"]), int(r2["diamonds"])])
+	_og_assert(int(r["diamonds"]) == int(r2["diamonds"]), "C07", "两次 start_run 残响相同",
+		"%d vs %d" % [int(r["diamonds"]), int(r2["diamonds"])], "相等")
+	# C08 静态门：字面调用点恰 1（排除 func/static func 定义行；词边界防 _test_oath_grant 自命中）
+	var call_lines := _og_grant_call_lines()
+	print("[SMOKE-OATH-GRANT] c08 detail: call_lines=%s" % str(call_lines))
+	_og_assert(call_lines.size() == 1, "C08", "授予符号字面调用点==1",
+		"count=%d lines=%s" % [call_lines.size(), str(call_lines)], 1)
+	# C09 不缓存：3 → 授予 8；改 1 → 再授予应为 3
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 3, true); _og_grant()
+	var after3 := Game.diamonds
+	_og_set_last_run(_og_oath_ne(), 1, true); _og_grant()
+	_og_assert(Game.diamonds - after3 == 3, "C09", "改 streak=1 后 Δ=3（不留 8）",
+		Game.diamonds - after3, 3)
+
+# ---------------------------------------------------------------- G 组（1，真实 HUD 标签）
+
+## 只读用户能看见的那个字符串（hud.gd:300 就是 _diamond_label.text = str(n)）。
+## 禁 mock、禁读 hud 内部缓存字段——「连了信号」是静态事实，「显示对了」必须实测。
+func _og_group_g() -> void:
+	_og_flat(7); _og_set_last_run(_og_oath_ne(), 3, true); _og_grant()
+	var new_total := Game.diamonds                       # 期望 15
+	var lab := _og_label_num()
+	print("[SMOKE-OATH-GRANT] g01 detail: label_raw=%s label_num=%s diamonds=%d" % [
+		_og_label(), lab, Game.diamonds])
+	_og_assert(lab == str(new_total), "G01", "真实 hud 标签数字==Game.diamonds", lab, str(new_total))
+
+
+# ---------------------------------------------------------------- D 组（5，文案）
+
+func _og_group_d() -> void:
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 3, true); _og_grant()
+	var t1 := _og_toast()
+	_og_assert(t1.begins_with(_OG_TAG), "D01", "toast 以「誓约遗赠」开头", t1, _OG_TAG + "…")
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 2, true); _og_grant()
+	var t2 := _og_toast()
+	_og_assert(t2.contains("2 局"), "D02", "含连绩局数 2 局", t2, "…2 局…")
+	_og_assert(t2.contains("+5"), "D03", "含回流实值 +5", t2, "…+5…")
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 0, true); _og_grant()
+	_og_assert(_og_toast() == _OG_SENTINEL, "D04", "streak=0 无 toast（哨兵未变）",
+		_og_toast(), _OG_SENTINEL)
+	var clash := ""
+	for k in Data.OATH_CONDITIONS.keys():
+		if String(Data.OATH_CONDITIONS[k].get("name", "")) == _OG_TAG:
+			clash = String(k)
+	_og_assert(clash == "", "D05", "「誓约遗赠」不与任何誓约名相同", clash, "无同名")
+
+
+# ---------------------------------------------------------------- F 组（2，零 rng）
+
+func _og_group_f() -> void:
+	_og_flat(0); _og_set_last_run(_og_oath_ne(), 3, true)
+	var s0 := Game.rng.seed
+	var fx0 := Game.fx_rng.seed
+	var st0 := Game.rng.state
+	_og_grant()
+	_og_assert(Game.rng.seed == s0 and Game.fx_rng.seed == fx0 and Game.rng.state == st0, "F01",
+		"授予前后 两个 seed + rng.state 不变",
+		"seed %d→%d fx %d→%d state_changed=%s" % [s0, Game.rng.seed, fx0, Game.fx_rng.seed,
+			str(Game.rng.state != st0)], "全不变")
+	var a3a := _og_amount(3)
+	var a3b := _og_amount(3)
+	print("[SMOKE-OATH-GRANT] f02 detail: 静态半边（函数体内不得出现 Game./player.）由 grep + 人工闭合")
+	_og_assert(a3a == a3b, "F02", "同输入两次同输出", "%d vs %d" % [a3a, a3b], "相等")
+
+
+# ---------------------------------------------------------------- E 组（7，🔴 必须最后）
+
+func _og_group_e() -> void:
+	# E01 无印记：控制组 streak=0 vs 处理组 streak=3（同 rng 起点，只断差值）
+	var e1 := _og_e2e_pair(0, 3, "", _OG_PLAIN_SEED)
+	var d1x := int(e1[0]["diamonds"])
+	var d1y := int(e1[1]["diamonds"])
+	print("[SMOKE-OATH-GRANT] e2e run=E01 ctrl diamonds=%d run_seed=%s | treat diamonds=%d run_seed=%s modifier=%s" % [
+		d1x, str(e1[0]["run_seed"]), d1y, str(e1[1]["run_seed"]), str(e1[1]["modifier"])])
+	_og_assert(d1y - d1x == 8, "E01", "E2E 差值 +8", d1y - d1x, 8)
+	# E02 purse
+	var e2 := _og_e2e_pair(0, 3, "purse", _OG_PLAIN_SEED)
+	var d2x := int(e2[0]["diamonds"])
+	var d2y := int(e2[1]["diamonds"])
+	print("[SMOKE-OATH-GRANT] e2e run=E02 ctrl diamonds=%d | treat diamonds=%d" % [d2x, d2y])
+	_og_assert(d2y - d2x == 8 and d2x >= 15, "E02", "purse Δ=8 且 X>=15",
+		"X=%d Y=%d Δ=%d" % [d2x, d2y, d2y - d2x], "X>=15 Δ=8")
+	# E03 seed 777（barren 场景）
+	var e3 := _og_e2e_pair(0, 3, "", _OG_E2E_SEED)
+	var d3x := int(e3[0]["diamonds"])
+	var d3y := int(e3[1]["diamonds"])
+	print("[SMOKE-OATH-GRANT] e2e run=E03 ctrl=%d treat=%d modifier=%s" % [
+		d3x, d3y, str(e3[1]["modifier"])])
+	_og_assert(d3y - d3x == 8, "E03", "barren 场景差值仍 8", d3y - d3x, 8)
+	# E04 / E05 🔴 源码序断言：一次读取算完三个锚点，读失败则两条一起红（不许 PENDING、不许静默跳过）
+	# 三个锚点一律只在 start_run() 函数体内定位（探针自身在文件末尾，天然落在范围外，不吃自己的子串）
+	var gl := _og_lines_in_body(_OG_SYM_GRANT)
+	var sl := _og_lines_in_body("_apply_sigil_contract()")
+	var rl := _og_lines_in_body("Game.run_seed = Game.rng.seed")
+	var g0 := int(gl[0]) if gl.size() > 0 else -1
+	var s1 := int(sl[0]) if sl.size() > 0 else -1
+	var rr := int(rl[0]) if rl.size() > 0 else -1
+	print("[SMOKE-OATH-GRANT] e04e05 detail: body=%s grant_call_lines=%s sigil_call_lines=%s run_seed_lines=%s src_lines=%d" % [
+		str(_og_body), str(gl), str(sl), str(rl), _og_src.size()])
+	# 源码读不到 / start_run 找不到 / 锚点找不到 ⇒ -1 ⇒ 两条同时红（这就是设计意图，不是跳过）
+	_og_assert(g0 > 0 and s1 > 0 and g0 > s1, "E04", "grant 调用行 > sigil 调用行",
+		"grant=%d sigil=%d" % [g0, s1], "grant>sigil>0")
+	_og_assert(g0 > 0 and rr > 0 and g0 < rr, "E05", "grant 调用行 < run_seed 行",
+		"grant=%d run_seed=%d" % [g0, rr], "0<grant<run_seed")
+	# E06 run_seed 逐字相同
+	var rs_a := str(e1[0]["run_seed"])
+	var rs_b := str(e1[1]["run_seed"])
+	_og_assert(rs_a == rs_b, "E06", "两次 run_seed 逐字相同", "%s vs %s" % [rs_a, rs_b], "相等")
+	# E07 地图指纹（房间序 + kinds 序）逐字相同
+	var fp_a := str(e1[0]["fp"])
+	var fp_b := str(e1[1]["fp"])
+	print("[SMOKE-OATH-GRANT] e07 detail: fp_ctrl=%s | fp_treat=%s" % [fp_a, fp_b])
+	_og_assert(fp_a == fp_b, "E07", "层1 地图指纹逐字相同", "equal" if fp_a == fp_b else "DIFF", "equal")
+
+
+## 一对 E2E：控制组/处理组用同一 rng 起点（seed + state 双还原），只变 last_run
+func _og_e2e_pair(streak_ctrl: int, streak_treat: int, sigil: String, seed_value: int) -> Array:
+	var x := _og_e2e_raw(streak_ctrl, sigil, seed_value)
+	var y := _og_e2e_raw(streak_treat, sigil, seed_value)
+	return [x, y]
+
+
+func _og_e2e_raw(streak: int, sigil: String, seed_value: int) -> Dictionary:
+	Game.sigils["equipped"] = sigil
+	Game.daily_mode = false
+	# 控制组也是「立誓未兑现」（oath 非空 + streak=0），不混入「未立誓」这一维
+	Game.codex["last_run"]["oath"] = _og_oath_ne()
+	Game.codex["last_run"]["oath_streak"] = streak
+	# 🔴 双还原：只还原 .state 不够（reset/daily 路径会读 .seed）
+	Game.rng.seed = seed_value
+	Game.rng.state = seed_value * 2654435761                      # 固定起点，避免依赖上一次消耗
+	start_run()
+	return {"diamonds": Game.diamonds, "run_seed": Game.run_seed,
+		"modifier": modifier, "fp": _og_fp()}
+
+
+## 与 _smoke_fingerprint 同一算法，但不打 [SMOKE-META] 前缀
+func _og_fp() -> String:
+	if dungeon == null:
+		return "<no-dungeon>"
+	var coords: Array = []
+	for c in dungeon.rooms.keys():
+		coords.append(c)
+	coords.sort_custom(func(a, b): return str(a) < str(b))
+	var rooms_s: Array = []
+	var kinds_s: Array = []
+	for c in coords:
+		rooms_s.append(str(c))
+		kinds_s.append(String(dungeon.rooms[c].get("kind", "?")))
+	return ",".join(rooms_s) + "|" + ",".join(kinds_s)
+
+
+# ---------------------------------------------------------------- 源码扫描
+# C08  走全仓（「字面调用点全仓恰 1 处」是仓库级事实）
+# E04/E05 走 start_run 函数体（「调用点在契约之后、run_seed 之前」是函数体内事实）
+
+func _og_load_src() -> void:
+	_og_src = []
+	_og_body = Vector2i(-1, -1)
+	var f := FileAccess.open("res://scripts/game_main.gd", FileAccess.READ)
+	if f == null:
+		print("[SMOKE-OATH-GRANT] WARN 读不到 res://scripts/game_main.gd → C08/E04/E05 判红（请从源码目录跑）")
+		return
+	var txt := f.get_as_text()
+	f.close()
+	_og_src = txt.split("\n")
+	_og_body = _og_start_run_body()
+
+
+## 定位 start_run() 函数体：[func 头下一行, 下一个顶层 func 前一行]，1-based；找不到返回 (-1,-1)
+## 🔴 E04/E05 的三个锚点必须在本范围内找，不许全文件扫：
+##    ① 探针函数名 _test_oath_grant 里含「_oath_grant」子串，全景扫会撞到自己；
+##    ② 限死函数体后「调用点在哪」没有歧义（探针追加在文件末尾，天然落在范围外）。
+func _og_start_run_body() -> Vector2i:
+	var s := -1
+	for i in _og_src.size():
+		if _og_src[i].begins_with("func start_run("):
+			s = i
+			break
+	if s < 0:
+		return Vector2i(-1, -1)
+	var last := _og_src.size() - 1
+	for i in range(s + 1, _og_src.size()):
+		var ln: String = _og_src[i]
+		if ln.begins_with("func ") or ln.begins_with("static func ") or ln.begins_with("class "):
+			last = i - 1
+			break
+	return Vector2i(s + 2, last + 1)          # 首行取 func 头下一行（跳过函数签名本身）
+
+
+func _og_is_word(c: String) -> bool:
+	if c == "_":
+		return true
+	if c >= "0" and c <= "9":
+		return true
+	if c >= "a" and c <= "z":
+		return true
+	if c >= "A" and c <= "Z":
+		return true
+	return false
+
+
+## 词边界匹配（左边界）：符号前不能是标识符字符
+## （否则 _test_oath_grant 会被误算成调用点，把 C08 读成 2/3）
+func _og_line_has_sym(line: String, sym: String) -> bool:
+	var i := line.find(sym)
+	while i >= 0:
+		var left_ok := i == 0 or not _og_is_word(line[i - 1])
+		if left_ok:
+			return true
+		i = line.find(sym, i + 1)
+	return false
+
+
+## 全仓 1-based 行号数组（排除 func/static func 定义行）
+## 🔴 不截断探针自身：探针若写了带括号的字面调用，这里就该读出 2 → C08 判红。
+##    为了让这条纪律可执行，探针自己用 _OG_SYM_GRANT 拼接符号，源码里不出现字面量。
+func _og_lines_containing(sym: String, also_exclude_func: bool) -> Array:
+	var out: Array = []
+	for i in _og_src.size():
+		var line: String = _og_src[i]
+		if not _og_line_has_sym(line, sym):
+			continue
+		if line.strip_edges().begins_with("func "):
+			continue
+		if also_exclude_func and line.strip_edges().begins_with("static func "):
+			continue
+		out.append(i + 1)
+	return out
+
+
+## start_run 函数体 1-based 行号数组（E04/E05 专用；范围外一律不算，读不到源码则为空）
+func _og_lines_in_body(sym: String) -> Array:
+	var out: Array = []
+	if _og_body.x < 0:
+		return out
+	for ln in range(_og_body.x, _og_body.y + 1):
+		if ln - 1 < _og_src.size() and _og_line_has_sym(_og_src[ln - 1], sym):
+			out.append(ln)
+	return out
+
+
+func _og_grant_call_lines() -> Array:
+	return _og_lines_containing(_OG_SYM_GRANT, true)
+
+
+# ---------------------------------------------------------------- 现场快照与还原
+
+func _og_snapshot() -> Dictionary:
+	var t: String = hud._toast.text if is_instance_valid(hud) else ""
+	return {
+		"equipped": String(Game.sigils.get("equipped", "")),
+		"codex": Game.codex.duplicate(true),          # 深拷贝：本探针只改内存态
+		"daily": Game.daily_mode,
+		"has_resocore": player.has_resocore if is_instance_valid(player) else false,
+		"diamonds": Game.diamonds,
+		"earned": Game.run_diamonds_earned,
+		"reso_pickups": Game._reso_pickups,
+		"resonance": resonance,
+		"toast": t,
+	}
+
+
+## 🔴 E 组会重建地图/player，运行状态不做完整还原（如实声明，不假装还原了）；
+## 只还原「会污染其它探针」的全局配置与存档内存态。
+func _og_restore() -> void:
+	Game.sigils["equipped"] = String(_og_snap.get("equipped", ""))
+	Game.codex = (_og_snap.get("codex", {}) as Dictionary).duplicate(true)
+	Game.daily_mode = bool(_og_snap.get("daily", false))
+	if is_instance_valid(player):
+		player.has_resocore = bool(_og_snap.get("has_resocore", false))
+	Game.diamonds = int(_og_snap.get("diamonds", 0))
+	Game.run_diamonds_earned = int(_og_snap.get("earned", 0))
+	Game._reso_pickups = int(_og_snap.get("reso_pickups", 0))
+	resonance = int(_og_snap.get("resonance", 0))
+	if is_instance_valid(hud):
+		hud._toast.text = String(_og_snap.get("toast", ""))
+		hud._diamond_label.text = str(Game.diamonds)
+	Game.diamonds_changed.emit(Game.diamonds)
+	print("[SMOKE-OATH-GRANT] restore equipped=%s daily=%s diamonds=%d（E 组运行态不还原，已声明）" % [
+		String(Game.sigils.get("equipped", "")), str(Game.daily_mode), Game.diamonds])
