@@ -1557,10 +1557,12 @@ func _floor_sign_probe() -> void:
 	Game._flush_flavor_toast()
 	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层"), "flavor",
 		"S22 D: 单条首发现维持原格式（%s）" % String(Game.main.hud._toast.text))
-	# ---------------- Sprint 22 附限定①：deferred 生产调度路径常驻断言 ----------------
-	# 直调冲洗之外的 call_deferred 帧末调度由此获得覆盖：预置哨兵假 toast → 同帧 3 条白名单
-	# 首发现（清 pending 隔离其它探针残留）→ 不直调冲洗，仅靠帧界 deferred → 哨兵被覆盖即证
-	# 生产调度路径真实生效（×9 诊断暴露的时序不确定性由此获得常驻回归锁）
+	# ---------------- Sprint 22 附限定①：聚合冲洗结果断言（确定性直调版） ----------------
+	# 【Sprint 24 降级登记——主理人处方 2】本断言原为 deferred 生产调度路径回归锁
+	# （回调经 call_deferred 排队列尾、FIFO 排在 3 次冲洗之后）；S23 三次跑绿 2 红 1 实录证明
+	# `await process_frame` 恢复点与帧末冲洗存在竞态，回调版间歇假红——**降级为直调冲洗断言**：
+	# 验聚合冲洗逻辑（确定性），deferred 调度路径的常驻回归锁暂缺，登记为已知限制（Sprint 24/25 候选）。
+	# 【Sprint 24 观察①②随批落地】完成标记移入探针侧 / floor_num 恢复点后移——见本块末尾注释
 	Game._flavor_pending.clear()
 	Game.main.hud.flash_toast("哨兵文本")
 	# 三条均先撤销既有发现（smoke 档可能已有）——保证首发现路径可测，否则 mark 早退不入缓冲
@@ -1570,14 +1572,11 @@ func _floor_sign_probe() -> void:
 	Game.mark_codex("themes", "toxic")
 	Game.mark_codex("bosses", "demon")
 	Game.mark_codex("shrine", "ore_upgrade")
-	# Sprint 22 附限定①（主理人订正处方 1 + 竞态终解）：断言**移进回调体内**——回调经
-	# call_deferred 排入同一 deferred 队列尾部（FIFO 保证排在 3 次 _flush_flavor_toast 冲洗
-	# 之后），断言在真实生产调度路径上原地执行；零 await、零恢复点竞态（×9 诊断与 S23
-	# 三次跑绿 2 红 1 的实录证明 await process_frame 恢复点与帧末冲洗存在竞态）
-	var check_cb: Callable = func() -> void:
-		Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
-			"附限定①: deferred 生产路径聚合（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
-	check_cb.call_deferred()
+	Game._flush_flavor_toast()   # 直调冲洗：聚合逻辑断言（确定性）；F1-F3 的 deferred 排队此后各自空转
+	Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
+		"附限定①: 聚合冲洗结果（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
+	# Sprint 24 观察①：完成标记保留探针侧打印（时序确定——回调版已降级，见上方降级登记）
+	# Sprint 24 观察②：floor_num 恢复点位于断言之后——回调内若加依赖 floor_num 的断言会踩坑（当前无回调）
 	Game.floor_num = bak_floor
 	print("[SMOKE-FLOOR-SIGN] done")
 
@@ -1988,9 +1987,11 @@ func _abyss_probe() -> void:
 func _streak_probe() -> void:
 	await get_tree().create_timer(0.6, true).timeout
 	var gm: Node = Game.main
-	# V1 纯函数四态真差值（先断言输入互不相同——四态断言的前提）
-	Dev.check([0, 1, 1] != [3, 1, 1] and [3, 1, 1] != [3, 1, 0] and [3, 1, 0] != [3, 0, 1], "streak",
-		"V1 前提: 四组输入互不相同")
+	# V1 纯函数四态真差值（先断言输入互不相同——四态断言的前提）。
+	# Sprint 24 观察⑥：前提校验扩为全 6 对互异（原 3 对 → 全量；信息级、不计绿灯）
+	Dev.check([0, 1, 1] != [3, 1, 1] and [0, 1, 1] != [3, 1, 0] and [0, 1, 1] != [3, 0, 1]
+		and [3, 1, 1] != [3, 1, 0] and [3, 1, 1] != [3, 0, 1] and [3, 1, 0] != [3, 0, 1], "streak",
+		"V1 前提: 四组输入全 6 对互不相同")
 	Dev.check(gm.next_oath_streak(0, 1, 1) == 1 and gm.next_oath_streak(3, 1, 1) == 4
 		and gm.next_oath_streak(3, 1, 0) == 0 and gm.next_oath_streak(3, 0, 1) == 3, "streak",
 		"V1: f 四态 (0,1,1)=1 / (3,1,1)=4 / (3,1,0)=0 / (3,0,1)=3")
@@ -2032,12 +2033,13 @@ func _streak_probe() -> void:
 	Game.codex["last_run"]["oath"] = gm.oath_fulfillment()
 	Game.codex["last_run"]["oath_streak"] = 4
 	Game.main.menu.show_page("codex")
-	Dev.check(_scan_codex_label("连绩 · ") == "连绩 · 4 局", "streak",
-		"V4: streak=4 渲染「连绩 · 4 局」（%s）" % _scan_codex_label("连绩 · "))
+	# Sprint 24 交叉陈述适配：连绩行追加发现度段——S23 精确断言改子串断言（原文本子串保留）
+	Dev.check(_scan_codex_label("连绩 · ").contains("连绩 · 4 局"), "streak",
+		"V4: streak=4 渲染含「连绩 · 4 局」（%s）" % _scan_codex_label("连绩 · "))
 	Game.codex["last_run"]["oath_streak"] = 7
 	Game.main.menu.show_page("codex")
-	Dev.check(_scan_codex_label("连绩 · ") == "连绩 · 7 局", "streak",
-		"V4 真差值: streak=7 渲染「连绩 · 7 局」（%s）" % _scan_codex_label("连绩 · "))
+	Dev.check(_scan_codex_label("连绩 · ").contains("连绩 · 7 局"), "streak",
+		"V4 真差值: streak=7 渲染含「连绩 · 7 局」（%s）" % _scan_codex_label("连绩 · "))
 	# V6 T1 用词区分：新前缀 + 既有「本局誓约」一字不变
 	Dev.check(_scan_codex_label("本局誓约") != "", "streak", "V6: 既有「本局誓约」行仍在（一字未改）")
 	# V5：H=0（oath 空）→ 连绩行不创建（即便 streak 键存在——I3 后半）。
@@ -2049,8 +2051,8 @@ func _streak_probe() -> void:
 	Game.codex["last_run"]["oath"] = gm.oath_fulfillment()
 	Game.codex["last_run"]["oath_streak"] = 7
 	Game.main.menu.show_page("sigils")
-	Dev.check(_scan_codex_label("上局连绩 · ") == "上局连绩 · 7 局", "streak",
-		"V6: 印记页「上局连绩 · 7 局」")
+	Dev.check(_scan_codex_label("上局连绩 · ").contains("上局连绩 · 7 局"), "streak",
+		"V6: 印记页「上局连绩 · 7 局」（%s）" % _scan_codex_label("上局连绩 · "))
 	Dev.check(_scan_codex_label("上局誓约") != "", "streak", "V6: 既有「上局誓约」行仍在")
 	# V3：旧档无键 + 坏档非数值 → 读侧归 0（三道防线之一；不迁移不补写不改 load_codex）
 	Game.codex["last_run"].erase("oath_streak")
@@ -2078,6 +2080,56 @@ func _streak_probe() -> void:
 	Game.load_codex()
 	Dev.check(not (Game.codex["last_run"] as Dictionary).has("oath_streak"), "streak",
 		"n8: 无参直调（哨兵 -1）不写 streak 键")
+	# ---------------- Sprint 24 B：发现度档 + 三刻度交叉（零字段，验渲染真差值） ----------------
+	# 构造两档达成（enemies_5 + relics_4）——mark_codex 走真实登记路径（SMOKE 隔离档累积）；
+	# 全清六类消除探针间状态累积（前跑 4/4 vs 2/4 前置矛盾即此——隔离后增量构造）
+	for k in Game.CODEX_KINDS:
+		Game.codex[k] = []
+	Game.mark_codex("enemies", "goblin")
+	Game.mark_codex("enemies", "rusher")
+	Game.mark_codex("enemies", "skeleton")
+	Game.mark_codex("enemies", "zombie")
+	Game.mark_codex("enemies", "orc")
+	Dev.check(Game.codex_boons().size() == 1, "streak", "S24 状态 A: 1/4 档达成")
+	Game.main.menu.show_page("codex")
+	Dev.check(_scan_codex_label("发现度 · ") == "发现度 · 1/4 档", "streak",
+		"S24: 发现度档渲染 1/4（%s）" % _scan_codex_label("发现度 · "))
+	# 状态 B：+4 遗物 → 2/4 档（真差值：渲染跟变）
+	Game.mark_codex("relics", "fang")
+	Game.mark_codex("relics", "thorn")
+	Game.mark_codex("relics", "bounce")
+	Game.mark_codex("relics", "frost")
+	Game.main.menu.show_page("codex")
+	Dev.check(_scan_codex_label("发现度 · ") == "发现度 · 2/4 档", "streak",
+		"S24 真差值: 2/4 档跟变（%s）" % _scan_codex_label("发现度 · "))
+	# 交叉陈述：复盘行追加连绩段+发现度段；连绩行追加发现度段（原文本子串保留）
+	Game.codex["last_run"]["oath_streak"] = 2
+	Game.main.menu.show_page("codex")
+	var replay_seg: String = _scan_codex_label("上局复盘 · ")
+	Dev.check(replay_seg.contains("发现度 · 2/4 档") and replay_seg.contains("连绩 · 2 局")
+		and replay_seg.begins_with("上局复盘 · 最深"), "streak",
+		"S24: 复盘行交叉陈述（%s）" % replay_seg)
+	Dev.check(_scan_codex_label("连绩 · ").contains("发现度 · 2/4 档"), "streak",
+		"S24: 连绩行交叉陈述（发现度追加）")
+	# 零副作用：show_page 前后 codex 深拷贝一致（同步段不跨 await——per-call 快照）
+	var c_b4: Dictionary = Game.codex.duplicate(true)
+	Game.main.menu.show_page("codex")
+	Dev.check(Game.codex.duplicate(true) == c_b4, "streak",
+		"S24: show_page 零副作用（codex 深拷贝一致）")
+	# 空判：全清六类 → 0 达成 → 发现度 Label 不创建（非建后隐藏——S24 空判）
+	for k in Game.CODEX_KINDS:
+		Game.codex[k] = []
+	Game.main.menu.show_page("codex")
+	Dev.check(_scan_codex_label("发现度 · ") == "", "streak", "S24 空判: 0 达成 → 不创建")
+	# 负向对照③（数据级）：交叉陈述无评价词（禁「建议 / 最优 / 优先 / 划算」——T1 词族纪律）
+	var banned := ["建议", "最优", "优先", "划算"]
+	var no_advice := true
+	for c in Game.main.menu._rows.get_children():
+		if c is Label:
+			for bw in banned:
+				if String(c.text).contains(bw):
+					no_advice = false
+	Dev.check(no_advice, "streak", "S24 负向③: 复盘页无评价词")
 	print("[SMOKE-STREAK] done")
 
 

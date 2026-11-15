@@ -338,6 +338,8 @@ func mark_codex(kind: String, id: String) -> void:
 		var fv: String = String(Data.FLAVOR.get(kind + "/" + id, ""))
 		if fv != "":
 			_flavor_pending.append(fv)
+			if OS.get_environment("SMOKE_FLOOR_SIGN") != "":
+				print("[SMOKE-TOAST] buffer kind=%s id=%s frame=%d pending=%d main_valid=%s" % [kind, id, Engine.get_process_frames(), _flavor_pending.size(), is_instance_valid(main)])
 			call_deferred("_flush_flavor_toast")
 
 

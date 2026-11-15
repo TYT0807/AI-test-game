@@ -384,6 +384,18 @@ func show_page(page: String, back := "") -> void:
 ## 平行页：不读不写 meta.gd UNLOCKS（冻结规格 v2.10）
 func _build_codex() -> void:
 	var lr: Dictionary = Game.codex.get("last_run", {})
+	# Sprint 24 B：三刻度交叉陈述——发现度档只读派生自 codex_boons()（零字段零写盘、
+	# 纯展示零数值回注、不入分母不调 mark_codex——P0 自激红线延续）；分母单源 CODEX_BOONS.size()。
+	# 词族 T1：前缀「发现度 · 」不复用既有「本局誓约 / 上局誓约 / 连绩 · / 上局连绩 · 」；
+	# 状态标签非攻略——禁「建议 / 最优 / 优先 / 划算」等评价词（探针负向对照）
+	var boons: Dictionary = Game.codex_boons()
+	var boon_seg := ""
+	if boons.size() > 0:
+		boon_seg = "发现度 · %d/%d 档" % [boons.size(), Data.CODEX_BOONS.size()]
+	var streak_seg := ""
+	var skey = lr.get("oath_streak", null)
+	if skey != null and (skey is int or skey is float):
+		streak_seg = ("连绩 · %d 局" % maxi(int(skey), 0)) if int(skey) >= 1 else "连绩 · 断了"
 	var replay := Label.new()
 	if lr.is_empty():
 		replay.text = "上局复盘：暂无记录（完成一局后生成）"
@@ -392,6 +404,12 @@ func _build_codex() -> void:
 		replay.text = "上局复盘 · 最深 %d 层 · 击杀 %d · 源石 %d · 用时 %d:%02d · 得分 %d" % [
 			int(lr.get("max_floor", 0)), int(lr.get("kills", 0)), int(lr.get("diamonds", 0)),
 			t / 60, t % 60, int(lr.get("score", 0))]
+		# Sprint 24 B：交叉陈述——既有行内追加只读文本（原文本一字不改、子串保留）；
+		# 空段条件跳过（达成 0 档不显「0/4」——S24 空判精神）
+		if streak_seg != "":
+			replay.text += " ｜ " + streak_seg
+		if boon_seg != "":
+			replay.text += " ｜ " + boon_seg
 	replay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	replay.add_theme_font_size_override("font_size", 15)
 	replay.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))
@@ -417,11 +435,21 @@ func _build_codex() -> void:
 		var s_next := maxi(int(streak_v), 0)
 		var sl := Label.new()
 		sl.text = ("连绩 · %d 局" % s_next) if s_done else "连绩 · 断了"
+		if boon_seg != "":
+			sl.text += " ｜ " + boon_seg   # Sprint 24 B：交叉陈述（原文本子串保留，零新增控件/颜色通道）
 		sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		sl.add_theme_font_size_override("font_size", 14)
 		sl.add_theme_color_override("font_color",
 			Color(0.6, 0.95, 0.7) if s_done else Color(0.72, 0.75, 0.82))
 		_rows.add_child(sl)
+	# Sprint 24 B：发现度档独立行（达成档数 0 → 整个 Label 不创建，非建后隐藏——S24 空判）
+	if boons.size() > 0:
+		var bl := Label.new()
+		bl.text = boon_seg
+		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bl.add_theme_font_size_override("font_size", 14)
+		bl.add_theme_color_override("font_color", Color(0.78, 0.82, 0.9))
+		_rows.add_child(bl)
 	var echo: Dictionary = lr.get("echo", {})
 	if int(echo.get("count", 0)) > 0:
 		var names := []
