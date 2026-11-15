@@ -123,6 +123,8 @@ var _calamity_theme_rule := ""     # S27 复合变体身份：施加瞬间快照
 const _OG_TOAST_TAG := "誓约遗赠"   # S27 批二：遗赠 toast 首词（D01 锚点；探针侧 _OG_TAG 须与本值逐字一致）
 var _calamity_frail_ratio := 0.2   # S27：本层实际虚弱比例（文案按实值显示，见 _calamity_name / _frail_ratio）
 var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
+var _mod_enemy_speed_mult := 1.0   # S27 批三：modifier 贡献的敌速倍率（与主题贡献分离）
+var _mod_diamond_mult := 1.0       # S27 批三：modifier 贡献的残响倍率（同上——live 值 = _mod_* + 主题 maxf）
 
 
 func _ready() -> void:
@@ -651,7 +653,7 @@ func _clear_calamity_effects() -> void:
 ## 故入口无条件打印、每条断言伴随无条件 #NN 行、末尾 done checked=… 并自校验 checked==declared。
 ## 三段式（§5.2）：段1 施加 → 段2 换层精确还原 → 段3 再施加幂等；换层构造复刻 next_floor
 ## 生产顺序（game_main.gd:1505-1509：floor 自增 → clear → 清 id → 主题），禁用真实 next_floor()。
-const _CT_DECLARED := 76  # A 组 66 + B 组 10（③ 两时变格 × 5 段）
+const _CT_DECLARED := 103  # 批一 76 + ⑮2 + ⑧8 + ⑨1 + ⑩3 + ⑪3 + ⑫1 + ⑬4 + ⑭1 + ⑯4
 
 # A 组 6 变体格：[楼层, 灾祸, 施加期望, 还原期望, 主题 rule 字面量]（frail 的还原期望是 max_hp）
 const _CT_VARIANTS := [
@@ -723,6 +725,41 @@ func _ct_floor_advance(nf: int) -> void:
 	_clear_calamity_effects()
 
 
+## S27 批三 ⑬：同一 slug 上 csm 1.0 → 1.25 两次驱动，返回 [v0, v1]（velocity 模长）。
+## 调用方保证 setup/环境就绪；碰撞层已清零，move_and_slide 不改 velocity。
+func _ct_c2_pair(s: Slug, home: Vector2) -> Array:
+	Game.calamity_speed_mult = 1.0
+	s.global_position = home
+	s._knock = Vector2.ZERO
+	s._physics_process(Game.FIXED_DT)
+	var v0: float = s.velocity.length()
+	Game.calamity_speed_mult = 1.25
+	s.global_position = home
+	s._knock = Vector2.ZERO
+	s._physics_process(Game.FIXED_DT)
+	var v1: float = s.velocity.length()
+	Game.calamity_speed_mult = 1.0
+	return [v0, v1]
+
+
+## S27 批三 ⑭：csm 恒 1.0，Game.enemy_speed_mult 1.0 → 1.25 两次驱动，返回 [w0, w1]。
+## 🔴 必须写 Game（game_state）的 enemy_speed_mult——移动表达式读的是它（game_state:63，
+## 减速 tween 通道）；game_main 的同名成员只在 slug setup 烘焙时被读，写它比值不动（⑭ 首跑实证）。
+## speed 在 setup() 时已烘焙，live 改 esm 不改 speed——比值只有显式一项贡献。
+func _ct_c2_esm_pair(s: Slug, home: Vector2) -> Array:
+	Game.enemy_speed_mult = 1.0
+	s.global_position = home
+	s._knock = Vector2.ZERO
+	s._physics_process(Game.FIXED_DT)
+	var w0: float = s.velocity.length()
+	Game.enemy_speed_mult = 1.25
+	s.global_position = home
+	s._knock = Vector2.ZERO
+	s._physics_process(Game.FIXED_DT)
+	var w1: float = s.velocity.length()
+	return [w0, w1]
+
+
 func _smoke_cal_theme_probe() -> void:
 	print("[SMOKE-CAL-THEME] entry floor=%d calamity=%s" % [Game.floor_num, _calamity])
 	# 现场快照（出口统一还原——多探针并发污染防线，player.gd:746 实证做法）
@@ -731,6 +768,10 @@ func _smoke_cal_theme_probe() -> void:
 	var save_theme_rule := _theme_rule
 	var save_dm := diamond_mult
 	var save_esm := enemy_speed_mult
+	var save_mod_es := _mod_enemy_speed_mult   # S27 批三：出口从快照还原 _mod_*（不许还原成 1.0——那会污染本局真实 modifier）
+	var save_mod_d := _mod_diamond_mult
+	var real_mod_es := _mod_enemy_speed_mult   # ⑨ 用：真实调用点接线值（④/⑥4 归一会改字段，故入口先存）
+	var real_mod_d := _mod_diamond_mult
 	var save_csm: float = Game.calamity_speed_mult
 	var save_mc: float = player.mag_cap_mult
 	var save_mhp: int = player.max_hp
@@ -759,9 +800,11 @@ func _smoke_cal_theme_probe() -> void:
 		_apply_calamity()
 		_ct_assert(is_equal_approx(_ct_channel(id), float(bp2[0])), "②%s 段1 施加=基线" % id, _ct_channel(id), bp2[0])
 		_ct_floor_advance(3)
+		# S27 批三：读数前移到主题重建之前（⑮ 同型）——C1 后 _apply_floor_theme 会把 diamond
+		# 回落到 _mod_*，段2 若读重建后的值就变成「验复位不验还原」，barren/swarm 局红在正确实现上
+		_ct_assert(is_equal_approx(_ct_cleared_value(id), float(bp2[1])), "②%s 段2 换层还原" % id, _ct_cleared_value(id), bp2[1])
 		_calamity = ""
 		_apply_floor_theme()
-		_ct_assert(is_equal_approx(_ct_cleared_value(id), float(bp2[1])), "②%s 段2 换层还原" % id, _ct_cleared_value(id), bp2[1])
 		Game.floor_num = 2
 		_calamity = id
 		_apply_calamity()
@@ -791,6 +834,10 @@ func _smoke_cal_theme_probe() -> void:
 		_calamity = ""
 
 	# ---- ④ 覆盖补全（9）：换层时序 4 + 幂等 4 + 零分支扫描 1 ----
+	# S27 批三 §4 段级归一：④ 段读 diamond 的地方（④a ore / ④c 13 号格）落在无 pressure 分支层或
+	# 依赖 saved，先显式把 _mod_* 归一到 1.0（出口统一从入口快照还原，不污染本局真实 modifier）
+	_mod_enemy_speed_mult = 1.0
+	_mod_diamond_mult = 1.0
 	# ④a 换层时序（4）：各灾祸经换层构造后通道精确还原
 	_ct_reset_channels()
 	Game.floor_num = 5
@@ -814,9 +861,12 @@ func _smoke_cal_theme_probe() -> void:
 	_calamity = "scarce_ore"
 	_apply_calamity()
 	_ct_floor_advance(7)
+	# ⑮1 真值前移：clear 刚跑完、主题还没重建——此刻 diamond 必须是 1.5（变异 D 唯一可观测点；
+	# 主题重建后读数被 C1 复位掩蔽，见实施单首批必读 #2）
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑮1 ④ore 换层 clear 后、主题重建前 diamond==1.5", diamond_mult, 1.5)
 	_calamity = ""
 	_apply_floor_theme()
-	_ct_assert(is_equal_approx(diamond_mult, 1.5), "④换层时序 ore@pressure: 还原到主题承诺 1.5", diamond_mult, 1.5)
+	_ct_assert(is_equal_approx(diamond_mult, 1.0), "④换层时序 ore@pressure: 主题重建后回落 _mod_*（段级归一 1.0）", diamond_mult, 1.0)
 	_ct_reset_channels()
 	Game.floor_num = 5
 	_calamity = "frenzy"
@@ -1045,6 +1095,9 @@ func _smoke_cal_theme_probe() -> void:
 		_calamity = ""
 	_ct_assert(rule_bad.is_empty(), "⑥1 施加后快照==目标层 rule（只验标志）", rule_bad, "0 违例")
 	# ⑥2 + ⑥4 共用 6→7 真实路径构造（pressure → scarce_ore → 换层）
+	# S27 批三 §4 段级归一：⑥4 段读 diamond 落在第 7 层复位值，先归一 _mod_*（互不依赖 ④ 段）
+	_mod_enemy_speed_mult = 1.0
+	_mod_diamond_mult = 1.0
 	_ct_reset_channels()
 	Game.floor_num = 6
 	_apply_floor_theme()
@@ -1052,9 +1105,11 @@ func _smoke_cal_theme_probe() -> void:
 	_apply_calamity()
 	_ct_floor_advance(7)
 	_ct_assert(_calamity_theme_rule == "", "⑥2 换层 clear 后快照清空（变异 D 正面靶子，只验标志）", _calamity_theme_rule, "空串")
+	# ⑮2 真值前移：同 ⑮1——主题重建前 diamond 必为 1.5，重建后读数被 C1 复位掩蔽
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑮2 ⑥4 换层 clear 后、主题重建前 diamond==1.5", diamond_mult, 1.5)
 	_calamity = ""
 	_apply_floor_theme()
-	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑥4 6→7 换层后 diamond_mult 精确还原==1.5（变异 D 行为靶子）", diamond_mult, 1.5)
+	_ct_assert(is_equal_approx(diamond_mult, 1.0), "⑥4 6→7 主题重建后 diamond_mult 回落 _mod_*（段级归一 1.0）", diamond_mult, 1.0)
 	# ⑥3 + ⑥5 共用净化路径构造（floor 6 pressure）
 	_ct_reset_channels()
 	Game.floor_num = 6
@@ -1182,12 +1237,180 @@ func _smoke_cal_theme_probe() -> void:
 	_clear_calamity_effects()
 	_calamity = ""
 
+	# ---- ⑧ 离压回落（8）：_mod_*=1.0 → pressure 顶到 1.3/1.5 → 各目标层回落（每条双值 and 链）----
+	_mod_enemy_speed_mult = 1.0
+	_mod_diamond_mult = 1.0
+	for f in [4, 5, 6, 7, 8, 9, 10, 11]:
+		_ct_reset_channels()
+		Game.floor_num = 6
+		_apply_floor_theme()
+		Game.floor_num = int(f)
+		_apply_floor_theme()
+		var we8: float = 1.3 if int(f) == 6 else 1.0
+		var wd8: float = 1.5 if int(f) == 6 else 1.0
+		_ct_assert(is_equal_approx(enemy_speed_mult, we8) and is_equal_approx(diamond_mult, wd8),
+			"⑧f%d 离压回落（双值）" % int(f),
+			"(es=%s, dm=%s)" % [enemy_speed_mult, diamond_mult], "(es=%s, dm=%s)" % [we8, wd8])
+	# ---- ⑨ _mod_* 接线巡检（1，只验标志）：真实调用点有没有把返回值接上（映射对错归 ⑯ 管）----
+	# 用入口快照值：④/⑥4 段级归一已改写字段，只有入口值还代表真实 start_run 的接线结果
+	var og_table := {"rage": Vector2(1.25, 1.0), "barren": Vector2(1.0, 0.7),
+		"swarm": Vector2(1.0, 1.5), "none": Vector2(1.0, 1.0),
+		"overload": Vector2(1.0, 1.0), "glass": Vector2(1.0, 1.0)}
+	var want_pair: Vector2 = og_table.get(modifier, Vector2(1.0, 1.0))
+	_ct_assert(is_equal_approx(real_mod_es, want_pair.x) and is_equal_approx(real_mod_d, want_pair.y),
+		"⑨ 接线巡检（只验标志，⑨绿不代表映射表对）",
+		"m=%s got=(%s,%s)" % [modifier, real_mod_es, real_mod_d],
+		"%s→(%s,%s)" % [modifier, want_pair.x, want_pair.y])
+	# ---- ⑩ modifier × pressure（3，🔴 maxf 掩蔽：只对「maxf 改乘法」这一种错误有效，有效覆盖按 0 计 ----
+	_mod_enemy_speed_mult = 1.25
+	Game.floor_num = 6
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(enemy_speed_mult, 1.3), "⑩a rage×pressure（maxf 掩蔽组）", enemy_speed_mult, 1.3)
+	_mod_diamond_mult = 0.7
+	Game.floor_num = 6
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑩b barren×pressure（maxf 掩蔽组）", diamond_mult, 1.5)
+	_mod_diamond_mult = 1.5
+	Game.floor_num = 6
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑩c swarm×pressure（maxf 掩蔽组）", diamond_mult, 1.5)
+	# ---- ⑪ modifier × 非压力层（3，C1 正面靶子：压力层上 maxf 会吃掉差异，必须选第 7 层 silent）----
+	_mod_enemy_speed_mult = 1.25
+	Game.floor_num = 7
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(enemy_speed_mult, 1.25), "⑪a rage@第7层（C1 正面靶子）", enemy_speed_mult, 1.25)
+	_mod_diamond_mult = 0.7
+	Game.floor_num = 7
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 0.7), "⑪b barren@第7层（C1 正面靶子）", diamond_mult, 0.7)
+	_mod_diamond_mult = 1.5
+	Game.floor_num = 7
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑪c swarm@第7层（C1 正面靶子）", diamond_mult, 1.5)
+	# ---- ⑫ 无主题层早退（1）：复位在早退分支之前，1–3 层也必须回落（专打「复位写在早退后」错法）----
+	_mod_enemy_speed_mult = 1.25
+	_mod_diamond_mult = 0.7
+	Game.floor_num = 6
+	_apply_floor_theme()
+	Game.floor_num = 3
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(enemy_speed_mult, 1.25) and is_equal_approx(diamond_mult, 0.7),
+		"⑫ 无主题层（f3）回落到 _mod_*（双值）",
+		"(es=%s, dm=%s)" % [enemy_speed_mult, diamond_mult], "(es=1.25, dm=0.7)")
+	# ---- ⑬ C2 四路径（4）+ ⑭ 零回归（1）：真 Slug 实例驱动 _physics_process，比值判定 ----
+	# 🔴 v0==0 必红（fold 进比值 and 链——v0=0 说明探针未造出目标，静默跳过=最典型假绿写法）
+	var s13 := Slug.new()
+	entities.add_child(s13)
+	var bomb13 := Node2D.new()
+	bomb13.add_to_group("bombs")
+	entities.add_child(bomb13)
+	var trail_keep: Array[Vector2] = player.trail.duplicate()
+	s13.collision_layer = 0   # 探针驱动 move_and_slide 不与房间实体碰撞——velocity 读数才可做比值
+	s13.collision_mask = 0
+	var pos13: Vector2 = Game.main.clamp_to_arena(player.global_position + Vector2(220, 0))
+	Game.calamity_speed_mult = 1.0
+	# ⑬1 defuser 冲向炸弹（真 bomb 在 240 内、>18px 不触发 defuse）
+	s13.setup("rusher", 1, 8)
+	s13.defuser = true
+	bomb13.global_position = Game.main.clamp_to_arena(player.global_position + Vector2(100, 0))
+	var pa13 := _ct_c2_pair(s13, pos13)
+	_ct_assert(float(pa13[0]) > 0.0 and is_equal_approx(float(pa13[1]) / float(pa13[0]), 1.25),
+		"⑬1 defuser 冲炸弹 csm 比值 1.25（v0=0=探针未造出目标）",
+		"ratio=%.4f v0=%s" % [float(pa13[1]) / maxf(float(pa13[0]), 0.0001), pa13[0]], "1.2500 且 v0>0")
+	# ⑬2 echo 追痕迹（mirror 段，trail 远点保证 limit_length 封顶）
+	s13.setup("echo", 1, 8)
+	s13.defuser = false
+	player.trail.append(player.global_position + Vector2(5000, 0))
+	s13._echo_t = 0.0
+	var pb13 := _ct_c2_pair(s13, pos13)
+	_ct_assert(float(pb13[0]) > 0.0 and is_equal_approx(float(pb13[1]) / float(pb13[0]), 1.25),
+		"⑬2 echo 追痕迹 csm 比值 1.25（v0=0=探针未造出目标）",
+		"ratio=%.4f v0=%s" % [float(pb13[1]) / maxf(float(pb13[0]), 0.0001), pb13[0]], "1.2500 且 v0>0")
+	# ⑬3 echo 游走-爬行（_echo_t=3.0 → 过镜像段 → creep_mult）
+	s13.setup("echo", 1, 8)
+	s13.defuser = false
+	s13._echo_t = 3.0
+	var pc13 := _ct_c2_pair(s13, pos13)
+	_ct_assert(float(pc13[0]) > 0.0 and is_equal_approx(float(pc13[1]) / float(pc13[0]), 1.25),
+		"⑬3 echo 游走-爬行 csm 比值 1.25（v0=0=探针未造出目标）",
+		"ratio=%.4f v0=%s" % [float(pc13[1]) / maxf(float(pc13[0]), 0.0001), pc13[0]], "1.2500 且 v0>0")
+	# ⑬4 echo 游走-突进（_echo_t=2.9 → cycle>2.5 → dash_mult）
+	s13.setup("echo", 1, 8)
+	s13.defuser = false
+	s13._echo_t = 2.9
+	var pd13 := _ct_c2_pair(s13, pos13)
+	_ct_assert(float(pd13[0]) > 0.0 and is_equal_approx(float(pd13[1]) / float(pd13[0]), 1.25),
+		"⑬4 echo 游走-突进 csm 比值 1.25（v0=0=探针未造出目标）",
+		"ratio=%.4f v0=%s" % [float(pd13[1]) / maxf(float(pd13[0]), 0.0001), pd13[0]], "1.2500 且 v0>0")
+	player.trail.resize(trail_keep.size())
+	# ⑭ 零回归（聚合）：csm 恒 1.0，Game.enemy_speed_mult 1.0→1.25，四路径读数各 ×1.25（补乘子没碰坏既有因子）
+	Game.calamity_speed_mult = 1.0
+	var es14: float = Game.enemy_speed_mult
+	var bad14: Array[String] = []
+	s13.setup("rusher", 1, 8)
+	s13.defuser = true
+	bomb13.global_position = Game.main.clamp_to_arena(player.global_position + Vector2(100, 0))
+	var w14a := _ct_c2_esm_pair(s13, pos13)
+	if not (float(w14a[0]) > 0.0 and is_equal_approx(float(w14a[1]) / float(w14a[0]), 1.25)):
+		bad14.append("defuser")
+	s13.setup("echo", 1, 8)
+	s13.defuser = false
+	player.trail.append(player.global_position + Vector2(5000, 0))
+	s13._echo_t = 0.0
+	var w14b := _ct_c2_esm_pair(s13, pos13)
+	if not (float(w14b[0]) > 0.0 and is_equal_approx(float(w14b[1]) / float(w14b[0]), 1.25)):
+		bad14.append("echo-chase")
+	s13.setup("echo", 1, 8)
+	s13.defuser = false
+	s13._echo_t = 3.0
+	var w14c := _ct_c2_esm_pair(s13, pos13)
+	if not (float(w14c[0]) > 0.0 and is_equal_approx(float(w14c[1]) / float(w14c[0]), 1.25)):
+		bad14.append("echo-creep")
+	s13.setup("echo", 1, 8)
+	s13.defuser = false
+	s13._echo_t = 2.9
+	var w14d := _ct_c2_esm_pair(s13, pos13)
+	if not (float(w14d[0]) > 0.0 and is_equal_approx(float(w14d[1]) / float(w14d[0]), 1.25)):
+		bad14.append("echo-dash")
+	player.trail.resize(trail_keep.size())
+	Game.enemy_speed_mult = es14
+	Game.calamity_speed_mult = save_csm
+	_ct_assert(bad14.is_empty(), "⑭ esm 切换四路径比值 1.25（聚合零回归）", bad14, "0 违例")
+	s13.queue_free()
+	bomb13.queue_free()
+	# ---- ⑯ 映射与接线覆盖（4）：直调 _apply_modifier_mult 后同链断 live+_mod_* 四值 ----
+	_apply_modifier_mult("rage")
+	_ct_assert(is_equal_approx(enemy_speed_mult, 1.25) and is_equal_approx(diamond_mult, 1.0)
+		and is_equal_approx(_mod_enemy_speed_mult, 1.25) and is_equal_approx(_mod_diamond_mult, 1.0),
+		"⑯1 rage 全四值", "(es=%s, dm=%s | mod=%s,%s)" % [enemy_speed_mult, diamond_mult, _mod_enemy_speed_mult, _mod_diamond_mult],
+		"(1.25, 1.0 | 1.25,1.0)")
+	_apply_modifier_mult("barren")
+	_ct_assert(is_equal_approx(enemy_speed_mult, 1.0) and is_equal_approx(diamond_mult, 0.7)
+		and is_equal_approx(_mod_enemy_speed_mult, 1.0) and is_equal_approx(_mod_diamond_mult, 0.7),
+		"⑯2 barren 全四值", "(es=%s, dm=%s | mod=%s,%s)" % [enemy_speed_mult, diamond_mult, _mod_enemy_speed_mult, _mod_diamond_mult],
+		"(1.0, 0.7 | 1.0,0.7)")
+	_apply_modifier_mult("swarm")
+	_ct_assert(is_equal_approx(enemy_speed_mult, 1.0) and is_equal_approx(diamond_mult, 1.5)
+		and is_equal_approx(_mod_enemy_speed_mult, 1.0) and is_equal_approx(_mod_diamond_mult, 1.5),
+		"⑯3 swarm 全四值", "(es=%s, dm=%s | mod=%s,%s)" % [enemy_speed_mult, diamond_mult, _mod_enemy_speed_mult, _mod_diamond_mult],
+		"(1.0, 1.5 | 1.0,1.5)")
+	var pair_bad := ""
+	for m in ["none", "overload", "glass"]:
+		_apply_modifier_mult(String(m))
+		if not (is_equal_approx(enemy_speed_mult, 1.0) and is_equal_approx(diamond_mult, 1.0)
+				and is_equal_approx(_mod_enemy_speed_mult, 1.0) and is_equal_approx(_mod_diamond_mult, 1.0)):
+			pair_bad = String(m)
+		print("[SMOKE-CAL-THEME] pair m=%s got=(%.2f,%.2f)" % [m, enemy_speed_mult, diamond_mult])
+	_ct_assert(pair_bad == "", "⑯4 none/overload/glass 三档聚合（全四值）", pair_bad, "无违例")
+
 	# ---- 出口：还原现场 ----
 	Game.floor_num = save_floor
 	_calamity = save_calamity
 	_theme_rule = save_theme_rule
 	diamond_mult = save_dm
 	enemy_speed_mult = save_esm
+	_mod_enemy_speed_mult = float(save_mod_es)   # S27 批三：还原本局真实 modifier 贡献（不许写 1.0）
+	_mod_diamond_mult = float(save_mod_d)
 	Game.calamity_speed_mult = save_csm
 	player.mag_cap_mult = save_mc
 	player.max_hp = save_mhp
@@ -1207,6 +1430,31 @@ func _smoke_cal_theme_probe() -> void:
 	print("[SMOKE-CAL-THEME] done checked=%d declared=%d" % [_ct_checked, _CT_DECLARED])
 
 
+## S27 批三：modifier → (敌速倍率, 残响倍率)。纯函数：零 rng、零副作用、不读成员。
+## 两个倍率的唯一来源，match 里不再写字面量（防「两处来源各自漂移」）。
+func _modifier_mult_pair(m: String) -> Vector2:
+	match m:
+		"rage":
+			return Vector2(1.25, 1.0)
+		"barren":
+			return Vector2(1.0, 0.7)
+		"swarm":
+			return Vector2(1.0, 1.5)
+		_:
+			return Vector2(1.0, 1.0)
+
+
+## S27 批三：把纯函数结果落到 _mod_* 与 live 两处。零 rng、零副作用（只写 4 个倍率字段）。
+## 单独抽出来的唯一目的：让探针能在不调 _roll_modifier()（会抽 rng）的前提下，
+## 确定性地验到 _mod_* 与 live 的接线——包括 pair.x/pair.y 接反这种错误。
+func _apply_modifier_mult(m: String) -> void:
+	var pair := _modifier_mult_pair(m)
+	_mod_enemy_speed_mult = pair.x             # 先落 _mod_*
+	_mod_diamond_mult = pair.y
+	enemy_speed_mult = _mod_enemy_speed_mult    # live 再从 _mod_* 读
+	diamond_mult = _mod_diamond_mult
+
+
 func _roll_modifier() -> void:
 	modifier = Data.roll_modifier()
 	enemy_hp_mult = 1.0
@@ -1215,12 +1463,11 @@ func _roll_modifier() -> void:
 	abyss_speed_mult = 1.0
 	abyss_dmg_mult = 1.0
 	diamond_mult = 1.0
+	_apply_modifier_mult(modifier)
 	match modifier:
 		"rage":
-			enemy_speed_mult = 1.25
 			enemy_hp_mult = 0.85
 		"barren":
-			diamond_mult = 0.7
 			Game.add_diamonds(10)
 		"overload":
 			player.skill_cd_mult = 0.6
@@ -1229,8 +1476,6 @@ func _roll_modifier() -> void:
 		"glass":
 			player.crit_chance = minf(player.crit_chance + 0.2, 0.8)
 			player.speed_base *= 0.9
-		"swarm":
-			diamond_mult = 1.5
 	if _smoke:
 		print("[SMOKE] modifier=%s" % modifier)
 	var m: Dictionary = Data.MODIFIERS.get(modifier, {})
@@ -1459,6 +1704,10 @@ func _milestone(id: String) -> void:
 func _apply_floor_theme() -> void:
 	_theme_rule = ""
 	_theme_t = 0.0
+	# S27 批三 C1：主题倍率先回落到 modifier 贡献（复位必须在 th.is_empty() 早退之前，
+	# 否则 1–3 层走早退分支、复位不执行，离压残留）。pressure 的 maxf 在此之上抬起。
+	enemy_speed_mult = _mod_enemy_speed_mult
+	diamond_mult = _mod_diamond_mult
 	var th: Dictionary = Data.theme_for_floor(Game.floor_num)
 	if th.is_empty():
 		if is_instance_valid(hud):

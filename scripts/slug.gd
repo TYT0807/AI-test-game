@@ -213,7 +213,7 @@ func _physics_process(delta: float) -> void:
 		var bomb: Node2D = _nearest_bomb(240.0)
 		if bomb != null:
 			velocity = (bomb.global_position - global_position).normalized() * speed * 1.25 \
-				* Game.enemy_speed_mult * _slow_mult + _knock
+				* Game.enemy_speed_mult * Game.calamity_speed_mult * _slow_mult + _knock
 			if global_position.distance_to(bomb.global_position) < 18.0:
 				bomb.defuse()
 
@@ -295,13 +295,13 @@ func _ai_echo(dist: float, dir: Vector2, _delta: float) -> void:
 		var target: Vector2 = trail[trail.size() - 1 - idx]
 		var to_target := target - global_position
 		velocity = to_target.limit_length(speed * float(Data.ECHO_TUNING["chase_mult"])
-			* Game.enemy_speed_mult * _slow_mult) + _knock
+			* Game.enemy_speed_mult * Game.calamity_speed_mult * _slow_mult) + _knock
 		return
 	# 镜像结束：游走 + 周期突进（压制玩家走位节奏）
 	var cycle := fmod(_echo_t, float(Data.ECHO_TUNING["cycle"]))
 	var mult := float(Data.ECHO_TUNING["dash_mult"]) if cycle > float(Data.ECHO_TUNING["cycle"]) - 0.5 \
 		else float(Data.ECHO_TUNING["creep_mult"])
-	velocity = dir * speed * mult * Game.enemy_speed_mult * _slow_mult + _knock
+	velocity = dir * speed * mult * Game.enemy_speed_mult * Game.calamity_speed_mult * _slow_mult + _knock
 
 
 func _ai_erratic(_dist: float, dir: Vector2, _delta: float) -> void:
