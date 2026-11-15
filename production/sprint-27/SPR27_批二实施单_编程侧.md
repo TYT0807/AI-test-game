@@ -276,8 +276,11 @@ const _OG_DECLARED := 43
 - E01 真实 `start_run()`：控制组 vs 处理组差值 == **8**
 - E02 带 purse 印记：差值 == **8** 且控制组基线 `X >= 15`（证明 purse 的 15 没被抹掉；若注入被放到 purse 之前，差值会变 0）
 - E03 `modifier == "barren"`（seed 777 实测可得）：差值 == **8**；`barren` 的 `add_diamonds(10)`（`:1220`）计入控制组基线，不进差值
-- E04 **源码序断言（探针内可判）**：`_oath_grant()` 调用行号 > `_apply_sigil_contract()` 调用行号。做法：探针读 `res://scripts/game_main.gd` 源码自己算行号；读不到（导出包）则打 WARN 并**判红**，不许静默跳过。外部 `grep -n` 作兜底
-- E05 **源码序断言（同 E04）**：`_oath_grant()` 调用行号 < `Game.run_seed = Game.rng.seed` 行号。同样读源码自算，读不到判红
+- E04 **源码序断言（探针内自行判定，不许打 PENDING 蒙过去）**：`_oath_grant()` 调用行号 > `_apply_sigil_contract()` 调用行号。
+  - 做法：探针读 `res://scripts/game_main.gd`，在 **`start_run()` 函数体范围内**定位三个锚点行号：`_apply_sigil_contract()`、`_oath_grant()`、`Game.run_seed = Game.rng.seed`。
+  - 🔴 **必须限定在 `start_run()` 函数体范围内找**，不许全文件正则扫。理由：探针函数名 `_test_oath_grant()` 含 `_oath_grant()` 子串，全景扫会撞到自己（见 C08 同款陷阱）。
+  - **读不到源码（导出包）→ 判红并打 `源码不可读，顺序未验`**，不许静默跳过、不许记成通过。
+- E05 **源码序断言（同 E04）**：`_oath_grant()` 调用行号 < `Game.run_seed = Game.rng.seed` 行号。同一处源码读取里一次算完三个锚点，两个断言各判各的关系，读失败时两条一起红（不是只红一条）。
 - E06 整局跑通后 `Game.run_seed` 与未装本批时的基线逐字相同
 - E07 **探针内的代理断**：控制组与处理组的 `[SMOKE-META] fingerprint` 行（`rooms=` + `kinds=`）逐字相同——证明本批改动没动地图生成。**权威 E1 仍是外部门控**：装本批前后各跑一次 `SMOKE_META_FINGERPRINT=1`，与 §10 基线逐字比对，不靠探针自证。
 
@@ -314,7 +317,9 @@ const _OG_DECLARED := 43
 
 ### 6.1 五门
 
-A 阶段（A/B/C/D/F，36 条）与 B 阶段（+E，43 条）分开跑，报两组 `[ERR]` 与 `checked/declared`。
+A 阶段（A/B/C/D/F/G，36 条）与 B 阶段（+E，43 条）分开跑，报两组 `[ERR]` 与 `checked/declared`。
+
+🔴 **门控判据三条同时成立，缺一不算过**：`#NN` 行数 == 43；`[ERR]` == 0；**`ok=PENDING` 行数 == 0**（本批不允许任何断言以「未判定」形态上线——E04/E05 由探针读源码自行判定，读不到源码就判红，不设 PENDING 档）。
 
 另外必跑：`validate.gd` 全过、既有 `SMOKE_*` 探针全过、E1 fingerprint 与 `ece249d` 逐字一致。
 
