@@ -12,7 +12,7 @@ e10b4dcc5f7d1ae547212f101b688fcd *scripts/dev_overlay.gd
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
 7235c5a7d8595bebb171aace8f44a6c3 *scripts/dungeon.gd
 9248ff72854c353576134c1979b844ab *scripts/explosion.gd
-8aeaff3c9b5f4bfcedc098d6e8209c0e *scripts/game_main.gd
+60000c6aff85f67523558d749c4b6a46 *scripts/game_main.gd
 b713860018ba0412bc03b91626014b80 *scripts/game_state.gd
 cdad09ceb5685186ad5074fe03daccc2 *scripts/hud.gd
 ae20204f70d966be4b0f91714ae92d24 *scripts/menu.gd

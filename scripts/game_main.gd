@@ -647,7 +647,7 @@ func _clear_calamity_effects() -> void:
 ## 故入口无条件打印、每条断言伴随无条件 #NN 行、末尾 done checked=… 并自校验 checked==declared。
 ## 三段式（§5.2）：段1 施加 → 段2 换层精确还原 → 段3 再施加幂等；换层构造复刻 next_floor
 ## 生产顺序（game_main.gd:1505-1509：floor 自增 → clear → 清 id → 主题），禁用真实 next_floor()。
-const _CT_DECLARED := 66  # B 组完成后改 76
+const _CT_DECLARED := 76  # A 组 66 + B 组 10（③ 两时变格 × 5 段）
 
 # A 组 6 变体格：[楼层, 灾祸, 施加期望, 还原期望, 主题 rule 字面量]（frail 的还原期望是 max_hp）
 const _CT_VARIANTS := [
@@ -657,6 +657,12 @@ const _CT_VARIANTS := [
 	[11, "scarce_ammo", 0.65, 1.0, "vines"], # vines×弹药荒: 0.65——轻
 	[10, "frenzy", 1.45, 1.0, "swamp"],   # swamp×狂乱: 1.45——重
 	[9, "frenzy", 1.4, 1.0, "ice"],       # ice×狂乱: 1.40——重
+]
+
+# B 组 2 时变格（走 _theme_damage_tick 公共路径，5 段验）：[楼层, 灾祸]
+const _CT_TICK_CELLS := [
+	[5, "scarce_ammo"],   # toxic×弹药荒: 0.5→0.4→0.3（每毒 tick −0.1，下限 0.3）——重
+	[8, "scarce_ore"],    # magma×残响枯竭: 0.7→…→0.5（每火 tick −0.05，下限 0.5）——重
 ]
 
 var _ct_checked := 0
@@ -759,7 +765,7 @@ func _smoke_cal_theme_probe() -> void:
 		_clear_calamity_effects()
 		_calamity = ""
 
-	# ---- ③ 三段式·变体（18）：6 格 × 段1 施加=变体 / 段2 换层还原 / 段3 再施加幂等 ----
+	# ---- ③ 三段式·变体（A 18 = 6 格×3 段；B 组另 10 = 2 时变格×5 段，见下方 ③B 段）----
 	# 段2 的换层增量必须让 rule 真的改变（4→5 / 7→8 / 8→9 / 10→11 / 11→12）；🔴 禁用 4→12（回卷后 rule 相同，写错也能蒙过）
 	for v in _CT_VARIANTS:
 		var f3 := int(v[0])
@@ -868,8 +874,8 @@ func _smoke_cal_theme_probe() -> void:
 	_ct_assert(is_equal_approx(diamond_mult, idem_or), "④幂等 ore: 清后再施加同值", diamond_mult, idem_or)
 	_clear_calamity_effects()
 	_calamity = ""
-	# ④c 零分支扫描（A 阶段 26 格）：32 格 − A 组 6 变体格；B 组两格本阶段未上代码走 default 必须一起扫
-	# （实施单 §5.6）。其中 13 号格（pressure×scarce_ore）走真实路径 1.5→0.7→1.5，其余 25 格基线字面量。
+	# ④c 零分支扫描（B 阶段 24 格）：32 格 − 8 变体格（A 6 常数 + B 2 时变）。
+	# 其中 13 号格（pressure×scarce_ore）走真实路径 1.5→0.7→1.5，其余 23 格基线字面量。
 	# 🔴 扫描行用 scan 前缀分流，禁用 #NN（否则污染 checked==declared 自校验，门控永久假绿）
 	var scan_bad: Array[String] = []
 	var scan_i := 0
@@ -878,6 +884,10 @@ func _smoke_cal_theme_probe() -> void:
 			var is_variant := false
 			for v in _CT_VARIANTS:
 				if int(v[0]) == f and String(v[1]) == id:
+					is_variant = true
+					break
+			for t in _CT_TICK_CELLS:
+				if int(t[0]) == f and String(t[1]) == id:
 					is_variant = true
 					break
 			if is_variant:
@@ -1094,6 +1104,77 @@ func _smoke_cal_theme_probe() -> void:
 	_apply_calamity()
 	var n6 := String(_calamity_name("scarce_ore"))
 	_ct_assert(n6 == "残响枯竭（残响掉落 -53%）" and is_equal_approx(diamond_mult, 0.7), "⑦ore 实值@pressure", "%s dm=%s" % [n6, diamond_mult], "-53% dm=0.7")
+	_clear_calamity_effects()
+	_calamity = ""
+
+	# ---- ③B B 组时变格（10）：2 格 × 5 段——施加 / 递减单调 / 下限钳制 / 换层还原 / 再施加 ----
+	# tick 直调 _theme_damage_tick()；每次驱动前后存取 player.hp 再回填（§4.4：tick 会走 DoT/SMOKE 分支）
+	# ③B#7 toxic×scarce_ammo：0.5→0.4→0.3（每毒 tick −0.1，下限 0.3）
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_apply_floor_theme()   # 真实路径：toxic 主题（_theme_rule="toxic"；terrain 改动由出口统一还原）
+	var hp_keep: int = player.hp
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	var ammo_apply: float = player.mag_cap_mult
+	_ct_assert(is_equal_approx(ammo_apply, 0.5), "③B f5×ammo 段1 施加=0.5", ammo_apply, 0.5)
+	_theme_damage_tick()
+	var ammo_t1: float = player.mag_cap_mult
+	player.hp = hp_keep
+	_theme_damage_tick()
+	var ammo_t2: float = player.mag_cap_mult
+	player.hp = hp_keep
+	_ct_assert(ammo_t1 < ammo_apply and ammo_t2 < ammo_t1 and is_equal_approx(ammo_t2, 0.3),
+		"③B f5×ammo 段2 递减单调至 0.3", "%s→%s→%s" % [ammo_apply, ammo_t1, ammo_t2], "0.5→0.4→0.3")
+	_theme_damage_tick()
+	player.hp = hp_keep
+	_theme_damage_tick()
+	player.hp = hp_keep
+	_ct_assert(is_equal_approx(player.mag_cap_mult, 0.3), "③B f5×ammo 段3 下限钳制", player.mag_cap_mult, 0.3)
+	_ct_floor_advance(6)
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(player.mag_cap_mult, 1.0), "③B f5×ammo 段4 换层还原=saved", player.mag_cap_mult, 1.0)
+	Game.floor_num = 5
+	_apply_floor_theme()
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	_ct_assert(is_equal_approx(player.mag_cap_mult, 0.5), "③B f5×ammo 段5 再施加=初值", player.mag_cap_mult, 0.5)
+	_clear_calamity_effects()
+	_calamity = ""
+	# ③B#8 magma×scarce_ore：0.7→0.65→…→0.5（每火 tick −0.05，下限 0.5）
+	_ct_reset_channels()
+	Game.floor_num = 8
+	_apply_floor_theme()
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var ore_apply: float = diamond_mult
+	_ct_assert(is_equal_approx(ore_apply, 0.7), "③B f8×ore 段1 施加=0.7", ore_apply, 0.7)
+	var ore_seq: Array = []
+	for i in 4:
+		_theme_damage_tick()
+		player.hp = hp_keep
+		ore_seq.append(diamond_mult)
+	var ore_mono: bool = true
+	for i in range(1, 4):
+		if not ore_seq[i] < ore_seq[i - 1]:
+			ore_mono = false
+	_ct_assert(ore_mono and is_equal_approx(ore_seq[3], 0.5),
+		"③B f8×ore 段2 递减单调至 0.5", "%s→%s→%s→%s" % [ore_apply, ore_seq[0], ore_seq[1], ore_seq[3]], "0.7→…→0.5")
+	_theme_damage_tick()
+	player.hp = hp_keep
+	_theme_damage_tick()
+	player.hp = hp_keep
+	_ct_assert(is_equal_approx(diamond_mult, 0.5), "③B f8×ore 段3 下限钳制", diamond_mult, 0.5)
+	_ct_floor_advance(9)
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 1.0), "③B f8×ore 段4 换层还原=saved", diamond_mult, 1.0)
+	Game.floor_num = 8
+	_apply_floor_theme()
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	_ct_assert(is_equal_approx(diamond_mult, 0.7), "③B f8×ore 段5 再施加=初值", diamond_mult, 0.7)
 	_clear_calamity_effects()
 	_calamity = ""
 
@@ -1475,6 +1556,16 @@ func _tick_floor_theme(_delta: float) -> void:
 func _theme_damage_tick() -> void:
 	if not is_instance_valid(player):
 		return
+	# S27 B 组复合变体：时间让代价变深（全批唯一非查表 Dynamics）。snappedf 收敛浮点累加——
+	# 0.5-0.1*2 = 0.30000000000000004，不收敛则 == 0.3 断言假红
+	if _calamity == "scarce_ammo" and _theme_rule == "toxic":
+		var mc_new := maxf(0.3, snappedf(player.mag_cap_mult - 0.1, 0.001))
+		if not is_equal_approx(mc_new, player.mag_cap_mult):
+			player.mag_cap_mult = mc_new
+			player.mag_changed.emit(player.mag(), player.mag_cap())
+	elif _calamity == "scarce_ore" and _theme_rule == "magma":
+		var dm_new := maxf(0.5, snappedf(diamond_mult - 0.05, 0.001))
+		diamond_mult = dm_new
 	if _smoke and OS.get_environment("SMOKE_MAGMA_PROBE" if _theme_rule == "magma" else "SMOKE_TOXIC_PROBE") != "":
 		player.hp = maxi(player.hp - 1, 1)
 		player.hp_changed.emit(player.hp, player.max_hp)
