@@ -120,14 +120,14 @@ func _oath_grant() -> void:
 	# 若不守这一条，玩家达成 S=3 后「永不再装印记」即可每局白拿 +8 且零风险 → 单向棘轮。
 	if (Game.codex["last_run"].get("oath", {}) as Dictionary).is_empty():
 		return
-	var n := _oath_grant_amount(_read_oath_streak())
+	var s := _read_oath_streak()        # 只读一次，档位与文案共用（见 §5.2 C08 静态门）
+	var n := _oath_grant_amount(s)
 	if n <= 0:
 		return
 	Game.diamonds += n
 	Game.diamonds_changed.emit(Game.diamonds)
 	if is_instance_valid(hud):
-		hud.flash_toast("%s · 连兑现 %d 局，开局残响 +%d" % [
-			_OG_TOAST_TAG, _read_oath_streak(), n])
+		hud.flash_toast("%s · 连兑现 %d 局，开局残响 +%d" % [_OG_TOAST_TAG, s, n])
 ```
 
 ### 3.3 调用点（**位置是硬约束**）
@@ -238,6 +238,7 @@ const _OG_DECLARED := 43
 - B06 `oath_streak = null` → 0 → 发 0
 - B07 🔴 **单向棘轮靶子（本组最重要一条）**：`last_run["oath"] = {}`（上局未立誓）但 `oath_streak = 3` → **发 0**。理由见 §1.1 第 3 条：`next_oath_streak(H=0)` 让 streak 永不衰减，若照发，玩家达成 3 连后永不再装印记即可每局白拿 +8 且零风险。**若实现里漏了 `oath.is_empty()` 守卫，只有这条会红。**
 - B08 上局立誓未兑现（`oath` 非空、`oath_streak = 0`）→ 发 0，且断言 `Game.diamonds` 未被扣成负数（§1.1 第 2 条：不许追加惩罚）
+  - ⚠️ **本批没有专属变异刀能只让它红**：删 oath 守卫红 B07、删 daily 红 C05；唯一能打到它的假想刀是给 `maxi(S,1)` 开地板，但那会**同时红 B01**，且 `maxi(S,1)` 已被 §1.1 否决。所以 B08 归类为**走查守卫**，报告里**不许写「已实证」**。
   - 附注：**本批不读 `oath["done"]`**（streak 已编码 done，见 §1.2），所以**不为 `done` 构造任何断言**。特别地，`done="yes"` 这种非 bool 脏值**不是**本批的靶子——要断言它得先让代码去读 `done`，与设计相反。日后若有人开始读 `done`，须同步补类型守卫并新增断言。
 - B09 基线手工置 `7`、`oath_streak = 3` → 期望 `15`。**唯一能抓住 `Game.diamonds = n` 覆盖式写法的断言**（覆盖写会得 8）
 - B10 🔴 **与 purse 叠加，但只断差值、不写死绝对值**：在同一 codex 状态下跑两次——`streak = 0` 得 `X`，`streak = 3` 得 `Y`，断言 **`Y - X == 8`** 且 `X >= 15`（证明 purse 没被抹掉）。
@@ -254,7 +255,10 @@ const _OG_DECLARED := 43
 - C07 🔴 **幂等，必须固定 rng 状态**：连续两次完整 `start_run()`，第二次结束后 `Game.diamonds` 与第一次逐字相同。
   - **关键**：`start_run()` 内部 `:371 _roll_modifier()` 会抽 `Game.rng`，两次连跑时第二次的 rng 位置已变 → modifier 可能从 `none` 变 `barren`（多 +10 残响）→ 逐字不等，**天然 flaky**。必须在每次 `start_run()` 之前把 `Game.rng.seed` 与 `Game.rng.state` **都还原到探针入口快照**，让两次跑在逐位相同的 rng 起点上。只还原 `.state` 不够（`reset`/`daily` 路径会读 `.seed`）。
   - 这条同时也是「幂等靠 `Game.reset()` 归零、不靠守卫标志」的正面证据。
-- C08 静态门：全仓 `_oath_grant()` 调用点恰 **1 处**（定义行不计）。防有人在别处再调一次而放大
+- C08 静态门（两条，都要满足）：
+  - ① 全仓 `_oath_grant()` **调用点恰 1 处**（定义行不计）。防有人在别处再调一次而放大。
+    🔴 **必须按词边界匹配**：探针函数名 `_test_oath_grant()` **含有** `_oath_grant()` 这个子串，朴素 `grep` 会把它算进去、得 3 行 → **C08 自己把自己判红**。正确写法 `grep -nE "(^|[^A-Za-z0-9_])_oath_grant\(\)"`，应得 **2 行**（1 定义 + 1 调用）。
+  - ② 全仓 `_read_oath_streak()` 恰 **3 行**：定义 `:2973` + 既有局末 `:3198` + 新增 `_oath_grant()` 内 **1** 行。若出现 4 行，说明有人在授予块里重复现读（档位一次、文案又一次）——功能上无害，但会让「读侧唯一」这个口径失守。
 - C09 无条件赋值（R2）：先按 `oath_streak = 3` 授予 → 手工改 `oath_streak = 1` → 再次调用 → 结果按 +3 重算，**不留**上次 +8 的残留
 
 **D 组（5，文案）**
@@ -272,8 +276,8 @@ const _OG_DECLARED := 43
 - E01 真实 `start_run()`：控制组 vs 处理组差值 == **8**
 - E02 带 purse 印记：差值 == **8** 且控制组基线 `X >= 15`（证明 purse 的 15 没被抹掉；若注入被放到 purse 之前，差值会变 0）
 - E03 `modifier == "barren"`（seed 777 实测可得）：差值 == **8**；`barren` 的 `add_diamonds(10)`（`:1220`）计入控制组基线，不进差值
-- E04 **静态门**（不在探针内断）：`_oath_grant()` 调用行号 > `_apply_sigil_contract()` 调用行号。**探针读不到源码行号**，只能在报告里以 `grep -n` 结果判定
-- E05 **静态门**（同 E04）：`_oath_grant()` 调用行号 < `Game.run_seed = Game.rng.seed` 行号
+- E04 **源码序断言（探针内可判）**：`_oath_grant()` 调用行号 > `_apply_sigil_contract()` 调用行号。做法：探针读 `res://scripts/game_main.gd` 源码自己算行号；读不到（导出包）则打 WARN 并**判红**，不许静默跳过。外部 `grep -n` 作兜底
+- E05 **源码序断言（同 E04）**：`_oath_grant()` 调用行号 < `Game.run_seed = Game.rng.seed` 行号。同样读源码自算，读不到判红
 - E06 整局跑通后 `Game.run_seed` 与未装本批时的基线逐字相同
 - E07 **探针内的代理断**：控制组与处理组的 `[SMOKE-META] fingerprint` 行（`rooms=` + `kinds=`）逐字相同——证明本批改动没动地图生成。**权威 E1 仍是外部门控**：装本批前后各跑一次 `SMOKE_META_FINGERPRINT=1`，与 §10 基线逐字比对，不靠探针自证。
 
@@ -297,8 +301,8 @@ const _OG_DECLARED := 43
 | 编号 | 归哪类 | 为什么不计 |
 |---|---|---|
 | C08 | 常量自比较（静态门） | grep 计数，不是行为观测 |
-| E04 | 常量自比较（静态门） | 源码行号比较，探针读不到 |
-| E05 | 常量自比较（静态门） | 同上 |
+| E04 | 常量自比较（源码序） | 比的是源码行号，不是运行期行为；探针读 `res://` 源码自判，导出包读不到时判红。**不计覆盖，但计 PASS** |
+| E05 | 常量自比较（源码序） | 同上 |
 | D04 | 只验标志 | 只验「没有 toast」，抓的是缺席而非效果 |
 | D05 | 常量自比较 | 验的是 `Data` 表里不含某字符串，纯数据比较 |
 
@@ -320,7 +324,7 @@ A 阶段（A/B/C/D/F，36 条）与 B 阶段（+E，43 条）分开跑，报两�
 
 | 刀 | 变异 | 预期红 |
 |---|---|---|
-| 刀一 | `_oath_grant_amount` 的 `s == 2` 支 `5` → `3` | A03、A08、A09（集合少 5）、B09、B10、E01、E02 |
+| 刀一 | `_oath_grant_amount` 的 `s == 2` 支 `5` → `3` | **A03、A08、A09（集合少 5）、D03** —— 只动 T2 支，所有 `streak=3`（T3）的构造**必绿**，B09/B10/E01/E02 不可能红；反过来 D03 构造是 `streak=2` 且断言文本含 `"+5"`，刀一后实际吐 `+3` → **必红** |
 | 刀二 | `Game.diamonds += n` → `Game.diamonds = n`（覆盖式） | B09、B10、E01、E02、E03 |
 | 刀三 | 删掉 `Game.diamonds_changed.emit(...)` 那一行 | **C01 + G01**（信号没发、标签也不动） |
 | 刀四 | 把 `_oath_grant()` 调用点上移到 `_apply_sigil_contract()` 之前 | E02、E04、B10 |
@@ -343,7 +347,7 @@ A 阶段（A/B/C/D/F，36 条）与 B 阶段（+E，43 条）分开跑，报两�
 
 ### 6.3 判 PASS 的方式（不接受「43/43 全绿」就完事）
 
-本批改前有 **30 条不可执行**（读 `_oath_grant`，函数不存在），所以「改后全绿」几乎是必然的，信息量接近零。PASS 必须同时满足四条：
+本批改前有 **28 条不可执行**（读 `_oath_grant` / `_oath_grant_amount`，符号今天不存在；逐编号清单见验证口径 §2，以那份为准、报告里不许两个数并写），所以「改后全绿」几乎是必然的，信息量接近零。PASS 必须同时满足四条：
 
 1. 43 条全绿，`checked == declared == 43`；
 2. **静态门（C08 那类）逐条过**：调用点唯一、无守卫标志、未走 `add_diamonds`、未碰 `_roll_modifier`；
