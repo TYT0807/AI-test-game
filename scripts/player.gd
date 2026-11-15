@@ -1511,7 +1511,7 @@ func _floor_sign_probe() -> void:
 	Game._flavor_pending.clear()
 	Game.mark_codex("themes", "vein")
 	Game._flush_flavor_toast()
-	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记"), "flavor",
+	Dev.check(String(Game.main.hud._toast.text).contains("见痕手记"), "flavor",
 		"首发现播报：%s" % String(Game.main.hud._toast.text))
 	var toast_after_dup: String = Game.main.hud._toast.text
 	Game.mark_codex("themes", "vein")
@@ -1561,16 +1561,16 @@ func _floor_sign_probe() -> void:
 		"S22 D: 同帧 3 条白名单首发现渲染为一条聚合 toast，非白名单不计入（%s）" % String(Game.main.hud._toast.text))
 	Dev.check(is_equal_approx(Game.main.hud._toast.modulate.a, 1.0), "flavor",
 		"S22 D: 聚合 toast 可见（modulate.a=1）")
-	# 单条回归：清 pending 后单条首发现维持「矿工手记 ·」原格式
+	# 单条回归：清 pending 后单条首发现维持「见痕手记 ·」原格式
 	(Game.codex["themes"] as Array).erase("magma")
 	Game._flavor_pending.clear()
 	Game.mark_codex("themes", "magma")
 	Game._flush_flavor_toast()
-	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层"), "flavor",
+	Dev.check(String(Game.main.hud._toast.text).contains("见痕手记 · 岩浆层"), "flavor",
 		"S22 D: 单条首发现维持原格式（%s）" % String(Game.main.hud._toast.text))
-	# Sprint 26 批二：toast 六道新词逐字上屏（「矿工手记 · 」格式串不变，只扩 value 内容）
-	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层。地狱热狱"), "flavor",
-		"S26: toast 含「矿工手记 · 岩浆层。地狱热狱」（FLAVOR themes/magma value 逐字上屏）：%s" % String(Game.main.hud._toast.text))
+	# Sprint 26 批二：toast 六道新词逐字上屏（「见痕手记 · 」格式串不变，只扩 value 内容）
+	Dev.check(String(Game.main.hud._toast.text).contains("见痕手记 · 岩浆层。地狱热狱"), "flavor",
+		"S26: toast 含「见痕手记 · 岩浆层。地狱热狱」（FLAVOR themes/magma value 逐字上屏）：%s" % String(Game.main.hud._toast.text))
 	# ---------------- Sprint 22 附限定①：聚合冲洗结果断言（确定性直调版） ----------------
 	# 【Sprint 24 降级登记——主理人处方 2】本断言原为 deferred 生产调度路径回归锁
 	# （回调经 call_deferred 排队列尾、FIFO 排在 3 次冲洗之后）；S23 三次跑绿 2 红 1 实录证明

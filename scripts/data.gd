@@ -362,7 +362,7 @@ const OATH_CONDITIONS := {
 	"scholar": {"name": "兼修并蓄", "desc": "既进圣所，又让词缀共鸣 1 次", "watched": ["shrine_visits", "suffix_fires"], "need": 1},
 }
 
-## Sprint 16 D：地窖低语文案表（键 "kind/id"；基调=废弃矿窟的实用主义——克制、功能性矿工手记，
+## Sprint 16 D：地窖低语文案表（键 "kind/id"；基调=六道卷的克制实用主义——见痕者的功能性手记，
 ## 不臆造设定，只覆盖已存在条目）。首发现播报用，重复登记天然不播；不入任何分母/白名单
 const FLAVOR := {
 	"bosses/prism_warden": "守望者。天道之眼，别站在光缝里，砸它的核。",
@@ -381,7 +381,7 @@ const FLAVOR := {
 	# `mark_codex("shrine", id)` 的首发现播报（mark_codex 拼键 kind + "/" + id 命中本表）。
 	# 显示条件仍为**恒显**（不读发现状态），内容随三卡派生而变；灰字层与发现集彼此独立、互不耦合。
 	"shrine/blood_relic": "血祭。以血换遗物，地窖里最不缺的就是血。",
-	"shrine/ore_upgrade": "残响淬炼。以残响换一次选择，矿里人管这叫喂石头。",
+	"shrine/ore_upgrade": "残响淬炼。以残响换一次选择，旧例里管这叫喂石头。",
 	"shrine/purify": "净化。以代价换清净，这层的脏，散得掉。",
 	"shrine/ward_boon": "护盾祝福。以残响买一挡，挡一下，就散了。",
 	"shrine/heal": "修复。以积分换血，缝两针，血就回来了。",
@@ -443,7 +443,7 @@ const FLAVOR := {
 	"suffixes/s_leech": "蚀养。毒云每跳回血，站云里养伤。",
 	"bosses/boss": "巨岩虫之王，拿下。异常之主，掉宝最肥的一次。",
 	"bosses/skeleton_king": "骷髅王，拿下。白骨留痕，骨头堆了半屋子。",
-	"bosses/dragon": "黑龙，拿下。鳞甲留痕，地精散了，矿窟安静一半。",
+	"bosses/dragon": "黑龙，拿下。鳞甲留痕，地精散了，这一层安静一半。",
 	"bosses/demon": "炎魔，拿下。业火留痕，火苗灭了，加钱。",
 }
 

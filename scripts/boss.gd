@@ -272,7 +272,7 @@ func _pulse_theme(rule: String, k: int) -> void:
 				c.position = clamp_pos(global_position + off)
 				get_parent().add_child(c)
 		"vein":
-			# 矿脉富集：环位散落残响（拾取走既有磁吸/经验路径）
+			# 往生脉富集：环位散落残响（拾取走既有磁吸/经验路径）
 			for i in 5:
 				Game.main.drop_pickup(
 					clamp_pos(global_position + Vector2.from_angle(TAU * i / 5.0) * 90.0),

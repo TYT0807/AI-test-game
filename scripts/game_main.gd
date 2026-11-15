@@ -549,7 +549,7 @@ func _calamity_name(id: String) -> String:
 		"frail": return "虚弱（生命上限 -20%）"
 		"frenzy": return "狂乱（敌人加速 25%）"
 		"scarce_ammo": return "弹药荒（弹匣减半）"
-		"scarce_ore": return "贫矿（残响掉落 -30%）"
+		"scarce_ore": return "残响枯竭（残响掉落 -30%）"
 	return id
 
 
@@ -2317,7 +2317,7 @@ func oath_fulfillment(def_override: Dictionary = {}) -> Dictionary:
 		"done": cur >= need, "cur": cur, "need": need}
 
 
-## 抉择回声标签：按主导代价类型派生（废弃矿窟的实用主义口吻）
+## 抉择回声标签：按主导代价类型派生（六道卷的克制口吻）
 func _echo_tag() -> String:
 	if _echo_choices.is_empty():
 		return "未入圣所"

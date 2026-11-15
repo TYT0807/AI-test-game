@@ -342,7 +342,7 @@ func mark_codex(kind: String, id: String) -> void:
 
 
 ## Sprint 22 D：同帧首发现聚合冲洗（call_deferred 帧末执行，零 delta 计时、零 rng）。
-## 单条（N=1）维持「矿工手记 ·」原格式（既有探针与玩家认知兼容）；多条合并为
+## 单条（N=1）维持「见痕手记 ·」原格式（既有探针与玩家认知兼容）；多条合并为
 ## 「图鉴新发现 ×N」——细节在图鉴页可查。单例 2.2s tween 复用，不加队列状态。
 ## hud.flash_toast 通用语义不变：仅 mark_codex 白名单首发现走此聚合通道
 func _flush_flavor_toast() -> void:
@@ -351,7 +351,7 @@ func _flush_flavor_toast() -> void:
 	var n := _flavor_pending.size()
 	if main != null and is_instance_valid(main) and is_instance_valid(main.hud):
 		if n == 1:
-			main.hud.flash_toast("矿工手记 · " + String(_flavor_pending[0]))
+			main.hud.flash_toast("见痕手记 · " + String(_flavor_pending[0]))
 		else:
 			main.hud.flash_toast("图鉴新发现 ×%d" % n)
 	_flavor_pending.clear()

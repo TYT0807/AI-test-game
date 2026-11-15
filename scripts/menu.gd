@@ -123,7 +123,7 @@ func _build_main_page() -> void:
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left.add_child(rule)
 	var tag := Label.new()
-	tag.text = "深入矿脉   ·   清剿虫群   ·   带回归途"
+	tag.text = "入六道   ·   清异常   ·   记归途"
 	tag.add_theme_font_size_override("font_size", 15)
 	tag.add_theme_color_override("font_color", Color(0.58, 0.56, 0.63))
 	left.add_child(tag)
@@ -526,7 +526,7 @@ func _codex_section(kind: String, title: String, total: int, name_of: Callable) 
 	body.add_theme_color_override("font_color",
 		Color(0.78, 0.82, 0.9) if parts.size() > 0 else Color(0.5, 0.52, 0.58))
 	_rows.add_child(body)
-	# Sprint 16 D：地窖低语展开（已发现条目附矿工手记，纯文本零 rng）。
+	# Sprint 16 D：地窖低语展开（已发现条目附见痕手记，纯文本零 rng）。
 	# Sprint 19 QA 收口（§九-3 独立批次兑现）：多条手记由无分隔直拼改为**逐条一行**——
 	# 每条自带句号可断句，分行后满格 10 条也不会黏成一坨（既有 themes 8 条同形态同步受益）
 	var flavor_parts := []
