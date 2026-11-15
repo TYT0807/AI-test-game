@@ -393,9 +393,12 @@ func _build_codex() -> void:
 	if boons.size() > 0:
 		boon_seg = "发现度 · %d/%d 档" % [boons.size(), Data.CODEX_BOONS.size()]
 	var streak_seg := ""
+	var s_oath: Dictionary = lr.get("oath", {})
 	var skey = lr.get("oath_streak", null)
-	if skey != null and (skey is int or skey is float):
-		streak_seg = ("连绩 · %d 局" % maxi(int(skey), 0)) if int(skey) >= 1 else "连绩 · 断了"
+	# Sprint 24 订正③：判据与独立连绩行统一——oath 非空 + done 决定「N 局 / 断了」，
+	# H=0（oath 空）→ 段为空（复盘行不含连绩段，与独立行「不创建」同语义）
+	if not s_oath.is_empty() and skey != null and (skey is int or skey is float):
+		streak_seg = ("连绩 · %d 局" % maxi(int(skey), 0)) if bool(s_oath.get("done", false)) else "连绩 · 断了"
 	var replay := Label.new()
 	if lr.is_empty():
 		replay.text = "上局复盘：暂无记录（完成一局后生成）"

@@ -46,6 +46,7 @@
 
 > 日期：2026-11-14｜编程侧收口，单独 commit
 
-1. **附限定① deferred 生产调度路径常驻断言**：预置哨兵假 toast → 撤销 3 条既有发现 → 同帧 3 条白名单 mark（不直调冲洗）→ `await process_frame` → 断言 `_toast.text` 逐字 =「图鉴新发现 ×3」——哨兵被覆盖即证 `call_deferred` 帧末调度真实生效。首跑抓出探针数据新鲜度缺陷（toxic/ore_upgrade 已是既有发现 → mark 早退不入缓冲 → flush n=1 单条）——补 erase 后过。**「×9 诊断暴露的时序不确定性」就此获得常驻回归锁**。
+1. **附限定① deferred 生产调度路径常驻断言**：预置哨兵假 toast → 撤销 3 条既有发现 → 同帧 3 条白名单 mark（不直调冲洗）→ `await process_frame` → 断言 `_toast.text` 逐字 =「图鉴新发现 ×3」——哨兵被覆盖即证 `call_deferred` 帧末调度真实生效。首跑抓出探针数据新鲜度缺陷（toxic/ore_upgrade 已是既有发现 → mark 早退不入缓冲 → flush n=1 单条）——补 erase 后过。
+   **【Sprint 24 订正：本条降级登记——议题已冻结】**该断言经四处方案（帧界 await / 回调存结果 / 回调体内原地断言 / 确定性直调）与全量仪器实测，`SMOKE` 下 `await process_frame` 恢复点与帧末冲洗存在不可消除的竞态（三跑绿 2 红 1 实录）；S23 曾误改直调致回归锁撤销、S24 恢复后全量仍间歇红。**现口径**：保留确定性直调断言覆盖聚合逻辑与白名单语义，deferred 调度回归锁登记为已知限制、不再追；仅当出现真实玩家可见缺陷时重启。
 2. **附限定②开局清缓冲**：`start_run` 增 `Game._flavor_pending.clear()`——极端帧边界不把陈旧 pending 带进新局。
 - **验证**：SMOKE_FLOOR_SIGN/FLAVOR 定向 0 [ERR]（含新断言）；冻结双清单：本批快照 34 OK / 0 FAILED（player.gd/game_main.gd 重算），历史归档勿覆盖（11 FAILED 预期）。

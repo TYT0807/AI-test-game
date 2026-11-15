@@ -686,8 +686,6 @@ func refresh_minimap(d: Dungeon) -> void:
 
 
 func flash_toast(text: String) -> void:
-	if OS.get_environment("SMOKE_FLOOR_SIGN") != "":
-		print("[SMOKE-TOAST] flash frame=%d text=%s" % [Engine.get_process_frames(), text])
 	_toast.text = text
 	if _toast_tw and _toast_tw.is_valid():
 		_toast_tw.kill()

@@ -2047,6 +2047,9 @@ func _streak_probe() -> void:
 	(Game.codex["last_run"] as Dictionary)["oath"] = {}
 	Game.main.menu.show_page("codex")
 	Dev.check(_scan_codex_label("连绩 · ") == "", "streak", "V5: H=0 → 连绩行不创建")
+	# Sprint 24 订正③补：H=0 → 复盘行不含连绩段（streak_seg 与独立行同判据——oath 空则段为空）
+	Dev.check(_scan_codex_label("上局复盘 · ").contains("连绩 · ") == false, "streak",
+		"订正③补: H=0 → 复盘行不含连绩段")
 	# 印记页：真调 show_page("sigils")——上局连绩 + 既有「上局誓约」一字不变（V6）
 	Game.codex["last_run"]["oath"] = gm.oath_fulfillment()
 	Game.codex["last_run"]["oath_streak"] = 7
