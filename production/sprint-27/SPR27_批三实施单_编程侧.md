@@ -341,3 +341,27 @@ PASS = `grep -c "^\[SMOKE-CAL-THEME\] #"` == **103** **且** `grep -c "\[ERR\] c
 1. **只改 `:815` 不改 `:1053`（或反过来）** → A 组红的样子像 C1 写错，你会去改探针。
 2. **改了期望值不补 ⑮** → 变异 D 的靶子被拆了，以后「clear 里现查新层主题」这种 bug 再也没有断言能抓。
 3. **`_mod_*` 不归一就写死 1.0** → 约 28.6% 的局红在正确实现上，换 seed 就绿，会被误判成「探针不稳定」。
+
+---
+
+## 10. E1 基线（已实测，直接用，不用自己再跑）
+
+实测于 `63b7ba0`（批三实施前）。命令：
+
+```
+GODOT="<Godot 绝对路径>"
+SMOKE=1 SMOKE_SEED=<seed> SMOKE_META_FINGERPRINT=1 SMOKE_RUN_START=1 \
+  "$GODOT" --headless --path . --quit-after 90
+```
+
+| seed | `rooms=` | `kinds=` | `run start diamonds=` | modifier |
+|---|---|---|---|---|
+| 12345 | `(-1, 0),(-1, 1),(0, -1),(0, 0),(0, 1),(0, 2),(0, 3),(1, 1),(2, 1)` | `secret,treasure,shop,start,combat,elite,super_secret,elite,boss` | 3 | **none** |
+| 777 | `(-1, -1),(-1, 0),(-2, 0),(0, -1),(0, 0),(0, 1),(0, 2),(1, 1),(2, -1),(2, 0),(2, 1)` | `treasure,cursed,super_secret,secret,start,elite,shop,elite,boss,combat,combat` | 13 | **barren** |
+| 42 | `(-1, -1),(-1, 0),(0, -1),(0, -2),(0, -3),(0, 0),(0, 1),(1, -1),(1, -3),(2, -1),(2, 0)` | `treasure,secret,combat,combat,elite,start,super_secret,challenge,boss,combat,shop` | 3 | **swarm** |
+
+判 PASS 时：装完本批后重跑同一 seed，`rooms=` 与 `kinds=` 两段必须逐字相同。**只比这两段**，不比整行（`floor=` 之外的格式若变会误报）、不比整体日志。
+
+🔴 **seed 12345 的 modifier 是 `none`——刀 F（漏调用）在这个 seed 上会全绿**，会被误判成「变异无效」。跑刀 F 请用 **seed 777（barren）** 或 **seed 42（swarm）**，即「不是 none / overload / glass」即可。
+
+⚠️ **已知局限（沿用批一，本批不改）**：headless 下 `fingerprint` 只打到 `floor=1`，多楼层不在指纹里。多楼层的确定性由既有 5 条 `[SMOKE-SUPER]` 生成记录补，仍非全楼层指纹——报告里要如实写这一句，不要写成「E1 全楼层通过」。
