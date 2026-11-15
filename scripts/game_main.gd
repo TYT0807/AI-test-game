@@ -251,6 +251,8 @@ func _ready() -> void:
 			_smoke_cal_theme_probe()
 		if OS.get_environment("SMOKE_OATH_GRANT") != "":
 			_test_oath_grant()
+		if OS.get_environment("SMOKE_PURIFY_COST") != "":
+			_test_purify_cost()
 
 
 func _process(delta: float) -> void:
@@ -3088,7 +3090,8 @@ func _shrine_execute(offer: Dictionary) -> void:
 			# 先清空会走空分支把 debuff 永久固化（max_hp/弹匣/掉率/敌速）
 			_clear_calamity_effects()
 			_calamity = ""
-			Game.calamity_floors.erase(Game.floor_num)   # 代价：若为唯一灾祸层，×1.5 结算作废
+			Game.purified_run = true   # S28 批一：代价的单一来源——本局确定放弃 ×1.5
+			Game.calamity_floors.erase(Game.floor_num)   # 记录如实；本行不再承担代价（代价见 Game.purified_run）
 			oath_count("purify_used")   # Sprint 16 A：净化誓约计数
 		"ward_boon":
 			player.shield_charges += 1
@@ -4091,3 +4094,220 @@ func _og_restore() -> void:
 	Game.diamonds_changed.emit(Game.diamonds)
 	print("[SMOKE-OATH-GRANT] restore equipped=%s daily=%s diamonds=%d（E 组运行态不还原，已声明）" % [
 		String(Game.sigils.get("equipped", "")), str(Game.daily_mode), Game.diamonds])
+
+
+## ============================================================================
+## Sprint 28 批一 探针：净化代价（SMOKE_PURIFY_COST=1）
+## 23 条断言，declared 字面量 23。每条后无条件打印 #NN + 实测值 + ok= 字段
+## （判红口径：Dev.check 只在失败时打 [ERR]；ok=false 计数为第二道门）。
+## 净化驱动走真实 _on_shrine_chosen 全链（affordable → execute → 记账 → 回声桶）。
+## settle_shards 会 save_sigils()：每次调用前后把 shards 还原到入口快照（直接赋值，不走 add_shards）。
+## 🔴 本探针源码不得出现记账赋值符号的带上下文完整字面（F01 是文本级静态门，
+##    注释命中也算一处；探针自己的记账式赋值一律走 Game.set("purified_run", …)）。
+## ============================================================================
+
+const _PC_DECLARED := 23
+var _pc_checked := 0
+
+
+func _pc_assert(ok: bool, nn: String, what: String, measured, expect) -> void:
+	_pc_checked += 1
+	var msg := "%s %s | measured=%s expect=%s" % [nn, what, str(measured), str(expect)]
+	Dev.check(ok, "purify_cost", msg)
+	print("[SMOKE-PURIFY-COST] #%02d %s measured=%s expect=%s ok=%s" % [
+		_pc_checked, nn + " " + what, str(measured), str(expect), str(ok)])
+
+
+func _pc_is_word(c: String) -> bool:
+	if c == "_":
+		return true
+	if c >= "0" and c <= "9":
+		return true
+	if c >= "a" and c <= "z":
+		return true
+	if c >= "A" and c <= "Z":
+		return true
+	return false
+
+
+## 组卡助手：SHRINE_OFFERS 表项不带 id 键（键名即 id，真链由 _open_shrine 注入）——
+## 探针喂裸表项会让 offer["id"] 取值报错、execute 静默中止（首跑实证 7 红同源）。
+func _pc_purify_offer() -> Dictionary:
+	var o: Dictionary = Data.SHRINE_OFFERS["purify"].duplicate()
+	o["id"] = "purify"
+	return o
+
+
+func _test_purify_cost() -> void:
+	var shards0: int = int(Game.sigils["shards"])
+	var rng_seed0: int = Game.rng.seed
+	var rng_state0: int = Game.rng.state
+	var floor0: int = Game.floor_num
+	var offers0: Array = _shrine_offers.duplicate()
+	var coord0: Vector2i = _shrine_coord
+	var echo_choices0: Array = _echo_choices.duplicate()
+	var echo_costs0: Dictionary = _echo_costs.duplicate()
+	var codex0: Dictionary = Game.codex.duplicate(true)
+	var counters0: Dictionary = _oath_counters.duplicate()
+	var floors0: Array = Game.calamity_floors.duplicate()
+	print("[SMOKE-PURIFY-COST] entry shards=%d floors=%s purified=%s" % [
+		shards0, str(Game.calamity_floors), str(Game.purified_run)])
+
+	# ---- A 状态（5）----
+	_pc_assert(Game.purified_run == false, "A01", "新局开局 purified_run=false", Game.purified_run, false)
+	Game.set("purified_run", true)
+	Game.reset()
+	_pc_assert(Game.purified_run == false, "A02", "reset 后 purified_run=false（reset 漏清即红）", Game.purified_run, false)
+	Game.calamity_floors = [2]
+	Game.floor_num = 2
+	Game.sigils["shards"] = shards0
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	_on_shrine_chosen(0)
+	_pc_assert(Game.purified_run == true, "A03", "净化全链执行后 purified_run=true（记账漏写/写错字段即红）", Game.purified_run, true)
+	_pc_assert(Game.calamity_floors.has(2) == false, "A04", "erase 保留：本层已出灾祸表（删 erase 即红）", Game.calamity_floors.has(2), false)
+	_pc_assert(String(Data.SHRINE_OFFERS["purify"].get("cost_kind", "x")) == "" and int(Data.SHRINE_OFFERS["purify"].get("cost", -1)) == 0,
+		"A05", "purify cost_kind/cost 字段未动", "%s/%s" % [Data.SHRINE_OFFERS["purify"].get("cost_kind"), Data.SHRINE_OFFERS["purify"].get("cost")], "空串/0")
+
+	# ---- B 结算（6，M=10；META_RATE=2.0 → 基线 20 / ×1.5 = 30）----
+	Game.calamity_floors = []
+	Game.set("purified_run", false)
+	Game.sigils["shards"] = shards0
+	var b01 := Game.settle_shards(10)
+	_pc_assert(b01 == 20, "B01", "无灾祸未净化 → 基线 20", b01, 20)
+	Game.calamity_floors = [2]
+	Game.sigils["shards"] = shards0
+	var b02 := Game.settle_shards(10)
+	_pc_assert(b02 == 30, "B02", "单灾祸未净化 → ×1.5=30（1.5 被删即红）", b02, 30)
+	Game.calamity_floors = [2, 3]
+	Game.sigils["shards"] = shards0
+	var b03 := Game.settle_shards(10)
+	_pc_assert(b03 == 30, "B03", "多灾祸未净化 → 仍 ×1.5（按层累加=方案C误入即红）", b03, 30)
+	Game.calamity_floors = [2]
+	Game.set("purified_run", true)
+	Game.sigils["shards"] = shards0
+	var b04 := Game.settle_shards(10)
+	_pc_assert(b04 == 20, "B04", "单灾祸净化 → 不乘（回归基线）", b04, 20)
+	Game.calamity_floors = [2, 3]
+	Game.set("purified_run", true)
+	Game.sigils["shards"] = shards0
+	var b05 := Game.settle_shards(10)
+	_pc_assert(b05 == 20, "B05", "多灾祸净化 → 不乘 20 而非 30（本批靶心）", b05, 20)
+	Game.calamity_floors.append(9)
+	Game.sigils["shards"] = shards0
+	var b06 := Game.settle_shards(10)
+	_pc_assert(b06 == 20, "B06", "净化后塞别的灾祸层 → 仍不乘（作废由记账位决定非 size）", b06, 20)
+
+	# ---- C 跨局（3）----
+	Game.reset()
+	Game.calamity_floors = [2]
+	Game.set("purified_run", false)
+	Game.sigils["shards"] = shards0
+	var c01 := Game.settle_shards(10)
+	_pc_assert(c01 == 30, "C01", "净化局 reset 后新局未净化有灾祸 → 恢复 ×1.5", c01, 30)
+	var alt_bad := 0
+	for i in 3:
+		Game.reset()
+		Game.calamity_floors = [2]
+		Game.sigils["shards"] = shards0
+		if i % 2 == 0:
+			Game.floor_num = 2
+			_shrine_offers = [_pc_purify_offer()]
+			_shrine_coord = Vector2i.ZERO
+			_on_shrine_chosen(0)
+			if Game.settle_shards(10) != 20:
+				alt_bad += 1
+		else:
+			if Game.settle_shards(10) != 30:
+				alt_bad += 1
+	_pc_assert(alt_bad == 0, "C02", "净化/未净化交替 3 轮按预期交替（状态只增不清即红）", "%d 轮错" % alt_bad, "0 轮错")
+	Game.reset()
+	Game.calamity_floors = [2, 3]
+	Game.set("purified_run", false)
+	Game.floor_num = 2
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	_on_shrine_chosen(0)
+	Game.sigils["shards"] = shards0
+	var c03a := Game.settle_shards(10)
+	Game.floor_num = 3
+	_on_shrine_chosen(0)
+	Game.sigils["shards"] = shards0
+	var c03b := Game.settle_shards(10)
+	_pc_assert(c03a == 20 and c03b == 20, "C03", "连续两次净化不叠加（布尔被写成计数即红）", "%s/%s" % [c03a, c03b], "20/20")
+
+	# ---- D 零漂移（4）----
+	_pc_assert(_echo_costs.has("") and int(_echo_costs.get("", 0)) >= 1, "D01",
+		"净化记账走空串桶（擅迁桶即红）", str(_echo_costs), "含空串键")
+	var echo_costs_keep := _echo_costs.duplicate()
+	_echo_costs = {"": 1}
+	var d02 := _echo_tag()
+	_echo_costs = echo_costs_keep
+	_pc_assert(d02 == "实用流", "D02", "_echo_tag 对空串桶返回实用流（分支被改死即红）", d02, "实用流")
+	_pc_assert(int(_oath_counters.get("purify_used", 0)) >= 1, "D03", "purify_used 誓约计数在位", _oath_counters.get("purify_used", 0), ">=1")
+	var d_seed0: int = Game.rng.seed
+	var d_state0: int = Game.rng.state
+	Game.reset()
+	Game.calamity_floors = [2]
+	Game.floor_num = 2
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	_on_shrine_chosen(0)
+	Game.sigils["shards"] = shards0
+	Game.settle_shards(10)
+	_pc_assert(Game.rng.seed == d_seed0 and Game.rng.state == d_state0, "D04",
+		"净化+结算链 rng seed/state 双不变（只比 state 不够——reset/daily 路径读 seed）",
+		"seed %d→%d state_changed=%s" % [d_seed0, Game.rng.seed, str(Game.rng.state != d_state0)], "全不变")
+
+	# ---- E 文案（3）----
+	_pc_assert(String(Data.SHRINE_OFFERS["purify"]["desc"]).contains("本局 ×1.5 结算加成作废"), "E01",
+		"卡面 desc 新文案", Data.SHRINE_OFFERS["purify"]["desc"], "含「本局 ×1.5 结算加成作废」")
+	var e02: String = shrine_panel._cost_text({"cost_kind": ""})
+	_pc_assert(e02 == "代价：本局 ×1.5 加成作废", "E02", "面板代价行新文案（仍说「或失效」即红）", e02, "代价：本局 ×1.5 加成作废")
+	var e03_bad: Array[String] = []
+	for k in Data.SHRINE_OFFERS.keys():
+		if String(k) != "purify" and String(Data.SHRINE_OFFERS[k].get("cost_kind", "")) == "":
+			e03_bad.append(String(k))
+	_pc_assert(e03_bad.is_empty(), "E03", "其余 9 项 cost_kind 均非空（默认分支仅净化可达）", e03_bad, "0 误伤")
+
+	# ---- F 静态（2，文本级门；读失败判红不静默跳过）----
+	var f01_cnt := -1
+	var f02_ok := false
+	var fg := FileAccess.open("res://scripts/game_main.gd", FileAccess.READ)
+	var fg2 := FileAccess.open("res://scripts/game_state.gd", FileAccess.READ)
+	if fg != null and fg2 != null:
+		var lines_g: PackedStringArray = fg.get_as_text().split("\n")
+		var lines_s: PackedStringArray = fg2.get_as_text().split("\n")
+		fg.close()
+		fg2.close()
+		f01_cnt = 0
+		var pc_sym := "Game.purified_run " + "= true"
+		for i in lines_g.size():
+			var ln := lines_g[i]
+			var pos := ln.find(pc_sym)
+			while pos >= 0:
+				if pos == 0 or not _pc_is_word(ln[pos - 1]):
+					f01_cnt += 1
+				pos = ln.find(pc_sym, pos + 1)
+		for i in lines_s.size():
+			if lines_s[i].contains("calamity_floors.size() > 0 and not purified_run"):
+				f02_ok = true
+	_pc_assert(f01_cnt == 1, "F01", "全仓记账赋值词边界恰 1 处（多处记账即红）", f01_cnt, 1)
+	_pc_assert(f02_ok, "F02", "settle_shards 判定行含 and not purified_run（改回存在性布尔即红）", f02_ok, true)
+
+	# ---- 出口还原 ----
+	Game.sigils["shards"] = shards0
+	Game.rng.seed = rng_seed0
+	Game.rng.state = rng_state0
+	Game.calamity_floors = floors0
+	Game.set("purified_run", false)
+	Game.floor_num = floor0
+	_shrine_offers = offers0
+	_shrine_coord = coord0
+	_echo_choices = echo_choices0
+	_echo_costs = echo_costs0
+	_oath_counters = counters0
+	Game.codex = codex0.duplicate(true)
+	Dev.check(_pc_checked == _PC_DECLARED, "purify_cost",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_pc_checked, _PC_DECLARED])
+	print("[SMOKE-PURIFY-COST] done checked=%d declared=%d" % [_pc_checked, _PC_DECLARED])

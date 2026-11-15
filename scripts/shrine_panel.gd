@@ -163,7 +163,7 @@ func _cost_text(o: Dictionary) -> String:
 			return "代价：生命上限 -%d" % int(o["cost"])
 		"score":
 			return "代价：积分 -%d" % int(o["cost"])
-	return "代价：×1.5 加成或失效"
+	return "代价：本局 ×1.5 加成作废"
 
 
 ## 置灰：代价不足的卡不可选（主侧 _on_shrine_chosen 再校验，双保险）
