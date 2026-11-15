@@ -319,7 +319,7 @@ func _calamity_name(id: String) -> String:
 
 ```
 # 1 静态
-python3 -c "print(open('scripts/game_main.gd',encoding='utf-8').read().count('theme_for_floor'))"   # 期望 2（原 1 + 新增 1）
+python3 -c "print(open('scripts/game_main.gd',encoding='utf-8').read().count('theme_for_floor'))"   # 期望 4（基线 3 + 新增 1）
 grep -rn "FLOOR_THEMES\.get(" scripts/          # 期望只有 data.gd:495 一条
 grep -rn "Game\.rng\|_floor_rng" scripts/game_main.gd | wc -l   # 与批前基线逐字相同
 
@@ -337,7 +337,9 @@ SMOKE_CAL_THEME=1 <godot> --headless --path . ...
 #    两条同时成立才 PASS。只做第二条 → 提前 return 的探针能拿满分，等于没测。
 ```
 
-**变异测试自检（交付前自己先做，不要丢给核验侧）**：把 §4.2 的快照行临时改成 `Data.theme_for_floor(Game.floor_num)` 的**错版**（写在 `_clear_calamity_effects()` 里现查），期望 ⑥2 + ⑥4 + ④ 换层 4 条一起红；改回来必须全绿。这一刀是「不改会红」的唯一实证。
+**变异测试自检（交付前自己先做，不要丢给核验侧）**：把 §4.2 的快照行临时改成 `Data.theme_for_floor(Game.floor_num)` 的**错版**（写在 `_clear_calamity_effects()` 里现查），期望 ⑥2 + ⑥3 + ⑥4 + ③/④ 数值面成片红；改回来必须全绿。这一刀是「不改会红」的唯一实证。
+
+⚠️ **变异必须替换目标行，不许新增行**：若只在 clear 顶部加一行现查、而 if-block 里的 `_calamity_theme_rule = ""` 复位行还在，现查就是死代码，⑥2/⑥3 会**假绿**（S27 批一实施时实际踩过，已入交付文档）。另外这一刀单独只红 2 条（⑥2/⑥3）——它证明的是「复位不许现查」；要同时打红数值面，得改成「apply 不再快照、只在 clear 现查」的完整错版。
 
 ---
 
