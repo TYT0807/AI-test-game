@@ -987,6 +987,14 @@ func _shrine_probe() -> void:
 		if want != "" and got == want and vis:
 			f_hits += 1
 	Dev.check(f_hits == 3, "shrine", "D: 三卡灰字全部命中（%d/3）" % f_hits)
+	# Sprint 26 批二：灰字六道新词逐字上屏（上方为「与表自比较」，本条为字面量锁，防表被改成同款错值）
+	var s26_blood := false
+	for i in 3:
+		if String(fset[i].get("id", "")) == "blood_relic":
+			var fl_lit := String(gm.shrine_panel._flavors[i].text)
+			s26_blood = gm.shrine_panel._flavors[i].visible and fl_lit.contains("血祭。以血换遗物")
+	Dev.check(s26_blood, "shrine",
+		"S26: blood_relic 灰字含「血祭。以血换遗物」（六道新词逐字上屏）")
 	print("[SMOKE-SHRINE] D flavors %s" % f_list)
 	# 自开自关：不留给 autopick 触发真实选择（隐藏后 safe_delay 回调会因 _root.visible=false 跳过）
 	gm.shrine_panel._root.visible = false
@@ -1484,6 +1492,9 @@ func _floor_sign_probe() -> void:
 		"floor=4 第二行含房型段实值（floor_layout_hint）：%s（房型段=%s）" % [sub, lay4])
 	Dev.check(sub.contains("往生脉"), "floor_sign_sub",
 		"floor=4 第二行含主题手记实值（FLAVOR themes/vein，Sprint 25 随主题改名同步）：%s" % sub)
+	# Sprint 26 批二：六道卷语义深绑——第二行六道新词逐字上屏（首词之外的插入语，验渲染非验表）
+	Dev.check(sub.contains("人间拾痕"), "floor_sign_sub",
+		"S26: floor=4 第二行含六道新词「人间拾痕」（FLAVOR themes/vein value 全文上屏）：%s" % sub)
 	# 拼接分隔符（房型段/诅咒段与手记段之间为「 ｜ 」——锁组合结构，不锁具体文案）
 	Dev.check(sub.contains(" ｜ "), "floor_sign_sub",
 		"floor=4 第二行以「 ｜ 」连接房型与手记：%s" % sub)
@@ -1557,6 +1568,9 @@ func _floor_sign_probe() -> void:
 	Game._flush_flavor_toast()
 	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层"), "flavor",
 		"S22 D: 单条首发现维持原格式（%s）" % String(Game.main.hud._toast.text))
+	# Sprint 26 批二：toast 六道新词逐字上屏（「矿工手记 · 」格式串不变，只扩 value 内容）
+	Dev.check(String(Game.main.hud._toast.text).contains("矿工手记 · 岩浆层。地狱热狱"), "flavor",
+		"S26: toast 含「矿工手记 · 岩浆层。地狱热狱」（FLAVOR themes/magma value 逐字上屏）：%s" % String(Game.main.hud._toast.text))
 	# ---------------- Sprint 22 附限定①：聚合冲洗结果断言（确定性直调版） ----------------
 	# 【Sprint 24 降级登记——主理人处方 2】本断言原为 deferred 生产调度路径回归锁
 	# （回调经 call_deferred 排队列尾、FIFO 排在 3 次冲洗之后）；S23 三次跑绿 2 红 1 实录证明
@@ -1575,6 +1589,15 @@ func _floor_sign_probe() -> void:
 	Game._flush_flavor_toast()   # 直调冲洗：聚合逻辑断言（确定性）；F1-F3 的 deferred 排队此后各自空转
 	Dev.check(String(Game.main.hud._toast.text) == "图鉴新发现 ×3", "flavor",
 		"附限定①: 聚合冲洗结果（哨兵被覆盖，%s）" % String(Game.main.hud._toast.text))
+	# Sprint 26 批二：图鉴手记行六道新词逐字上屏（themes/toxic 已在上方首发现登记，value 全文入行）
+	Game.main.menu._build_codex()
+	var s26_note := false
+	for c in Game.main.menu._rows.get_children():
+		if c is Label and String(c.text).contains("　手记：") \
+			and String(c.text).contains("毒巢。饿鬼食毒"):
+			s26_note = true
+	Dev.check(s26_note, "flavor",
+		"S26: 图鉴 themes 手记行含「毒巢。饿鬼食毒」（FLAVOR themes/toxic value 全文上屏）")
 	# Sprint 24 观察①：完成标记保留探针侧打印（时序确定——回调版已降级，见上方降级登记）
 	# Sprint 24 观察②：floor_num 恢复点位于断言之后——回调内若加依赖 floor_num 的断言会踩坑（当前无回调）
 	Game.floor_num = bak_floor
