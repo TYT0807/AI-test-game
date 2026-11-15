@@ -119,6 +119,8 @@ var _calamity_floor := -1
 var _calamity_frail_cut := 0
 var _calamity_saved_diamond_mult := 1.0
 var _calamity_saved_mag_cap_mult := 1.0
+var _calamity_theme_rule := ""     # S27 复合变体身份：施加瞬间快照主题派生结果，clear 只读它（禁现查 floor_num——陷阱 1：换层时 floor_num 已先自增）
+var _calamity_frail_ratio := 0.2   # S27：本层实际虚弱比例（文案按实值显示，见 _calamity_name / _frail_ratio）
 var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
 
 
@@ -242,6 +244,8 @@ func _ready() -> void:
 				or OS.get_environment("SMOKE_META_RNGCOUNT") != "" \
 				or OS.get_environment("SMOKE_META_QUIT") != "":
 			_smoke_meta_probe()
+		if OS.get_environment("SMOKE_CAL_THEME") != "":
+			_smoke_cal_theme_probe()
 
 
 func _process(delta: float) -> void:
@@ -544,12 +548,27 @@ func _roll_calamity() -> void:
 		print("[SMOKE-CALAMITY] floor=%d calamity=%s" % [Game.floor_num, _calamity])
 
 
+## S27 复合变体：虚弱削减比例按主题分层（vein 贴身单杀换残响吃不满 / silent 看不见绕不开）。
+## 只读快照 _calamity_theme_rule，禁止现查 Game.floor_num（陷阱 1）
+func _frail_ratio() -> float:
+	match _calamity_theme_rule:
+		"vein": return 0.1
+		"silent": return 0.4
+	return 0.2
+
+
 func _calamity_name(id: String) -> String:
+	# S27 §4.5：百分比按实值显示（变体上线后写死值会撒谎），族名首词逐字保留
 	match id:
-		"frail": return "虚弱（生命上限 -20%）"
-		"frenzy": return "狂乱（敌人加速 25%）"
-		"scarce_ammo": return "弹药荒（弹匣减半）"
-		"scarce_ore": return "残响枯竭（残响掉落 -30%）"
+		"frail":
+			return "虚弱（生命上限 -%d%%）" % int(round(_calamity_frail_ratio * 100.0))
+		"frenzy":
+			return "狂乱（敌人加速 %d%%）" % int(round((Game.calamity_speed_mult - 1.0) * 100.0))
+		"scarce_ammo":
+			return "弹药荒（弹匣 -%d%%）" % int(round((1.0 - player.mag_cap_mult) * 100.0))
+		"scarce_ore":
+			var base: float = maxf(_calamity_saved_diamond_mult, 0.001)
+			return "残响枯竭（残响掉落 -%d%%）" % int(round((1.0 - 0.7 / base) * 100.0))
 	return id
 
 
@@ -557,20 +576,39 @@ func _apply_calamity() -> void:
 	# 保存进入灾祸前的倍率（换层还原用——核验 #2：不抹 modifier 全局倍率）
 	_calamity_saved_diamond_mult = Game.main.diamond_mult
 	_calamity_saved_mag_cap_mult = player.mag_cap_mult
+	# S27：施加瞬间快照主题 rule（clear 只读它）。🔴 必须经 Data 主题派生函数（内部 4+((n-4)%8)，
+	# 12 层回卷 vein）——禁止绕过它直查 FLOOR_THEMES 表：floor_num 直下标在 12 层拿空字典 → 变体静默失效
+	_calamity_theme_rule = String(Data.theme_for_floor(Game.floor_num).get("rule", ""))
 	match _calamity:
 		"frail":
 			# 核验 #3：cut 差值增量还原（与层内成长解耦，避免绝对值还原吞成长）
 			# 终审边界：存「实际」削减量（max_hp 已到钳制下限时可能为 0），否则 clear 会凭空 +1 血上限
 			var old_hp: int = player.max_hp
-			_calamity_frail_cut = maxi(1, int(round(old_hp * 0.2)))
+			_calamity_frail_ratio = _frail_ratio()
+			_calamity_frail_cut = maxi(1, int(round(old_hp * _calamity_frail_ratio)))
 			player.max_hp = maxi(2, old_hp - _calamity_frail_cut)
 			_calamity_frail_cut = old_hp - player.max_hp
 			player.hp = mini(player.hp, player.max_hp)
 			player.hp_changed.emit(player.hp, player.max_hp)
 		"frenzy":
-			Game.calamity_speed_mult = 1.25
+			# S27 复合变体：沼泽本就拖玩家脚步、冰面玩家收不住——两个主题的杠杆都压在玩家位移上，
+			# 都能把「敌人加速」推得更深（方向从主题杠杆推出，不是无脑加难）
+			match _calamity_theme_rule:
+				"swamp":
+					Game.calamity_speed_mult = 1.45
+				"ice":
+					Game.calamity_speed_mult = 1.4
+				_:
+					Game.calamity_speed_mult = 1.25
 		"scarce_ammo":
-			player.mag_cap_mult = 0.5
+			# S27 复合变体：岩浆逼你走位站不定 → 弹匣不再是瓶颈；藤替你堵路 → 不必按原量开火
+			match _calamity_theme_rule:
+				"magma":
+					player.mag_cap_mult = 0.7
+				"vines":
+					player.mag_cap_mult = 0.65
+				_:
+					player.mag_cap_mult = 0.5
 			player.mag_changed.emit(player.mag(), player.mag_cap())
 		"scarce_ore":
 			if Game.main != null and is_instance_valid(Game.main):
@@ -599,6 +637,489 @@ func _clear_calamity_effects() -> void:
 		_calamity_frail_cut = 0
 		_calamity_saved_diamond_mult = 1.0
 		_calamity_saved_mag_cap_mult = 1.0
+		_calamity_theme_rule = ""      # S27：变体身份随灾祸一起失效。🔴 禁止在此处现查 floor_num/_theme_rule（陷阱 1：floor 已是新层；_theme_rule 恰为旧值纯属调用顺序巧合）
+		_calamity_frail_ratio = 0.2    # S27：比例复位为基线
+
+
+## ---------------- Sprint 27 批一：主题×灾祸复合探针（SMOKE_CAL_THEME） ----------------
+## 断言死数：A 组 66 / B 组 76（实施单 §5.3，写死不许公式现算）。
+## 打印纪律（实施单 §5.1）：Dev.check 只在失败时打印（dev_log.gd:29-32），[ERR]=0 不构成执行证明——
+## 故入口无条件打印、每条断言伴随无条件 #NN 行、末尾 done checked=… 并自校验 checked==declared。
+## 三段式（§5.2）：段1 施加 → 段2 换层精确还原 → 段3 再施加幂等；换层构造复刻 next_floor
+## 生产顺序（game_main.gd:1505-1509：floor 自增 → clear → 清 id → 主题），禁用真实 next_floor()。
+const _CT_DECLARED := 66  # B 组完成后改 76
+
+# A 组 6 变体格：[楼层, 灾祸, 施加期望, 还原期望, 主题 rule 字面量]（frail 的还原期望是 max_hp）
+const _CT_VARIANTS := [
+	[4, "frail", 1.0, 10.0, "vein"],      # vein×frail: cut 1（0.10）——轻
+	[7, "frail", 4.0, 10.0, "silent"],    # silent×frail: cut 4（0.40）——重
+	[8, "scarce_ammo", 0.7, 1.0, "magma"],   # magma×弹药荒: 0.7——轻
+	[11, "scarce_ammo", 0.65, 1.0, "vines"], # vines×弹药荒: 0.65——轻
+	[10, "frenzy", 1.45, 1.0, "swamp"],   # swamp×狂乱: 1.45——重
+	[9, "frenzy", 1.4, 1.0, "ice"],       # ice×狂乱: 1.40——重
+]
+
+var _ct_checked := 0
+
+
+func _ct_assert(ok: bool, nn_name: String, measured, expect) -> void:
+	_ct_checked += 1
+	var m := str(measured)
+	var e := str(expect)
+	Dev.check(ok, "cal_theme", "%s | measured=%s expect=%s" % [nn_name, m, e])
+	print("[SMOKE-CAL-THEME] #%02d %s measured=%s expect=%s" % [_ct_checked, nn_name, m, e])
+
+
+func _ct_reset_channels() -> void:
+	# 同帧差额对照的公共基线（实施单 §5.2）：四通道手工拉平，防多格间泄漏（player.gd:746 同源教训）
+	player.max_hp = 10
+	player.hp = 10
+	player.mag_cap_mult = 1.0
+	diamond_mult = 1.0
+	Game.calamity_speed_mult = 1.0
+
+
+func _ct_channel(id: String) -> float:
+	match id:
+		"frail": return float(_calamity_frail_cut)
+		"frenzy": return Game.calamity_speed_mult
+		"scarce_ammo": return player.mag_cap_mult
+		"scarce_ore": return diamond_mult
+	return -1.0
+
+
+func _ct_cleared_value(id: String) -> float:
+	# 还原后的读数：frail 看 max_hp（差值增量还原），其余看通道本值
+	if id == "frail":
+		return float(player.max_hp)
+	return _ct_channel(id)
+
+
+func _ct_baseline_pair(id: String) -> Array:
+	# 无主题层基线 [施加期望, 还原期望]（max_hp=10 构造下 frail cut=2 / 还原 10）
+	match id:
+		"frail": return [2.0, 10.0]
+		"frenzy": return [1.25, 1.0]
+		"scarce_ammo": return [0.5, 1.0]
+		"scarce_ore": return [0.7, 1.0]
+	return [-1.0, -1.0]
+
+
+func _ct_floor_advance(nf: int) -> void:
+	# 复刻 next_floor 生产顺序前三步（:1505-1507）：floor 自增 → clear（此时 _calamity 仍为旧值，
+	# ⑤9 断言点）；调用方负责随后 _calamity = "" + _apply_floor_theme()（对齐 :1508-1509）。
+	# 禁用真实 next_floor()：会触发转场/进房/地图生成。
+	Game.floor_num = nf
+	_clear_calamity_effects()
+
+
+func _smoke_cal_theme_probe() -> void:
+	print("[SMOKE-CAL-THEME] entry floor=%d calamity=%s" % [Game.floor_num, _calamity])
+	# 现场快照（出口统一还原——多探针并发污染防线，player.gd:746 实证做法）
+	var save_floor := Game.floor_num
+	var save_calamity := _calamity
+	var save_theme_rule := _theme_rule
+	var save_dm := diamond_mult
+	var save_esm := enemy_speed_mult
+	var save_csm: float = Game.calamity_speed_mult
+	var save_mc: float = player.mag_cap_mult
+	var save_mhp: int = player.max_hp
+	var save_hp: int = player.hp
+	var save_tam: float = player.terrain_accel_mult
+	var save_tsm: float = player.terrain_speed_mult
+	var rng_state0: int = Game.rng.state
+	_ct_checked = 0
+
+	# ---- ① 基线通道（4）：无主题层（floor 1）四灾祸的基线值 ----
+	for id in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		_ct_reset_channels()
+		_calamity = id
+		_apply_calamity()
+		var bp := _ct_baseline_pair(id)
+		_ct_assert(is_equal_approx(_ct_channel(id), float(bp[0])), "①%s 基线通道值" % id, _ct_channel(id), bp[0])
+		_clear_calamity_effects()
+		_calamity = ""
+
+	# ---- ② 三段式·基线（12）：floor 2→3，每灾祸 段1 施加 / 段2 换层还原 / 段3 再施加幂等 ----
+	for id in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		var bp2 := _ct_baseline_pair(id)
+		_ct_reset_channels()
+		Game.floor_num = 2
+		_calamity = id
+		_apply_calamity()
+		_ct_assert(is_equal_approx(_ct_channel(id), float(bp2[0])), "②%s 段1 施加=基线" % id, _ct_channel(id), bp2[0])
+		_ct_floor_advance(3)
+		_calamity = ""
+		_apply_floor_theme()
+		_ct_assert(is_equal_approx(_ct_cleared_value(id), float(bp2[1])), "②%s 段2 换层还原" % id, _ct_cleared_value(id), bp2[1])
+		Game.floor_num = 2
+		_calamity = id
+		_apply_calamity()
+		_ct_assert(is_equal_approx(_ct_channel(id), float(bp2[0])), "②%s 段3 再施加幂等" % id, _ct_channel(id), bp2[0])
+		_clear_calamity_effects()
+		_calamity = ""
+
+	# ---- ③ 三段式·变体（18）：6 格 × 段1 施加=变体 / 段2 换层还原 / 段3 再施加幂等 ----
+	# 段2 的换层增量必须让 rule 真的改变（4→5 / 7→8 / 8→9 / 10→11 / 11→12）；🔴 禁用 4→12（回卷后 rule 相同，写错也能蒙过）
+	for v in _CT_VARIANTS:
+		var f3 := int(v[0])
+		var id3 := String(v[1])
+		_ct_reset_channels()
+		Game.floor_num = f3
+		_calamity = id3
+		_apply_calamity()
+		_ct_assert(is_equal_approx(_ct_channel(id3), float(v[2])), "③f%d×%s 段1 施加=变体" % [f3, id3], _ct_channel(id3), v[2])
+		_ct_floor_advance(f3 + 1)
+		_calamity = ""
+		_apply_floor_theme()
+		_ct_assert(is_equal_approx(_ct_cleared_value(id3), float(v[3])), "③f%d×%s 段2 换层还原" % [f3, id3], _ct_cleared_value(id3), v[3])
+		Game.floor_num = f3
+		_calamity = id3
+		_apply_calamity()
+		_ct_assert(is_equal_approx(_ct_channel(id3), float(v[2])), "③f%d×%s 段3 再施加幂等" % [f3, id3], _ct_channel(id3), v[2])
+		_clear_calamity_effects()
+		_calamity = ""
+
+	# ---- ④ 覆盖补全（9）：换层时序 4 + 幂等 4 + 零分支扫描 1 ----
+	# ④a 换层时序（4）：各灾祸经换层构造后通道精确还原
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "frail"
+	_apply_calamity()
+	_ct_floor_advance(6)
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(player.max_hp, 10.0), "④换层时序 frail: max_hp 还原", player.max_hp, 10.0)
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	_ct_floor_advance(6)
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(player.mag_cap_mult, 1.0), "④换层时序 ammo: mag_cap 还原", player.mag_cap_mult, 1.0)
+	_ct_reset_channels()
+	Game.floor_num = 6
+	_apply_floor_theme()   # 真实路径：pressure 把 diamond_mult 拉到 1.5
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	_ct_floor_advance(7)
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "④换层时序 ore@pressure: 还原到主题承诺 1.5", diamond_mult, 1.5)
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "frenzy"
+	_apply_calamity()
+	_ct_floor_advance(6)
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(Game.calamity_speed_mult, 1.0), "④换层时序 frenzy: 敌速还原", Game.calamity_speed_mult, 1.0)
+	# ④b 幂等（4）：清后再施加同值
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "frail"
+	_apply_calamity()
+	var idem_f := float(_calamity_frail_cut)
+	_clear_calamity_effects()
+	_calamity = ""
+	Game.floor_num = 5
+	_calamity = "frail"
+	_apply_calamity()
+	_ct_assert(is_equal_approx(float(_calamity_frail_cut), idem_f), "④幂等 frail: 清后再施加同值", _calamity_frail_cut, idem_f)
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "frenzy"
+	_apply_calamity()
+	var idem_fr := Game.calamity_speed_mult
+	_clear_calamity_effects()
+	_calamity = ""
+	Game.floor_num = 5
+	_calamity = "frenzy"
+	_apply_calamity()
+	_ct_assert(is_equal_approx(Game.calamity_speed_mult, idem_fr), "④幂等 frenzy: 清后再施加同值", Game.calamity_speed_mult, idem_fr)
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	var idem_am: float = player.mag_cap_mult
+	_clear_calamity_effects()
+	_calamity = ""
+	Game.floor_num = 5
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	_ct_assert(is_equal_approx(player.mag_cap_mult, idem_am), "④幂等 ammo: 清后再施加同值", player.mag_cap_mult, idem_am)
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var idem_or := diamond_mult
+	_clear_calamity_effects()
+	_calamity = ""
+	Game.floor_num = 5
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	_ct_assert(is_equal_approx(diamond_mult, idem_or), "④幂等 ore: 清后再施加同值", diamond_mult, idem_or)
+	_clear_calamity_effects()
+	_calamity = ""
+	# ④c 零分支扫描（A 阶段 26 格）：32 格 − A 组 6 变体格；B 组两格本阶段未上代码走 default 必须一起扫
+	# （实施单 §5.6）。其中 13 号格（pressure×scarce_ore）走真实路径 1.5→0.7→1.5，其余 25 格基线字面量。
+	# 🔴 扫描行用 scan 前缀分流，禁用 #NN（否则污染 checked==declared 自校验，门控永久假绿）
+	var scan_bad: Array[String] = []
+	var scan_i := 0
+	for f in range(4, 12):
+		for id in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+			var is_variant := false
+			for v in _CT_VARIANTS:
+				if int(v[0]) == f and String(v[1]) == id:
+					is_variant = true
+					break
+			if is_variant:
+				continue
+			scan_i += 1
+			_ct_reset_channels()
+			Game.floor_num = f   # 每格落位：快照与 13 号格真实路径都以本格楼层为准（漏设会全部落在残留楼层上）
+			var ap_exp := float(_ct_baseline_pair(id)[0])
+			var cl_exp := float(_ct_baseline_pair(id)[1])
+			var special: bool = f == 6 and id == "scarce_ore"
+			if special:
+				_apply_floor_theme()   # 真实路径：pressure 把 diamond_mult 拉到 1.5
+				ap_exp = 0.7
+				cl_exp = 1.5
+			_calamity = id
+			_apply_calamity()
+			var ap := _ct_channel(id)
+			_clear_calamity_effects()
+			var cl := _ct_cleared_value(id)
+			_calamity = ""
+			if not (is_equal_approx(ap, ap_exp) and is_equal_approx(cl, cl_exp)):
+				scan_bad.append("f%d×%s(ap=%s,cl=%s)" % [f, id, ap, cl])
+			print("[SMOKE-CAL-THEME] scan i=%d cell=f%d×%s applied=%s cleared=%s" % [scan_i, f, id, ap, cl])
+	_ct_assert(scan_bad.is_empty(), "④c 零分支扫描 %d 格（26 含 13 号格）" % scan_i, scan_bad, "0 违例")
+
+	# ---- ⑤ 旁证（13）----
+	# ⑤1 无主题层（floor 3）四灾祸施加==基线
+	var n5_bad: Array[String] = []
+	for id in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		_ct_reset_channels()
+		Game.floor_num = 3
+		_calamity = id
+		_apply_calamity()
+		if not is_equal_approx(_ct_channel(id), float(_ct_baseline_pair(id)[0])):
+			n5_bad.append("%s=%s" % [id, _ct_channel(id)])
+		_clear_calamity_effects()
+		_calamity = ""
+	_ct_assert(n5_bad.is_empty(), "⑤1 无主题层(f3)四灾祸施加==基线", n5_bad, "0 违例")
+	# ⑤2 空灾祸 clear 完全不碰倍率（复验 player.gd:753-761 层流程①）
+	_ct_reset_channels()
+	diamond_mult = 1.5
+	player.mag_cap_mult = 1.7
+	_calamity = ""
+	_clear_calamity_effects()
+	_ct_assert(is_equal_approx(diamond_mult, 1.5) and is_equal_approx(player.mag_cap_mult, 1.7),
+		"⑤2 空灾祸 clear 不碰倍率", "%s/%s" % [diamond_mult, player.mag_cap_mult], "1.5/1.7")
+	_ct_reset_channels()
+	# ⑤3 差额正：scarce_ammo 在 magma 实测 0.70 ≠ ice 0.50（🔴 不许用 scarce_ore——apply 瞬间两格同为 0.7）
+	_ct_reset_channels()
+	Game.floor_num = 8
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	var v_magma: float = player.mag_cap_mult
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 10
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	var v_ice: float = player.mag_cap_mult
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_assert(is_equal_approx(v_magma, 0.7) and is_equal_approx(v_ice, 0.5) and not is_equal_approx(v_magma, v_ice),
+		"⑤3 差额正: magma 0.70 ≠ ice 0.50（唯一直接复合证据）", "%s/%s" % [v_magma, v_ice], "0.7/0.5 且不等")
+	# ⑤4 差额反：同主题不同通道互不越界
+	_ct_reset_channels()
+	Game.floor_num = 8
+	_calamity = "frail"
+	_apply_calamity()
+	var frail_side := _calamity_frail_cut == 2 and is_equal_approx(Game.calamity_speed_mult, 1.0)
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 8
+	_calamity = "frenzy"
+	_apply_calamity()
+	var frenzy_side: bool = is_equal_approx(Game.calamity_speed_mult, 1.25) and player.max_hp == 10
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_assert(frail_side and frenzy_side, "⑤4 差额反: magma 上 frail/frenzy 通道互不越界", "%s/%s" % [frail_side, frenzy_side], "true/true")
+	# ⑤5 探针窗口 Game.rng.state 不变（零抽取自证）
+	_ct_assert(Game.rng.state == rng_state0, "⑤5 探针窗口 rng.state 不变", Game.rng.state, rng_state0)
+	# ⑤6 FLOOR_THEMES 表长（⚠️ 常量自比较——护表长不被误改，不构成行为证据）
+	_ct_assert(Data.FLOOR_THEMES.size() == 8, "⑤6 FLOOR_THEMES.size()==8（常量自比较）", Data.FLOOR_THEMES.size(), 8)
+	# ⑤7 层签含变体实值（楼层对照写死：f4 vein=-10% / f7 silent=-40%；magma×frail 不是变体，别当靶子）
+	var sign_bad: Array[String] = []
+	_ct_reset_channels()
+	Game.floor_num = 4
+	_calamity = "frail"
+	_apply_calamity()
+	update_floor_sign()
+	var s4 := String(hud._floor_sign_label.text)
+	if not s4.contains("虚弱（生命上限 -10%）"):
+		sign_bad.append("f4: " + s4)
+	_ct_reset_channels()
+	Game.floor_num = 7
+	_calamity = "frail"
+	_apply_calamity()
+	update_floor_sign()
+	var s7 := String(hud._floor_sign_label.text)
+	if not s7.contains("虚弱（生命上限 -40%）"):
+		sign_bad.append("f7: " + s7)
+	_clear_calamity_effects()
+	_calamity = ""
+	update_floor_sign()
+	_ct_assert(sign_bad.is_empty(), "⑤7 层签含变体实值（f4=-10%/f7=-40%）", sign_bad, "0 违例")
+	# ⑤8 _calamity_name 四 id 均不返回原始 id
+	var nm_bad: Array[String] = []
+	for id in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		if String(_calamity_name(id)) == id:
+			nm_bad.append(id)
+	_ct_assert(nm_bad.is_empty(), "⑤8 _calamity_name 不返回原始 id", nm_bad, "0 违例")
+	# ⑤9 换层构造：clear 时 _calamity 仍为旧值（next_floor :1507 早于 :1508）
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	_ct_floor_advance(6)
+	_ct_assert(_calamity == "scarce_ammo", "⑤9 换层 clear 时 _calamity 仍为旧值", _calamity, "scarce_ammo")
+	_calamity = ""
+	_apply_floor_theme()
+	# ⑤10 净化路径：clear 时 _calamity 仍为旧值（:2224 早于 :2225），且已还原
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	_clear_calamity_effects()
+	var purify_still := _calamity
+	var purify_dm := diamond_mult
+	_calamity = ""
+	_ct_assert(purify_still == "scarce_ore" and is_equal_approx(purify_dm, 1.0),
+		"⑤10 净化 clear 时 _calamity 仍为旧值且已还原", "%s/%s" % [purify_still, purify_dm], "scarce_ore/1.0")
+	# ⑤11-13 前提守卫（🔴 恒过型，仅证明探针环境成立，不计入行为覆盖）
+	_ct_assert(is_instance_valid(player), "⑤11 前提守卫: player 有效（恒过型）", is_instance_valid(player), true)
+	_ct_assert(dungeon != null, "⑤12 前提守卫: dungeon 非空（恒过型）", dungeon != null, true)
+	_ct_assert(_smoke, "⑤13 前提守卫: _smoke 已开（恒过型）", _smoke, true)
+
+	# ---- ⑥ 快照纪律（6）：结构 4（只验标志）+ 行为 2 ----
+	# ⑥1 施加后快照==目标层 rule 字面量（6 变体格聚合；字面量取自 _CT_VARIANTS 第 5 列）
+	var rule_bad: Array[String] = []
+	for v in _CT_VARIANTS:
+		var f6 := int(v[0])
+		var id6 := String(v[1])
+		_ct_reset_channels()
+		Game.floor_num = f6
+		_calamity = id6
+		_apply_calamity()
+		if _calamity_theme_rule != String(v[4]):
+			rule_bad.append("f%d×%s got=%s want=%s" % [f6, id6, _calamity_theme_rule, v[4]])
+		_clear_calamity_effects()
+		_calamity = ""
+	_ct_assert(rule_bad.is_empty(), "⑥1 施加后快照==目标层 rule（只验标志）", rule_bad, "0 违例")
+	# ⑥2 + ⑥4 共用 6→7 真实路径构造（pressure → scarce_ore → 换层）
+	_ct_reset_channels()
+	Game.floor_num = 6
+	_apply_floor_theme()
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	_ct_floor_advance(7)
+	_ct_assert(_calamity_theme_rule == "", "⑥2 换层 clear 后快照清空（变异 D 正面靶子，只验标志）", _calamity_theme_rule, "空串")
+	_calamity = ""
+	_apply_floor_theme()
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑥4 6→7 换层后 diamond_mult 精确还原==1.5（变异 D 行为靶子）", diamond_mult, 1.5)
+	# ⑥3 + ⑥5 共用净化路径构造（floor 6 pressure）
+	_ct_reset_channels()
+	Game.floor_num = 6
+	_apply_floor_theme()
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	_clear_calamity_effects()
+	_ct_assert(_calamity_theme_rule == "", "⑥3 净化 clear 后快照清空（只验标志）", _calamity_theme_rule, "空串")
+	_ct_assert(is_equal_approx(diamond_mult, 1.5), "⑥5 净化路径 6 层 diamond_mult 精确还原==saved(1.5)", diamond_mult, 1.5)
+	_calamity = ""
+	# ⑥6 floor 12 回卷（主题派生 f12→key4→vein）：施加后快照==vein（变异 D′ 正面靶子，只验标志）；跑完必须还原 floor_num
+	var save_floor_66 := Game.floor_num
+	_ct_reset_channels()
+	Game.floor_num = 12
+	_calamity = "frail"
+	_apply_calamity()
+	_ct_assert(_calamity_theme_rule == "vein", "⑥6 f12 施加后快照==vein（回卷，只验标志）", _calamity_theme_rule, "vein")
+	_clear_calamity_effects()
+	_calamity = ""
+	Game.floor_num = save_floor_66
+
+	# ---- ⑦ 文案实值（4）：_calamity_name() 百分比与实测通道一致（族名首词逐字保留）----
+	_ct_reset_channels()
+	Game.floor_num = 7
+	_calamity = "frail"
+	_apply_calamity()
+	var n7 := String(_calamity_name("frail"))
+	_ct_assert(n7 == "虚弱（生命上限 -40%）" and _calamity_frail_cut == 4, "⑦frail 实值", "%s cut=%d" % [n7, _calamity_frail_cut], "-40% cut=4")
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 10
+	_calamity = "frenzy"
+	_apply_calamity()
+	var n10 := String(_calamity_name("frenzy"))
+	_ct_assert(n10 == "狂乱（敌人加速 45%）" and is_equal_approx(Game.calamity_speed_mult, 1.45), "⑦frenzy 实值", "%s speed=%s" % [n10, Game.calamity_speed_mult], "-45% speed=1.45")
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 8
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	var n8 := String(_calamity_name("scarce_ammo"))
+	_ct_assert(n8 == "弹药荒（弹匣 -30%）" and is_equal_approx(player.mag_cap_mult, 0.7), "⑦ammo 实值", "%s mag=%s" % [n8, player.mag_cap_mult], "-30% mag=0.7")
+	_clear_calamity_effects()
+	_calamity = ""
+	_ct_reset_channels()
+	Game.floor_num = 6
+	_apply_floor_theme()   # 真实路径：pressure 1.5 → scarce_ore 0.7 → 相对承诺 −53%
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var n6 := String(_calamity_name("scarce_ore"))
+	_ct_assert(n6 == "残响枯竭（残响掉落 -53%）" and is_equal_approx(diamond_mult, 0.7), "⑦ore 实值@pressure", "%s dm=%s" % [n6, diamond_mult], "-53% dm=0.7")
+	_clear_calamity_effects()
+	_calamity = ""
+
+	# ---- 出口：还原现场 ----
+	Game.floor_num = save_floor
+	_calamity = save_calamity
+	_theme_rule = save_theme_rule
+	diamond_mult = save_dm
+	enemy_speed_mult = save_esm
+	Game.calamity_speed_mult = save_csm
+	player.mag_cap_mult = save_mc
+	player.max_hp = save_mhp
+	player.hp = save_hp
+	player.terrain_accel_mult = save_tam
+	player.terrain_speed_mult = save_tsm
+	_calamity_theme_rule = ""
+	_calamity_frail_ratio = 0.2
+	_calamity_frail_cut = 0
+	_calamity_saved_diamond_mult = 1.0
+	_calamity_saved_mag_cap_mult = 1.0
+	player.hp_changed.emit(player.hp, player.max_hp)
+	player.mag_changed.emit(player.mag(), player.mag_cap())
+	update_floor_sign()
+	Dev.check(_ct_checked == _CT_DECLARED, "cal_theme",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_ct_checked, _CT_DECLARED])
+	print("[SMOKE-CAL-THEME] done checked=%d declared=%d" % [_ct_checked, _CT_DECLARED])
 
 
 func _roll_modifier() -> void:
