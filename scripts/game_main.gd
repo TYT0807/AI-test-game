@@ -569,14 +569,21 @@ func _calamity_name(id: String) -> String:
 	# S27 §4.5：百分比按实值显示（变体上线后写死值会撒谎），族名首词逐字保留
 	match id:
 		"frail":
-			return "虚弱（生命上限 -%d%%）" % int(round(_calamity_frail_ratio * 100.0))
+			# S28 批二：读实际削减（钳制后重算的 _calamity_frail_cut），0 削减不显示 -0%
+			if _calamity_frail_cut <= 0:
+				return "虚弱（生命上限不再削减）"
+			return "虚弱（生命上限 -%d%%）" % int(round(100.0 * float(_calamity_frail_cut) / float(maxi(1, player.max_hp + _calamity_frail_cut))))
 		"frenzy":
 			return "狂乱（敌人加速 %d%%）" % int(round((Game.calamity_speed_mult - 1.0) * 100.0))
 		"scarce_ammo":
 			return "弹药荒（弹匣 -%d%%）" % int(round((1.0 - player.mag_cap_mult) * 100.0))
 		"scarce_ore":
 			var base: float = maxf(_calamity_saved_diamond_mult, 0.001)
-			return "残响枯竭（残响掉落 -%d%%）" % int(round((1.0 - 0.7 / base) * 100.0))
+			var ore_cut := 1.0 - 0.7 / base
+			# S28 批二：barren 局 base=0.7 → 实际削减 0 → 不许显示 -0%
+			if ore_cut <= 0.0:
+				return "残响枯竭（残响不再削减）"
+			return "残响枯竭（残响掉落 -%d%%）" % int(round(ore_cut * 100.0))
 	return id
 
 
@@ -655,7 +662,7 @@ func _clear_calamity_effects() -> void:
 ## 故入口无条件打印、每条断言伴随无条件 #NN 行、末尾 done checked=… 并自校验 checked==declared。
 ## 三段式（§5.2）：段1 施加 → 段2 换层精确还原 → 段3 再施加幂等；换层构造复刻 next_floor
 ## 生产顺序（game_main.gd:1505-1509：floor 自增 → clear → 清 id → 主题），禁用真实 next_floor()。
-const _CT_DECLARED := 103  # 批一 76 + ⑮2 + ⑧8 + ⑨1 + ⑩3 + ⑪3 + ⑫1 + ⑬4 + ⑭1 + ⑯4
+const _CT_DECLARED := 117  # 批三 103 + S28 批二 G7 + H7（口径 G08=刀一变异非运行期断言；单子 118 按「按实报」条款收 117）
 
 # A 组 6 变体格：[楼层, 灾祸, 施加期望, 还原期望, 主题 rule 字面量]（frail 的还原期望是 max_hp）
 const _CT_VARIANTS := [
@@ -772,6 +779,9 @@ func _smoke_cal_theme_probe() -> void:
 	var save_esm := enemy_speed_mult
 	var save_mod_es := _mod_enemy_speed_mult   # S27 批三：出口从快照还原 _mod_*（不许还原成 1.0——那会污染本局真实 modifier）
 	var save_mod_d := _mod_diamond_mult
+	var save_frail_ratio := _calamity_frail_ratio   # S28 批二：G/H 组用（出口逐项还原）
+	var save_frail_cut: int = _calamity_frail_cut
+	var save_saved_dm := _calamity_saved_diamond_mult
 	var real_mod_es := _mod_enemy_speed_mult   # ⑨ 用：真实调用点接线值（④/⑥4 归一会改字段，故入口先存）
 	var real_mod_d := _mod_diamond_mult
 	var save_csm: float = Game.calamity_speed_mult
@@ -1405,6 +1415,77 @@ func _smoke_cal_theme_probe() -> void:
 		print("[SMOKE-CAL-THEME] pair m=%s got=(%.2f,%.2f)" % [m, enemy_speed_mult, diamond_mult])
 	_ct_assert(pair_bad == "", "⑯4 none/overload/glass 三档聚合（全四值）", pair_bad, "无违例")
 
+	# ---- G 组（7，S28 批二）：第 12 层回卷真跑（G08=刀一变异，非运行期断言——口径 §1.3 明注）----
+	# G01/G07 前提守卫（恒过，不构成覆盖）：只验 Data 函数返回值，直查表的错误实现照样绿
+	_ct_assert(String(Data.theme_for_floor(12).get("rule", "")) == "vein", "G01 前提守卫（恒过）：theme_for_floor(12) 回卷 vein", Data.theme_for_floor(12).get("rule"), "vein")
+	_ct_assert(String(Data.theme_for_floor(13).get("rule", "")) == String(Data.theme_for_floor(5).get("rule", "")),
+		"G07 前提守卫（恒过）：f13 回卷 key5 与 f5 同 rule（模运算而非 12 特判）",
+		"%s/%s" % [Data.theme_for_floor(13).get("rule"), Data.theme_for_floor(5).get("rule")], "相等")
+	# 换层构造选择：11→12 推进（vines→vein，rule 真改变；省构造——12 的回卷结果才是靶心）
+	Game.floor_num = 11
+	_apply_floor_theme()
+	_ct_reset_channels()
+	var g_old_hp: int = player.max_hp
+	var g_hp0: int = player.max_hp
+	var g_mc0: float = player.mag_cap_mult
+	var g_dm0: float = diamond_mult
+	var g_cs0: float = Game.calamity_speed_mult
+	Game.floor_num = 12
+	_calamity = "frail"
+	_apply_calamity()
+	_ct_assert(_calamity_theme_rule == "vein", "G02 靶心：f12 施加后快照==vein（直查 FLOOR_THEMES.get(12) 的实现此处为空串）", _calamity_theme_rule, "vein")
+	_ct_assert(is_equal_approx(_calamity_frail_ratio, 0.1), "G03 f12 frail 比例==vein 实值 0.1（实读 _frail_ratio vein 支）", _calamity_frail_ratio, 0.1)
+	_ct_assert(float(g_old_hp - player.max_hp) == 1.0, "G04 f12 实际削减==1（10×0.1，maxi(1,…) 钳）", g_old_hp - player.max_hp, 1)
+	_ct_floor_advance(13)
+	_ct_assert(_calamity_theme_rule == "", "G05 f12→f13 clear 后快照清空（clear 里现查 f13 主题的错误实现此处为 toxic）", _calamity_theme_rule, "空串")
+	_ct_assert(player.max_hp == g_hp0 and is_equal_approx(player.mag_cap_mult, g_mc0) and is_equal_approx(diamond_mult, g_dm0) and is_equal_approx(Game.calamity_speed_mult, g_cs0),
+		"G06 f12 clear 后四通道还原入口快照（主题重建前读——⑮ 同型）",
+		"(hp=%s, mc=%s, dm=%s, cs=%s)" % [player.max_hp, player.mag_cap_mult, diamond_mult, Game.calamity_speed_mult],
+		"(hp=%s, mc=%s, dm=%s, cs=%s)" % [g_hp0, g_mc0, g_dm0, g_cs0])
+	_calamity = ""
+	# ---- H 组（7，S28 批二）：文案名义值 → 实际值 ----
+	# H01 名义≠实际构造：old_hp=6、基线比例 0.2 → 名义 20%，实际 cut=1/6≈17%（相等则恒过不算覆盖）
+	Game.floor_num = 1
+	_ct_reset_channels()
+	player.max_hp = 6
+	player.hp = 6
+	_calamity = "frail"
+	_apply_calamity()
+	var h_cut: int = _calamity_frail_cut
+	var h_old: int = player.max_hp + _calamity_frail_cut
+	var h_pct := int(round(100.0 * float(h_cut) / float(maxi(1, h_old))))
+	var h01_name := String(_calamity_name("frail"))
+	_ct_assert(h_pct != 20 and h01_name == "虚弱（生命上限 -%d%%）" % h_pct and h01_name.contains("虚弱"),
+		"H01 frail 常规局文案含实际百分比（读名义即红）", "%s (nominal=20, actual=%d)" % [h01_name, h_pct], "含 -%d%% 且首词保留" % h_pct)
+	# H02 钳制局：max_hp=2 → cut 重算为 0 → 「不再削减」且不含 -0%
+	player.max_hp = 2
+	player.hp = 2
+	_calamity = "frail"
+	_apply_calamity()
+	var h02 := String(_calamity_name("frail"))
+	_ct_assert(h02.contains("不再削减") and not h02.contains("-0%"), "H02 frail 钳制局不显示 -0%（靶心）", h02, "含「不再削减」且无 -0%")
+	_ct_assert(player.max_hp == 2, "H03 前提守卫（恒过）：钳制局 max_hp 确为 2", player.max_hp, 2)
+	# H04 常规 scarce_ore：base=1.0 → -30%
+	_ct_reset_channels()
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var h04 := String(_calamity_name("scarce_ore"))
+	_ct_assert(h04.contains("-30%") and h04.contains("残响枯竭"), "H04 scarce_ore 常规局 -30%（base=1.0 实读）", h04, "含 -30% 且首词保留")
+	# H05 barren 局：diamond=0.7 → apply 真链捕获 saved=0.7 → 不再削减（靶心）
+	diamond_mult = 0.7
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var h05 := String(_calamity_name("scarce_ore"))
+	_ct_assert(h05.contains("不再削减") and not h05.contains("-0%"), "H05 barren 局 scarce_ore 不显示 -0%（靶心）", h05, "含「不再削减」且无 -0%")
+	_ct_assert(is_equal_approx(_calamity_saved_diamond_mult, 0.7), "H06 前提守卫（恒过）：构造真的在 base=0.7", _calamity_saved_diamond_mult, 0.7)
+	# H07 四条文案首词逐字保留（跨批回归守卫，聚合）
+	var h07_bad: Array[String] = []
+	for pair in [["frail", "虚弱"], ["frenzy", "狂乱"], ["scarce_ammo", "弹药荒"], ["scarce_ore", "残响枯竭"]]:
+		if not String(_calamity_name(String(pair[0]))).contains(String(pair[1])):
+			h07_bad.append(String(pair[0]))
+	_ct_assert(h07_bad.is_empty(), "H07 四条文案首词逐字保留（跨批回归守卫）", h07_bad, "0 违例")
+	_calamity = ""
+
 	# ---- 出口：还原现场 ----
 	Game.floor_num = save_floor
 	_calamity = save_calamity
@@ -1413,6 +1494,9 @@ func _smoke_cal_theme_probe() -> void:
 	enemy_speed_mult = save_esm
 	_mod_enemy_speed_mult = float(save_mod_es)   # S27 批三：还原本局真实 modifier 贡献（不许写 1.0）
 	_mod_diamond_mult = float(save_mod_d)
+	_calamity_frail_ratio = float(save_frail_ratio)   # S28 批二：G/H 组现场逐项还原
+	_calamity_frail_cut = int(save_frail_cut)
+	_calamity_saved_diamond_mult = float(save_saved_dm)
 	Game.calamity_speed_mult = save_csm
 	player.mag_cap_mult = save_mc
 	player.max_hp = save_mhp
