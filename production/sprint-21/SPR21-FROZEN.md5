@@ -12,7 +12,7 @@ e10b4dcc5f7d1ae547212f101b688fcd *scripts/dev_overlay.gd
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
 7235c5a7d8595bebb171aace8f44a6c3 *scripts/dungeon.gd
 9248ff72854c353576134c1979b844ab *scripts/explosion.gd
-60000c6aff85f67523558d749c4b6a46 *scripts/game_main.gd
+29a04fa72c9500cd90fa7909dcdeb5ec *scripts/game_main.gd
 b713860018ba0412bc03b91626014b80 *scripts/game_state.gd
 cdad09ceb5685186ad5074fe03daccc2 *scripts/hud.gd
 ae20204f70d966be4b0f91714ae92d24 *scripts/menu.gd
@@ -25,7 +25,7 @@ fca5e79a397220b8f250b4314a0fe797 *scripts/prop.gd
 df36aaf1cc41150081f5982c22929f87 *scripts/secret_wall.gd
 fdfe7f525d62cb134f25d011d243598d *scripts/shop_stand.gd
 ce8a678699cdc9c6a049030e4e17671b *scripts/shrine_panel.gd
-d9f447ee714e86397adec149244b25f0 *scripts/slug.gd
+06fa0ebd4c50e16bdd22d7ae7cd77269 *scripts/slug.gd
 5aa28e9bc4c9592d07bc00bd693d1259 *scripts/toxic_cloud.gd
 8a6e78d8e4ea3e6bca8af97124ef288b *scripts/turret.gd
 7768f40e2a606d2debbe1fb32e7660d5 *scripts/upgrade_panel.gd
