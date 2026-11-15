@@ -183,7 +183,7 @@ if _calamity != "":
 
 ### 4.4 B 组：tick 钩子
 
-插在 `_theme_damage_tick()` 开头、`is_instance_valid(player)` 之后、SMOKE 分支之前（`game_main.gd:952` 附近）。用 `snappedf` 收敛浮点累加，否则 `0.5-0.1*2` 是 `0.30000000000000004`，`== 0.3` 会假红：
+插在 `_theme_damage_tick()` 开头、`is_instance_valid(player)` 之后、SMOKE 分支之前（`game_main.gd:954` 是 `func` 行；`:962` 非 SMOKE 分支会 `player.take_damage(1, ...)`，探针每次驱动 tick 前后必须存取 `player.hp` 再回填）。用 `snappedf` 收敛浮点累加，否则 `0.5-0.1*2` 是 `0.30000000000000004`，`== 0.3` 会假红：
 
 ```gdscript
 if _calamity == "scarce_ammo" and _theme_rule == "toxic":
@@ -253,7 +253,7 @@ func _calamity_name(id: String) -> String:
 | ① 基线通道 | 无主题层（floor 1–3）下 4 个灾祸的基线值 | 4 | 4 |
 | ② 三段式·基线 | 4 个基线灾祸 × 3 段 | 12 | 12 |
 | ③ 三段式·变体 | 6 常数格 × 3 段 = 18；B 组再加 2 时变格 × 5 段（施加 / 递减单调 / 下限钳制 / 还原 / 再施加）= 10 | 18 | 28 |
-| ④ 覆盖补全 | 换层时序 4 + 幂等 4 + 23 格零分支扫描 1 | 9 | 9 |
+| ④ 覆盖补全 | 换层时序 4 + 幂等 4 + 零分支扫描 1（聚合断言；A 阶段扫 25 格、B 阶段 23 格，格数只影响打印行数） | 9 | 9 |
 | ⑤ 旁证 | 见 §5.4 明细 | 13 | 13 |
 | ⑥ 快照纪律 | 结构 4 + 行为 2 | 6 | 6 |
 | ⑦ 文案实值 | 4 个灾祸各 1 条：`_calamity_name()` 里的百分比与实测通道值一致 | 4 | 4 |
@@ -267,11 +267,11 @@ func _calamity_name(id: String) -> String:
 |---|---|---|
 | ⑤1 | 无主题层（1–3 层）施加后 == 基线 | 验效果型 |
 | ⑤2 | `_calamity == ""` 时 clear 完全不碰倍率（复验 `player.gd:753-761`） | 验效果型 |
-| ⑤3 | **差额正**：scarce_ore 在 magma 实测 ≠ 在 ice 实测（本批唯一直接证明「复合生效」的断言） | 验效果型 |
+| ⑤3 | **差额正**：`scarce_ammo` 在 magma 实测 **0.70** ≠ 在 ice 实测 **0.50**（两格初值即不同，A 阶段就成立）。🔴 **不许用 scarce_ore 做这条** —— `#8` 的差异来自 tick 累积，apply 瞬间 magma 与 ice 都是 `minf(1.0,0.7) = 0.7`，两值相等，A 阶段必假红 | 验效果型，本批唯一直接证明「复合生效」的断言 |
 | ⑤4 | 差额反：magma 层 frail 削减 ≠ frenzy 加速（通道不同） | 验效果型 |
 | ⑤5 | 探针窗口内 `Game.rng.state` 不变 | 验效果型（附属性） |
 | ⑤6 | `Data.FLOOR_THEMES.size() == 8` | ⚠️ 常量自比较，须标注 |
-| ⑤7 | 层签文本含变体实值（如 `虚弱（生命上限 -40%）`） | 验效果型（渲染） |
+| ⑤7 | 层签文本含变体实值。楼层对照写死：**floor 4 (vein) 上 frail 满 `虚弱（生命上限 -10%）`；floor 7 (silent) 上满 `-40%`**。🔴 `magma × frail` **不是变体**（floor 8 上 frail 是基线 `-20%`），别拿它当靶子 | 验效果型（渲染） |
 | ⑤8 | `_calamity_name()` 对四个 id 均不返回原始 id | 验效果型 |
 | ⑤9 | `next_floor` 路径 clear 时 `_calamity` 仍为旧值（`:1507` 早于 `:1508`） | 验效果型 |
 | ⑤10 | 净化路径 clear 时 `_calamity` 仍为旧值（`:2224` 早于 `:2225`） | 验效果型 |
@@ -290,17 +290,26 @@ func _calamity_name(id: String) -> String:
 
 ⑥1/⑥2/⑥3/⑥6 是**只验标志**，必须标注，不许计入「施加/还原」覆盖。
 
-### 5.6 ④ 组 23 格扫描怎么写
+### 5.6 ④ 组零分支扫描怎么写
 
 算术先对齐，这一步最容易口径打架：
 
-- 8 主题 × 4 灾祸 = 32 格
+- 8 主题 × 4 灾祸 = 32 格（主题层号写死：4 vein / 5 toxic / 6 pressure / 7 silent / 8 magma / 9 ice / 10 swamp / 11 vines）
 - 8 格写了变体分支（A 组 6 + B 组 2）→ 剩 **24 格零分支**
-- 24 格里 `pressure × scarce_ore`（§4.6 的 13 号格）由 ⑥4 单独验 → **扫描 23 格**
+- 24 格里 `pressure × scarce_ore`（§4.6 的 13 号格）由 ⑥4 单独验
+- **B 组完成时扫 23 格；A 组阶段扫 25 格**——A 阶段 `#7`/`#8` 还没上代码，那两格此刻也走 default，必须一起扫，否则正好漏掉最可能被 fall-through 踩到的两格
 
-🔴 注意 B 组两格**本身就带分支**，不在 24 格里，**不许再扣一次**（我第一版口径写成「20 格」就是重复扣了 B 组两格，已改）。
+🔴 注意 B 组两格**本身就带分支**，不在那 24 格里，**不许再扣一次**（我第一版口径写成「20 格」就是重复扣了 B 组两格，已改）。
 
-逐格设 `floor_num` + `_calamity`，apply 后与基线字面量（`cut 2 / max_hp 8`、`mag_cap_mult 0.5`、`calamity_speed_mult 1.25`、`diamond_mult 0.7`）比，clear 后与还原值比。**每格无条件打印实测值**（23 行），断言聚合成 1 条 `Dev.check(bad.is_empty(), ...)` 并打印 `bad` 全表。聚合断言只负责「有没有踩」，逐格打印负责「执行过」。
+逐格设 `floor_num` + `_calamity`，apply 后与基线字面量（`cut 2 / max_hp 8`、`mag_cap_mult 0.5`、`calamity_speed_mult 1.25`、`diamond_mult 0.7`）比，clear 后与还原值比。断言聚合成 1 条 `Dev.check(bad.is_empty(), ...)` 并打印 `bad` 全表。聚合断言只负责「有没有踩」，逐格打印负责「执行过」。
+
+🔴 **扫描行的打印前缀不许用 `#`**。若沿用 `#NN`，`grep -c "^\[SMOKE-CAL-THEME\] #"` 会把 23/25 行扫描结果算进断言条数 → `checked == declared` 自校验直接失效、门控永久假绿。扫描行格式固定为：
+
+```
+[SMOKE-CAL-THEME] scan i=%d cell=%s applied=%s cleared=%s
+```
+
+与断言行 `#NN` 分流。
 
 ---
 
