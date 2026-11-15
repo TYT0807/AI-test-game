@@ -22,7 +22,7 @@ const POOL := [
 		"icon": "pierce", "max": 1, "rarity": "rare", "tag": "fire", "meta": "u_mx_pierce"},
 	{"id": "mx_critboom", "name": "致命共振", "desc": "暴击时在命中点引爆，爆炸造成 60% 子弹伤害",
 		"icon": "crit", "max": 1, "rarity": "rare", "tag": "fire", "meta": "u_mx_critboom"},
-	{"id": "mx_resocore", "name": "源石共鸣核心", "desc": "每拾取 3 颗源石叠 1 层共鸣，满 5 层释放冲击波",
+	{"id": "mx_resocore", "name": "残响共鸣核心", "desc": "每拾取 3 颗残响叠 1 层共鸣，满 5 层释放冲击波",
 		"icon": "diamond", "max": 1, "rarity": "rare", "tag": "surv", "meta": "u_mx_resocore"},
 ]
 
@@ -148,7 +148,7 @@ static func apply(id: String, main: Node2D) -> void:
 			# 形态：暴击时在命中点引爆；修饰：爆炸 = 子弹伤害 60%
 			player.crit_boom = true
 		"mx_resocore":
-			# 形态：共鸣计数源改为每拾取 3 颗源石 +1；修饰：冲击波伤害 6→9
+			# 形态：共鸣计数源改为每拾取 3 颗残响 +1；修饰：冲击波伤害 6→9
 			player.has_resocore = true
 		_:
 			# 防止 POOL 新增 id 却漏写分支：抽到卡没效果时立刻在日志里点名

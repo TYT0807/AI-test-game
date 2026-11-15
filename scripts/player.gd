@@ -62,7 +62,7 @@ var shield_charges := 0     # 护盾层数（挡一次伤害）
 # F2 主动遗物：开局可用、独立按键、E6 固定步冷却（定义见 Data.ACTIVE_RELICS）
 var active_relic_cds := {}
 # Sprint 12 A：印记注入字段（_apply_sigil_contract 绝对置位，幂等）
-var harvester_active := false  # 丰收：击杀额外 +1 源石
+var harvester_active := false  # 丰收：击杀额外 +1 残响
 var sigil_ward := false        # 守护：Boss 房受伤 -20%
 var scholar_active := false    # 博学：每层首次清场 +2 地窖碎片
 var dash_boost_mult := 1.0     # 疾行：冲刺距离/无敌帧倍率
@@ -81,7 +81,7 @@ var _suffix_cds := {}
 ## SPR7 局外解锁内容的持有标记（由 apply() 置位，不写玩家初始数值字段）
 var pierce_bonus := 0       # 贯穿弹头 mx_pierce：额外穿透层数
 var crit_boom := false      # 致命共振 mx_critboom：暴击时在命中点引爆
-var has_resocore := false   # 源石共鸣核心 mx_resocore：共鸣计数源改为源石
+var has_resocore := false   # 残响共鸣核心 mx_resocore：共鸣计数源改为残响
 var has_resoshield := false  # 谐振护盾 mr_resoshield：共鸣爆发加盾 + 免疫中毒
 var has_kinetic := false     # 动能转换器 mr_kinetic：受击后 2 秒加速
 var set_fire := false       # 火力套装：子弹命中溅射
@@ -848,7 +848,7 @@ func _find_label_containing(root: Node, needle: String) -> Label:
 
 
 ## SMOKE_SHRINE=1：圣所断言——三卡确定性 / 效果+代价逐条 / 置灰 / 实开面板全链（Sprint 13 A）
-## 【Sprint 17 B 断言盘点】以「验效果型」为主：代价数值（20→12 源石 / 5→4 上限 / 40 源石）、
+## 【Sprint 17 B 断言盘点】以「验效果型」为主：代价数值（20→12 残响 / 5→4 上限 / 40 残响）、
 ## 面板可见状态、cleared 回写、暂停态。两条限时 buff 已由 Sprint 15 收口批从「只验标志」
 ## 升级为 mult=1.25/1.3 + t>0 + 分数的数值断言；其余无「只验标志」绿灯。
 func _shrine_probe() -> void:
@@ -874,7 +874,7 @@ func _shrine_probe() -> void:
 	Dev.check(gm.entities.get_child_count() > ents_before, "shrine", "blood_relic 掉落遗物")
 	Game.diamonds = 20
 	gm._shrine_execute(gm._shrine_entry("ore_upgrade"))
-	Dev.check(Game.diamonds == 12, "shrine", "ore_upgrade 代价源石 20→12：%d" % Game.diamonds)
+	Dev.check(Game.diamonds == 12, "shrine", "ore_upgrade 代价残响 20→12：%d" % Game.diamonds)
 	await get_tree().create_timer(1.2, true).timeout   # 升级面板 autopick 收尾（暂停期照走）
 	# 核验 #1 补断言：四种灾祸逐一验「净化后数值还原」——只验标志位是 Sprint 12 两轮同款根因
 	for cid in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
@@ -906,7 +906,7 @@ func _shrine_probe() -> void:
 	var pre_hp2 := max_hp
 	Game.diamonds = 30
 	gm._shrine_execute(gm._shrine_entry("greed_pact"))
-	Dev.check(Game.diamonds == 40 and max_hp == pre_hp2 - 1, "shrine", "D: greed_pact 上限换源石 30→40")
+	Dev.check(Game.diamonds == 40 and max_hp == pre_hp2 - 1, "shrine", "D: greed_pact 上限换残响 30→40")
 	Game.score = 200
 	gm._shrine_execute(gm._shrine_entry("wind_dance"))
 	Dev.check(_buffs.has("boots") and is_equal_approx(float(_buffs["boots"].mult), 1.25) \
@@ -919,10 +919,10 @@ func _shrine_probe() -> void:
 	Game.diamonds = 20
 	var sh0 := int(Game.sigils["shards"])
 	gm._shrine_execute(gm._shrine_entry("shard_pact"))
-	Dev.check(int(Game.sigils["shards"]) == sh0 + 6 and Game.diamonds == 8, "shrine", "D: shard_pact 源石换碎片")
+	Dev.check(int(Game.sigils["shards"]) == sh0 + 6 and Game.diamonds == 8, "shrine", "D: shard_pact 残响换碎片")
 	# ③ 置灰：余额/血量不足不可支付（面板据此置灰，主侧 _on_shrine_chosen 双保险同口径）
 	Game.diamonds = 0
-	Dev.check(gm._shrine_affordable(gm._shrine_entry("ward_boon")) == false, "shrine", "源石 0 → ward_boon 置灰")
+	Dev.check(gm._shrine_affordable(gm._shrine_entry("ward_boon")) == false, "shrine", "残响 0 → ward_boon 置灰")
 	max_hp = 1
 	Dev.check(gm._shrine_affordable(gm._shrine_entry("blood_relic")) == false, "shrine", "上限 1 → blood_relic 置灰（防扣死）")
 	Game.score = 10
@@ -939,7 +939,7 @@ func _shrine_probe() -> void:
 			break
 	if found:
 		shield_charges = 0
-		# Sprint 19 终审查修：④ 强制可支付语境——池扩到 10 条后派生三卡可能全为积分/源石代价卡，
+		# Sprint 19 终审查修：④ 强制可支付语境——池扩到 10 条后派生三卡可能全为积分/残响代价卡，
 		# 而 ③ 的 score=10 残留 + 余额未知会让 autopick 无卡可选 → 面板不关（审查实录）。
 		# ④ 测的是面板链路不是置灰逻辑，故把余额置足并测后还原
 		var dia_bak: int = Game.diamonds
@@ -1473,7 +1473,7 @@ func _floor_sign_probe() -> void:
 	# theme_for_floor(n<4) 返回 {} → 1 层无手记段 → 第二行收尾即房型段末尾（全等锁）
 	Dev.check(sub1 == "本层 · " + lay1, "floor_sign_sub",
 		"floor=1 第二行全等「本层 · <房型>」（无主题故无手记段）：%s" % sub1)
-	# Sprint 18 B / A-v3：floor=4（源石矿脉 vein）→ 第二行显示，含「本层」房型段 + 主题手记实值
+	# Sprint 18 B / A-v3：floor=4（往生脉 vein）→ 第二行显示，含「本层」房型段 + 主题手记实值
 	Game.floor_num = 4
 	gm.update_floor_sign()
 	var lay4: String = gm.floor_layout_hint()
@@ -1482,14 +1482,14 @@ func _floor_sign_probe() -> void:
 		"floor=4 层签第二行显示且含「本层 · 」：%s" % sub)
 	Dev.check(sub.contains(lay4), "floor_sign_sub",
 		"floor=4 第二行含房型段实值（floor_layout_hint）：%s（房型段=%s）" % [sub, lay4])
-	Dev.check(sub.contains("矿脉层"), "floor_sign_sub",
-		"floor=4 第二行含主题手记实值（FLAVOR themes/vein）：%s" % sub)
+	Dev.check(sub.contains("往生脉"), "floor_sign_sub",
+		"floor=4 第二行含主题手记实值（FLAVOR themes/vein，Sprint 25 随主题改名同步）：%s" % sub)
 	# 拼接分隔符（房型段/诅咒段与手记段之间为「 ｜ 」——锁组合结构，不锁具体文案）
 	Dev.check(sub.contains(" ｜ "), "floor_sign_sub",
 		"floor=4 第二行以「 ｜ 」连接房型与手记：%s" % sub)
 	# Sprint 18 B：主行一字不改（全等回归锁——防 B 项改动溢出到主行格式）
 	var main4: String = String(Game.main.hud._floor_sign_label.text)
-	Dev.check(main4 == "层签 · 源石矿脉◆ ｜ 灾祸：无", "floor_sign_sub",
+	Dev.check(main4 == "层签 · 往生脉◆ ｜ 灾祸：无", "floor_sign_sub",
 		"floor=4 主行文本一字未改：%s" % main4)
 	print("[SMOKE-FLOOR-SIGN] B: sub1=%s sub4=%s main4=%s" % [sub1, sub, main4])
 	Game.floor_num = 1   # 还原本探针自设语境（后续 D 段在 1 层跑）

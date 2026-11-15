@@ -33,13 +33,13 @@ const UNLOCKS := {
 		"icon": "crit", "max": 1,
 	},
 	"u_mx_resocore": {
-		"name": "源石共鸣核心", "desc": "每拾取 3 颗源石叠 1 层共鸣，满 5 层释放冲击波",
+		"name": "残响共鸣核心", "desc": "每拾取 3 颗残响叠 1 层共鸣，满 5 层释放冲击波",
 		"kind": "upgrade", "target": "mx_resocore",
 		"cost": 100, "requires": ["u_mx_critboom"], "default": false,
 		"icon": "diamond", "max": 1,
 	},
 	"u_mr_resoshield": {
-		"name": "谐振护盾", "desc": "源石共鸣爆发时获得 1 层护盾，护盾存在时免疫中毒",
+		"name": "谐振护盾", "desc": "残响共鸣爆发时获得 1 层护盾，护盾存在时免疫中毒",
 		"kind": "relic", "target": "mr_resoshield",
 		"cost": 40, "requires": [], "default": false,
 		"icon": "icon_guard", "max": 1,
@@ -74,7 +74,7 @@ const UNLOCKS := {
 const ECONOMY := {
 	"rate": 0.10,          # 局内累计拾取 → 结晶
 	"floor_bonus": 8,      # 每深入 1 层的额外奖励（按层数-1 计）
-	"kill_bonus": 0,       # 击杀与源石同源，再计一次=同一件事算两遍
+	"kill_bonus": 0,       # 击杀与残响同源，再计一次=同一件事算两遍
 	"run_cap": 60,         # 单局结算上限（防刷）
 	"min_floor": 1,        # 不设层数门槛（设 2 会让弱玩家永久卡死）
 	"min_seconds": 45.0,   # 短于此不结算

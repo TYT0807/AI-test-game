@@ -429,7 +429,7 @@ func _build_status_ui(root: Control) -> void:
 		_status_labels.append(lbl)
 
 
-## 左上第三块：挑战因子 + 源石共鸣（Sprint 4）
+## 左上第三块：挑战因子 + 残响共鸣（Sprint 4）
 func _build_meta_ui(root: Control) -> void:
 	var panel := PanelContainer.new()
 	_meta_panel = panel
@@ -823,7 +823,7 @@ func _refresh_counters() -> void:
 func game_over(extra: String = "") -> void:
 	_game_over = true
 	_boss_box.visible = false
-	_stats_label.text = "存活 %s   ·   击杀 %d   ·   第 %d 层\n最终得分 %d\n本局复盘 · 最深 %d 层 · 源石 %d" % [
+	_stats_label.text = "存活 %s   ·   击杀 %d   ·   第 %d 层\n最终得分 %d\n本局复盘 · 最深 %d 层 · 残响 %d" % [
 		Game.fmt_time(), Game.kills, Game.floor_num, Game.score, Game.max_floor, int(Game.run_diamonds_earned)]
 	# 结算文案由 game_main 提供（串本身冻结不动），这里只取两个数用于 5 行排版
 	var pay := 0
@@ -844,7 +844,7 @@ func game_over(extra: String = "") -> void:
 
 
 func _crystal_line(picked: int, pay: int) -> String:
-	return "本局源石 %d            本局结晶  +%d" % [picked, pay]
+	return "本局残响 %d            本局结晶  +%d" % [picked, pay]
 
 
 ## 0 → +N 的 0.8s 数字滚动；SMOKE 下直接落终值，不拖慢 / 卡住 headless

@@ -106,14 +106,14 @@ func _build_main_page() -> void:
 	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hbox.add_child(left)
 	var big := Label.new()
-	big.text = "源石虫清剿战"
+	big.text = "见痕"
 	big.add_theme_font_size_override("font_size", 58)
 	big.add_theme_color_override("font_color", Color(1.0, 0.86, 0.52))
 	big.add_theme_color_override("font_outline_color", Color(0.10, 0.05, 0.04))
 	big.add_theme_constant_override("outline_size", 10)
 	left.add_child(big)
 	var en := Label.new()
-	en.text = "ROGUELIKE  /  源石矿脉清剿行动"
+	en.text = "ROGUELIKE  /  六道拾痕录"
 	en.add_theme_font_size_override("font_size", 16)
 	en.add_theme_color_override("font_color", Color(0.74, 0.70, 0.78))
 	left.add_child(en)
@@ -404,7 +404,7 @@ func _build_codex() -> void:
 		replay.text = "上局复盘：暂无记录（完成一局后生成）"
 	else:
 		var t := int(lr.get("time", 0.0))
-		replay.text = "上局复盘 · 最深 %d 层 · 击杀 %d · 源石 %d · 用时 %d:%02d · 得分 %d" % [
+		replay.text = "上局复盘 · 最深 %d 层 · 击杀 %d · 残响 %d · 用时 %d:%02d · 得分 %d" % [
 			int(lr.get("max_floor", 0)), int(lr.get("kills", 0)), int(lr.get("diamonds", 0)),
 			t / 60, t % 60, int(lr.get("score", 0))]
 		# Sprint 24 B：交叉陈述——既有行内追加只读文本（原文本一字不改、子串保留）；
@@ -802,7 +802,7 @@ func _add_sigil_row(parent: Node, id: String) -> void:
 func _build_unlocks() -> void:
 	_unlock_icons_ok = 0
 	var balance := Label.new()
-	balance.text = "结晶源石：%d" % Game.meta_crystals()
+	balance.text = "结算结晶：%d" % Game.meta_crystals()
 	balance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	balance.add_theme_font_size_override("font_size", 20)
 	balance.add_theme_color_override("font_color", Color(1.0, 0.85, 0.45))

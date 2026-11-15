@@ -115,7 +115,7 @@ const GEN_NAMES := [
 	"prop_barrel", "prop_barrel_hit", "prop_totem", "prop_spike", "prop_pillar", "secret_wall",
 	"merchant_0", "merchant_1", "merchant_2",
 	"icon_chain", "icon_guard", "icon_dice", "icon_venom",
-	# Sprint 4：挑战因子 / 源石共鸣 / 词缀头顶标记
+	# Sprint 4：挑战因子 / 残响共鸣 / 词缀头顶标记
 	"icon_resonance",
 	"icon_mod_rage", "icon_mod_barren", "icon_mod_overload", "icon_mod_glass",
 	"icon_mod_swarm", "icon_mod_silent",

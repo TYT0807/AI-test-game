@@ -112,7 +112,7 @@ static func generate(floor_num: int, rng: RandomNumberGenerator, count: int) -> 
 			print("[SMOKE-SUPER] floor=%d cell=%s neighbors=%d" % [
 				floor_num, super_secret, d.neighbors(super_secret).size()])
 
-	# ---- 诅咒房：进房扣 1 血，必掉遗物 + 大宝箱 + 源石（以撒诅咒房思路）----
+	# ---- 诅咒房：进房扣 1 血，必掉遗物 + 大宝箱 + 残响（以撒诅咒房思路）----
 	var cursed_pool: Array[Vector2i] = []
 	for c in d.rooms:
 		if c == Vector2i.ZERO or d.rooms[c]["kind"] != "combat":

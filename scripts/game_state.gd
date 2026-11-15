@@ -62,17 +62,17 @@ const RESOLUTION_PRESETS := ["1280x720", "1600x900", "1920x1080", "2560x1440"]
 const WINDOW_MODES := ["窗口", "全屏", "无边框全屏"]
 var enemy_speed_mult := 1.0
 var playing := true
-var diamonds := 0  # 可消费的源石（同时也是经验来源）
+var diamonds := 0  # 可消费的残响（同时也是经验来源）
 var floor_num := 1
 ## 本局到达过的最深层（结算用这个，不是死亡时的当前层）
 var max_floor := 1
 ## 本局的地图种子（每层地图由它 + 层号派生，解锁内容不影响地图）
 var run_seed := 0
-## 本局累计获得的源石（只增不减，结算按它折算结晶，不受局内消费影响）
+## 本局累计获得的残响（只增不减，结算按它折算结晶，不受局内消费影响）
 var run_diamonds_earned := 0
-## 本局累计消费的源石（只作统计，不从局外余额扣）
+## 本局累计消费的残响（只作统计，不从局外余额扣）
 var meta_spent := 0
-## 源石共鸣核心（mx_resocore）：本局按源石计的共鸣计数（每 3 颗 +1 层）
+## 残响共鸣核心（mx_resocore）：本局按残响计的共鸣计数（每 3 颗 +1 层）
 var _reso_pickups := 0
 ## 局外 meta 状态：余额 / 已解锁集合 / 累计统计（持久化在 user://meta.cfg）
 var meta := {
@@ -152,7 +152,7 @@ func add_diamonds(n: int) -> void:
 	# Sprint 16 A：誓约计数（满载而归）——只计获得，不因消费倒扣
 	if n > 0 and main != null and is_instance_valid(main) and main.has_method("oath_count"):
 		main.oath_count("diamonds_picked", n)
-	# 源石共鸣核心（mx_resocore）：共鸣计数源改为「每拾取 3 颗源石 +1」
+	# 残响共鸣核心（mx_resocore）：共鸣计数源改为「每拾取 3 颗残响 +1」
 	# （与旧的「拾取升级/遗物 +1」互斥，不两条并存）
 	if main != null and is_instance_valid(main) and is_instance_valid(main.player) \
 			and main.player.has_resocore:
@@ -811,7 +811,7 @@ func _read_meta(path: String) -> void:
 	meta["abyss_best_tier"] = maxi(0, int(cfg.get_value("meta", "abyss_best_tier", 0)))
 
 
-## SMOKE 探针：清空 / 强制给源石 / 强制解锁（只改内存，绝不落盘）
+## SMOKE 探针：清空 / 强制给残响 / 强制解锁（只改内存，绝不落盘）
 func _apply_meta_probes() -> void:
 	if OS.get_environment("SMOKE_META_RESET") != "":
 		meta = _default_meta()

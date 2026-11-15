@@ -1,6 +1,6 @@
 class_name Pickup
 extends Area2D
-## 掉落物：源石/回复/炸弹/宝箱/疾速/火力/时钟/武器/遗物/大宝箱/楼梯。
+## 掉落物：残响/回复/炸弹/宝箱/疾速/火力/时钟/武器/遗物/大宝箱/楼梯。
 
 const TEX_KEY := {
 	"diamond": "diamond",
@@ -144,7 +144,7 @@ func _apply(player: Node) -> void:
 			var res: Dictionary = player.attach_suffix(payload)
 			Game.sfx("secret", 1.2, -6.0)
 		"chest_big":
-			# 宝箱房大宝箱：武器或遗物二选一 + 源石
+			# 宝箱房大宝箱：武器或遗物二选一 + 残响
 			Game.sfx("secret")
 			var ex := preload("res://scripts/explosion.gd").new()
 			ex.setup("spark", 0.8)

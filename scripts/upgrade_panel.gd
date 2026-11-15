@@ -251,7 +251,7 @@ func _try_reroll() -> void:
 	if _rerolled or _choices.is_empty():
 		return
 	if not Game.spend(REROLL_COST):
-		_reroll_label.text = "源石不足（需要 %d）" % REROLL_COST
+		_reroll_label.text = "残响不足（需要 %d）" % REROLL_COST
 		return
 	_rerolled = true
 	show_choices(UpgradesClass.roll(3))
@@ -261,7 +261,7 @@ func _try_reroll() -> void:
 func _update_reroll_label() -> void:
 	if _reroll_label == null:
 		return
-	_reroll_label.text = "已刷新" if _rerolled else "按 R 刷新（%d 源石，每次升级一次）" % REROLL_COST
+	_reroll_label.text = "已刷新" if _rerolled else "按 R 刷新（%d 残响，每次升级一次）" % REROLL_COST
 	_reroll_label.add_theme_color_override("font_color",
 		Color(0.6, 0.6, 0.65) if _rerolled else Color(1.0, 0.85, 0.45))
 

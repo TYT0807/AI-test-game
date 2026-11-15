@@ -21,7 +21,7 @@ var _root: Control
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
-	layer = 21   # 高于升级面板（20）：圣所选「源石淬炼」时先关本面板再弹升级面板
+	layer = 21   # 高于升级面板（20）：圣所选「残响淬炼」时先关本面板再弹升级面板
 	_root = Control.new()
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.theme = Assets.theme()
@@ -158,7 +158,7 @@ func open(offers: Array) -> void:
 func _cost_text(o: Dictionary) -> String:
 	match String(o.get("cost_kind", "")):
 		"diamonds":
-			return "代价：源石 -%d" % int(o["cost"])
+			return "代价：残响 -%d" % int(o["cost"])
 		"max_hp":
 			return "代价：生命上限 -%d" % int(o["cost"])
 		"score":

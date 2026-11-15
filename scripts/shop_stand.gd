@@ -46,7 +46,7 @@ func _ready() -> void:
 	add_child(_icon)
 
 	_price_label = Label.new()
-	_price_label.text = "%d 源石" % price
+	_price_label.text = "%d 残响" % price
 	if Assets.font():
 		_price_label.add_theme_font_override("font", Assets.font())
 	_price_label.add_theme_font_size_override("font_size", 10)
@@ -88,4 +88,4 @@ func _try_buy() -> void:
 		_price_label.modulate = Color(0.6, 0.6, 0.6)
 	else:
 		Game.sfx("pickup", 0.7, -6.0)
-		Game.main.hud.flash_toast("源石不足！")
+		Game.main.hud.flash_toast("残响不足！")

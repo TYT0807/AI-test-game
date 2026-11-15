@@ -66,7 +66,7 @@ func _build() -> String:
 		"层 %d   房间 %s (%s)   状态 %s" % [Game.floor_num, coord, kind, state],
 		"敌 %d  弹 %d  箱 %d  掉落 %d" % [
 			_n(main, "enemies"), _n(main, "bullets"), _n(main, "crates"), _n(main, "pickups")],
-		"玩家 HP %d/%d  源石 %d  击杀 %d  得分 %d" % [
+		"玩家 HP %d/%d  残响 %d  击杀 %d  得分 %d" % [
 			main.player.hp, main.player.max_hp, Game.diamonds, Game.kills, Game.score],
 		"日志：错误 %d / 告警 %d" % [Dev.errors, Dev.warnings],
 		"-----------------------------",

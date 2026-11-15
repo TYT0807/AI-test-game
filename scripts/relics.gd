@@ -17,7 +17,7 @@ const POOL := [
 	{"id": "drone", "name": "双浮游炮", "desc": "再召唤一座浮游炮", "icon": "relic_drone"},
 	{"id": "heart", "name": "黄金心脏", "desc": "生命上限 +1 并回满", "icon": "relic_heart"},
 	# ---- SPR7：局外解锁内容（增量：未解锁不进池，解锁后进池）----
-	{"id": "mr_resoshield", "name": "谐振护盾", "desc": "源石共鸣爆发时获得 1 层护盾，护盾存在时免疫中毒",
+	{"id": "mr_resoshield", "name": "谐振护盾", "desc": "残响共鸣爆发时获得 1 层护盾，护盾存在时免疫中毒",
 		"icon": "icon_guard", "meta": "u_mr_resoshield"},
 	{"id": "mr_kinetic", "name": "动能转换器", "desc": "受击后 2 秒内移速 +40%",
 		"icon": "relic_drone", "meta": "u_mr_kinetic"},

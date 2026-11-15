@@ -100,7 +100,7 @@ const FLOOR_POOLS := {
 ## 楼层主题：4 层起按 4→5→6→7 循环，各带一条环境规则 + 专属池/精英/Boss。
 ## mark=色盲友好符号标记（Sprint 13 E：与 tint 并列展示，颜色不是唯一编码通道）
 const FLOOR_THEMES := {
-	4: {"name": "源石矿脉", "rule": "vein", "pool": 4, "elite": "knight",
+	4: {"name": "往生脉", "rule": "vein", "pool": 4, "elite": "knight",
 		"boss": "skeleton_king", "tint": Color(0.95, 0.85, 0.6), "mark": "◆"},
 	5: {"name": "毒巢", "rule": "toxic", "pool": 3, "elite": "ogre",
 		"boss": "demon", "tint": Color(0.62, 0.85, 0.55), "mark": "●"},
@@ -215,11 +215,11 @@ const RELIC_SUFFIXES := {
 const SIGILS := {
 	"vigor": {"name": "刚韧印记", "desc": "开局生命上限 +1", "cost": 30},
 	"arsenal": {"name": "武备印记", "desc": "开局副手预装霰弹枪", "cost": 40},
-	"purse": {"name": "钱囊印记", "desc": "开局携带 15 源石", "cost": 25},
+	"purse": {"name": "钱囊印记", "desc": "开局携带 15 残响", "cost": 25},
 	"kindred": {"name": "协战印记", "desc": "开局召唤 1 个协战水晶（30 秒）", "cost": 50},
 	"bulwark": {"name": "壁垒印记", "desc": "开局获得 1 层环盾护盾（2.5 秒）", "cost": 35},
 	"sprinter": {"name": "疾行印记", "desc": "冲刺距离与无敌帧 +30%", "cost": 40},
-	"harvester": {"name": "丰收印记", "desc": "击杀额外掉落 1 源石", "cost": 45},
+	"harvester": {"name": "丰收印记", "desc": "击杀额外掉落 1 残响", "cost": 45},
 	"ward": {"name": "守护印记", "desc": "Boss 房受到伤害 -20%", "cost": 60},
 	"scholar": {"name": "博学印记", "desc": "每层首次清场额外 +2 地窖碎片", "cost": 40},
 }
@@ -271,10 +271,10 @@ const AI_OVERRIDES := {
 const MODIFIERS := {
 	"none": {"name": "静默", "icon": "mod_silent", "desc": "标准规则"},
 	"rage": {"name": "狂暴", "icon": "mod_rage", "desc": "敌人移速 +25%，血量 -15%"},
-	"barren": {"name": "贫瘠", "icon": "mod_barren", "desc": "源石掉落 -30%，开局 +10 源石"},
+	"barren": {"name": "贫瘠", "icon": "mod_barren", "desc": "残响掉落 -30%，开局 +10 残响"},
 	"overload": {"name": "超载", "icon": "mod_overload", "desc": "技能冷却 -40%，生命上限 -1"},
 	"glass": {"name": "玻璃", "icon": "mod_glass", "desc": "暴击率 +20%，移速 -10%"},
-	"swarm": {"name": "虫潮", "icon": "mod_swarm", "desc": "每房敌人 +2，源石掉落 +50%"},
+	"swarm": {"name": "虫潮", "icon": "mod_swarm", "desc": "每房敌人 +2，残响掉落 +50%"},
 }
 const MODIFIER_WEIGHTS := {"none": 4, "rage": 2, "barren": 2, "overload": 2, "glass": 2, "swarm": 2}
 
@@ -286,7 +286,7 @@ const MILESTONES := {
 	"first_cursed": {"text": "诅咒房：血是代价"},
 	"first_super": {"text": "超级秘密房 —— 稀有奖励"},
 	"first_relic": {"text": "第一件遗物"},
-	"resonance_burst": {"text": "源石共鸣 · 爆发"},
+	"resonance_burst": {"text": "残响共鸣 · 爆发"},
 	"floor3": {"text": "第 3 层 —— 敌人在变强"},
 	"first_shrine": {"text": "首入圣所 —— 抉择即构筑"},
 }
@@ -312,15 +312,15 @@ const ROOM_META := {
 ## effect 在 game_main._shrine_execute 分派；选项集由 stable_hash 纯派生（§4.5 零 Game.rng）
 const SHRINE_OFFERS := {
 	"blood_relic": {"name": "血祭", "desc": "生命上限 -1，掉落 1 件遗物", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
-	"ore_upgrade": {"name": "源石淬炼", "desc": "源石 -8，触发一次升级三选一", "cost_kind": "diamonds", "cost": 8, "min_floor": 3},
+	"ore_upgrade": {"name": "残响淬炼", "desc": "残响 -8，触发一次升级三选一", "cost_kind": "diamonds", "cost": 8, "min_floor": 3},
 	"purify": {"name": "净化", "desc": "解除本层灾祸（若为唯一灾祸层，×1.5 结算作废）", "cost_kind": "", "cost": 0, "min_floor": 3},
-	"ward_boon": {"name": "护盾祝福", "desc": "源石 -5，获得 1 层护盾", "cost_kind": "diamonds", "cost": 5, "min_floor": 3},
+	"ward_boon": {"name": "护盾祝福", "desc": "残响 -5，获得 1 层护盾", "cost_kind": "diamonds", "cost": 5, "min_floor": 3},
 	"heal": {"name": "修复", "desc": "积分 -60，回复 2 点生命", "cost_kind": "score", "cost": 60, "min_floor": 3},
 	"relic_suffix": {"name": "铭刻", "desc": "生命上限 -1，为主动遗物附 1 条词缀", "cost_kind": "max_hp", "cost": 1, "min_floor": 5},
 	# Sprint 15 D：池扩容 6→10（按 min_floor 分层——低层温和、高层高代价高收益；全部纯状态交换零赌局）
-	"greed_pact": {"name": "贪欲契约", "desc": "生命上限 -1，源石 +10", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
+	"greed_pact": {"name": "贪欲契约", "desc": "生命上限 -1，残响 +10", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
 	"wind_dance": {"name": "风之舞", "desc": "积分 -80，本局移速 +25%（120 秒）", "cost_kind": "score", "cost": 80, "min_floor": 5},
-	"shard_pact": {"name": "共鸣契约", "desc": "源石 -12，地窖碎片 +6", "cost_kind": "diamonds", "cost": 12, "min_floor": 5},
+	"shard_pact": {"name": "共鸣契约", "desc": "残响 -12，地窖碎片 +6", "cost_kind": "diamonds", "cost": 12, "min_floor": 5},
 	"power_surge": {"name": "力量激涌", "desc": "生命上限 -1，伤害 +30%（90 秒）", "cost_kind": "max_hp", "cost": 1, "min_floor": 7},
 }
 
@@ -357,7 +357,7 @@ const OATH_CONDITIONS := {
 	"kindred": {"name": "并肩清扫", "desc": "清扫 30 只敌人", "watched": ["kills"], "need": 30},
 	"bulwark": {"name": "盾未破身", "desc": "让环盾替你挡下一次伤害", "watched": ["shield_blocks"], "need": 1},
 	"sprinter": {"name": "残影连闪", "desc": "冲刺 15 次", "watched": ["dashes"], "need": 15},
-	"harvester": {"name": "满载而归", "desc": "获得 40 颗源石", "watched": ["diamonds_picked"], "need": 40},
+	"harvester": {"name": "满载而归", "desc": "获得 40 颗残响", "watched": ["diamonds_picked"], "need": 40},
 	"ward": {"name": "净化誓约", "desc": "在圣所净化一次灾祸", "watched": ["purify_used"], "need": 1},
 	"scholar": {"name": "兼修并蓄", "desc": "既进圣所，又让词缀共鸣 1 次", "watched": ["shrine_visits", "suffix_fires"], "need": 1},
 }
@@ -368,7 +368,7 @@ const FLAVOR := {
 	"bosses/prism_warden": "守望者。别站在光缝里，砸它的核。",
 	"bosses/pyrothalassian": "熔潮。弹匣留一半，给它变红的时候用。",
 	"bosses/third_boss": "玄渊之主。深处的老住户，比熔潮慢半拍，比守望者狠。",
-	"themes/vein": "矿脉层。多捡点，反射值钱。",
+	"themes/vein": "往生脉。多捡点，反射值钱。",
 	"themes/toxic": "毒巢。云别硬踩，绕着走。",
 	"themes/pressure": "高压层。子弹会拐弯，贴墙打。",
 	"themes/silent": "静默层。听不见脚步，多看小地图。",
@@ -381,7 +381,7 @@ const FLAVOR := {
 	# `mark_codex("shrine", id)` 的首发现播报（mark_codex 拼键 kind + "/" + id 命中本表）。
 	# 显示条件仍为**恒显**（不读发现状态），内容随三卡派生而变；灰字层与发现集彼此独立、互不耦合。
 	"shrine/blood_relic": "血祭。地窖里最不缺的就是血。",
-	"shrine/ore_upgrade": "源石淬炼。矿里人管这叫喂石头。",
+	"shrine/ore_upgrade": "残响淬炼。矿里人管这叫喂石头。",
 	"shrine/purify": "净化。这层的脏，散得掉。",
 	"shrine/ward_boon": "护盾祝福。挡一下，就散了。",
 	"shrine/heal": "修复。缝两针，血就回来了。",

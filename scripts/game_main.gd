@@ -87,7 +87,7 @@ var dungeon: Dungeon
 var room_state := "cleared"  # enter / combat / cleared
 var _transitioning := false
 var _room_budget := 0
-# ---- Sprint 4：挑战因子 / 源石共鸣 ----
+# ---- Sprint 4：挑战因子 / 残响共鸣 ----
 var modifier := "none"
 var enemy_hp_mult := 1.0
 var enemy_speed_mult := 1.0
@@ -333,8 +333,8 @@ func _smoke_fingerprint(floor_num: int) -> void:
 		floor_num, ",".join(rooms_s), ",".join(kinds_s)])
 
 func start_run() -> void:
-	# 局内状态归零：源石 / 击杀 / 升级已选次数 / 里程碑。
-	# 必须早于 _roll_modifier()，否则 barren 因子的开局 +10 源石会被清零。
+	# 局内状态归零：残响 / 击杀 / 升级已选次数 / 里程碑。
+	# 必须早于 _roll_modifier()，否则 barren 因子的开局 +10 残响会被清零。
 	Game.reset()
 	Upgrades.reset()
 	_run_settled = false
@@ -549,7 +549,7 @@ func _calamity_name(id: String) -> String:
 		"frail": return "虚弱（生命上限 -20%）"
 		"frenzy": return "狂乱（敌人加速 25%）"
 		"scarce_ammo": return "弹药荒（弹匣减半）"
-		"scarce_ore": return "贫矿（源石掉落 -30%）"
+		"scarce_ore": return "贫矿（残响掉落 -30%）"
 	return id
 
 
@@ -962,7 +962,7 @@ func _theme_damage_tick() -> void:
 		player.take_damage(1, player.global_position + Vector2(0, -70))
 
 
-## 源石共鸣：每拾取 1 个升级/遗物 +1 层，满 5 层触发全屏爆发
+## 残响共鸣：每拾取 1 个升级/遗物 +1 层，满 5 层触发全屏爆发
 func add_resonance(n := 1) -> void:
 	resonance += n
 	while resonance >= _resonance_step:
@@ -977,7 +977,7 @@ func add_resonance(n := 1) -> void:
 func _resonance_burst() -> void:
 	Game.add_score(50)
 	player.grant_invuln(1.5)
-	# 源石共鸣核心（mx_resocore）：冲击波伤害 6 → 9
+	# 残响共鸣核心（mx_resocore）：冲击波伤害 6 → 9
 	var burst_dmg := 9.0 if player.has_resocore else 6.0
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if is_instance_valid(e) and e.has_method("take_damage"):
@@ -991,7 +991,7 @@ func _resonance_burst() -> void:
 	ex.setup("blast", 1.4)
 	ex.position = player.global_position
 	entities.add_child(ex)
-	hud.banner("源石共鸣 · 爆发！")
+	hud.banner("残响共鸣 · 爆发！")
 	Game.sfx("secret")
 	_milestone("resonance_burst")
 	if _smoke:
@@ -1939,14 +1939,14 @@ func on_slug_killed(slug) -> void:
 		Game.mark_codex("bosses", slug.variant)
 	if Game.combo >= 20:
 		_milestone("combo20")
-	# 楼层主题「源石矿脉」：每次击杀额外掉 1 源石
+	# 楼层主题「往生脉」：每次击杀额外掉 1 残响
 	if _theme_rule == "vein":
 		drop_pickup(slug.global_position, "diamond", 1)
 	var xp: int = slug.xp_value
 	var drops := mini(xp, 8)
 	for i in drops:
 		drop_pickup(slug.global_position, "diamond", int(ceil(xp / float(drops))))
-	# 丰收印记：击杀额外 +1 源石
+	# 丰收印记：击杀额外 +1 残响
 	if is_instance_valid(player) and player.harvester_active:
 		drop_pickup(slug.global_position, "diamond", 1)
 	# 回响击败增益：2s 攻速提升（规划 §5.2；数值 Sprint 13 E 提为 Data.ECHO_TUNING）
@@ -2131,7 +2131,7 @@ func _on_level_up(level: int) -> void:
 
 func _on_upgrade_chosen(id: String) -> void:
 	Upgrades.apply(id, self)
-	# 源石共鸣核心（mx_resocore）解锁后，共鸣计数源改为源石 → 旧的「拾取升级 +1」不再计入
+	# 残响共鸣核心（mx_resocore）解锁后，共鸣计数源改为残响 → 旧的「拾取升级 +1」不再计入
 	if not player.has_resocore:
 		add_resonance(1)
 	if is_instance_valid(hud):
@@ -2423,7 +2423,7 @@ func give_player_weapon(id: String) -> void:
 
 func give_player_relic(id: String) -> void:
 	Relics.apply(id, self)
-	# 同上：mx_resocore 解锁后共鸣只由源石计数
+	# 同上：mx_resocore 解锁后共鸣只由残响计数
 	if not player.has_resocore:
 		add_resonance(1)
 	_milestone("first_relic")
