@@ -110,6 +110,10 @@ func _make_card(index: int) -> Dictionary:
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.75))
+	# 撑件吃掉剩余空间：内容顶排、提示恒贴底，三卡行数不同也不再错位
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vb.add_child(spacer)
 	vb.add_child(hint)
 
 	card.gui_input.connect(func(ev: InputEvent) -> void:
