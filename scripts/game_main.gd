@@ -122,6 +122,8 @@ var _calamity_saved_mag_cap_mult := 1.0
 var _calamity_theme_rule := ""     # S27 复合变体身份：施加瞬间快照主题派生结果，clear 只读它（禁现查 floor_num——陷阱 1：换层时 floor_num 已先自增）
 const _OG_TOAST_TAG := "誓约遗赠"   # S27 批二：遗赠 toast 首词（D01 锚点；探针侧 _OG_TAG 须与本值逐字一致）
 var _calamity_frail_ratio := 0.2   # S27：本层实际虚弱比例（文案按实值显示，见 _calamity_name / _frail_ratio）
+var _calamity_speed_mult_applied := 1.0   # S31：frenzy 施加时实际倍率（文案只读快照，不读 live）
+var _calamity_ammo_mult_applied := 1.0    # S31：scarce_ammo 施加时实际弹匣系数（同上）
 var _calamity_forced := false  # SMOKE_CALAMITY：跳过 15% 概率强制触发
 var _mod_enemy_speed_mult := 1.0   # S27 批三：modifier 贡献的敌速倍率（与主题贡献分离）
 var _mod_diamond_mult := 1.0       # S27 批三：modifier 贡献的残响倍率（同上——live 值 = _mod_* + 主题 maxf）
@@ -576,9 +578,15 @@ func _calamity_name(id: String) -> String:
 				return "虚弱（生命上限不再削减）"
 			return "虚弱（生命上限 -%d%%）" % int(round(100.0 * float(_calamity_frail_cut) / float(maxi(1, player.max_hp + _calamity_frail_cut))))
 		"frenzy":
-			return "狂乱（敌人加速 %d%%）" % int(round((Game.calamity_speed_mult - 1.0) * 100.0))
+			# S31：读施加时快照（不读 live）；增量 <=0 走「不再加速」，禁 0%
+			if _calamity_speed_mult_applied <= 1.0:
+				return "狂乱（敌人不再加速）"
+			return "狂乱（敌人加速 %d%%）" % int(round((_calamity_speed_mult_applied - 1.0) * 100.0))
 		"scarce_ammo":
-			return "弹药荒（弹匣 -%d%%）" % int(round((1.0 - player.mag_cap_mult) * 100.0))
+			# S31：读施加时快照（不读 live）；削减 <=0 走「不再削减」，禁 -0%
+			if _calamity_ammo_mult_applied >= 1.0:
+				return "弹药荒（弹匣不再削减）"
+			return "弹药荒（弹匣 -%d%%）" % int(round((1.0 - _calamity_ammo_mult_applied) * 100.0))
 		"scarce_ore":
 			var base: float = maxf(_calamity_saved_diamond_mult, 0.001)
 			var ore_cut := 1.0 - 0.7 / base
@@ -617,6 +625,8 @@ func _apply_calamity() -> void:
 					Game.calamity_speed_mult = 1.4
 				_:
 					Game.calamity_speed_mult = 1.25
+			# S31：存写进效果通道的那个数（施加时快照）——文案只读它，抗后续 live 漂移
+			_calamity_speed_mult_applied = Game.calamity_speed_mult
 		"scarce_ammo":
 			# S27 复合变体：岩浆逼你走位站不定 → 弹匣不再是瓶颈；藤替你堵路 → 不必按原量开火
 			match _calamity_theme_rule:
@@ -626,6 +636,8 @@ func _apply_calamity() -> void:
 					player.mag_cap_mult = 0.65
 				_:
 					player.mag_cap_mult = 0.5
+			# S31：施加时快照实际弹匣系数（文案只读它）
+			_calamity_ammo_mult_applied = player.mag_cap_mult
 			player.mag_changed.emit(player.mag(), player.mag_cap())
 		"scarce_ore":
 			if Game.main != null and is_instance_valid(Game.main):
@@ -656,6 +668,8 @@ func _clear_calamity_effects() -> void:
 		_calamity_saved_mag_cap_mult = 1.0
 		_calamity_theme_rule = ""      # S27：变体身份随灾祸一起失效。🔴 禁止在此处现查 floor_num/_theme_rule（陷阱 1：floor 已是新层；_theme_rule 恰为旧值纯属调用顺序巧合）
 		_calamity_frail_ratio = 0.2    # S27：比例复位为基线
+		_calamity_speed_mult_applied = 1.0   # S31：快照随灾祸同生共死（不跨层/跨局）
+		_calamity_ammo_mult_applied = 1.0
 
 
 ## ---------------- Sprint 27 批一：主题×灾祸复合探针（SMOKE_CAL_THEME） ----------------
@@ -683,6 +697,20 @@ const _CT_TICK_CELLS := [
 ]
 
 var _ct_checked := 0
+
+# ---- S31：灾祸文案快照差分探针块（独立计数，不动既有 117 的 done 线）----
+## 判红双门：打印带 ok= 且 Dev.check→[ERR]（团队口径 ok=false 与 QA 口径 [ERR] 同时可判）。
+## 差分一律在「施加后制造 live 漂移 + 刷层签」之后取值（live==施加值时读＝现行错实现也绿＝假绿）。
+const _S31_DECLARED := 12
+var _s31_checked := 0
+
+
+func _s31_assert(ok: bool, nn: String, measured, expect) -> void:
+	_s31_checked += 1
+	var m := str(measured)
+	var e := str(expect)
+	Dev.check(ok, "cal_theme_s31", "%s | measured=%s expect=%s" % [nn, m, e])
+	print("[SMOKE-CAL-THEME-S31] #%02d %s measured=%s expect=%s ok=%s" % [_s31_checked, nn, m, e, str(ok)])
 
 
 func _ct_assert(ok: bool, nn_name: String, measured, expect) -> void:
@@ -1516,6 +1544,150 @@ func _smoke_cal_theme_probe() -> void:
 	Dev.check(_ct_checked == _CT_DECLARED, "cal_theme",
 		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_ct_checked, _CT_DECLARED])
 	print("[SMOKE-CAL-THEME] done checked=%d declared=%d" % [_ct_checked, _CT_DECLARED])
+	_smoke_cal_theme_s31_probe()
+
+
+## S31 灾祸文案快照差分探针：造局施加 → 制造 live 漂移 → 刷层签 → 取 _calamity_name + 层签文本。
+## 12 条（F1/F2/F0/A1/A2/A2t/A0/O1/O2/O3/O4/W1）。出口整体还原，不污染后续 autopilot / 八探针。
+func _smoke_cal_theme_s31_probe() -> void:
+	_s31_checked = 0
+	var sv_mhp: int = player.max_hp
+	var sv_hp: int = player.hp
+	var sv_mc: float = player.mag_cap_mult
+	var sv_dm: float = diamond_mult
+	var sv_csm: float = Game.calamity_speed_mult
+	var sv_floor: int = Game.floor_num
+	var sv_cal: String = _calamity
+	var sv_rule: String = _calamity_theme_rule
+	var sv_speed_app: float = _calamity_speed_mult_applied
+	var sv_ammo_app: float = _calamity_ammo_mult_applied
+	var sv_mod_dm: float = _mod_diamond_mult
+
+	# F1 frenzy apply 当刻（前提守卫·恒过：live==施加值，错实现也绿）
+	_ct_reset_channels()
+	Game.floor_num = 1
+	_calamity = "frenzy"
+	_apply_calamity()
+	var f1: String = _calamity_name("frenzy")
+	_s31_assert(f1.contains("狂乱") and f1.contains("25%"), "F1 frenzy apply 当刻=25%", f1, "含 狂乱+25%")
+
+	# F2 frenzy 施加后改 live=1.6，文案仍报快照 25%（验效果型·差分）
+	Game.calamity_speed_mult = 1.6
+	update_floor_sign()
+	var f2n: String = _calamity_name("frenzy")
+	var f2s: String = String(hud._floor_sign_label.text)
+	_s31_assert(f2n.contains("25%") and not f2n.contains("60%") and f2s.contains("25%") and not f2s.contains("60%"),
+		"F2 frenzy 名义≠实际(live=1.6)", "name=%s | sign=%s" % [f2n, f2s], "含25% 不含60%")
+
+	# F0 frenzy 0 增量（合成前提守卫，走「不再加速」禁 0%）
+	_calamity_speed_mult_applied = 1.0
+	var f0: String = _calamity_name("frenzy")
+	_s31_assert(f0.contains("狂乱（敌人不再加速）") and not f0.contains("0%"), "F0 frenzy 0=不再加速", f0, "含 敌人不再加速 不含 0%")
+	_calamity_speed_mult_applied = 1.25
+
+	# A1 ammo apply 当刻（前提守卫）
+	_ct_reset_channels()
+	Game.floor_num = 1
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	var a1: String = _calamity_name("scarce_ammo")
+	_s31_assert(a1.contains("弹药荒") and a1.contains("-50%"), "A1 ammo apply 当刻=-50%", a1, "含 弹药荒+-50%")
+
+	# A2 ammo 施加后改 live=0.9，文案仍报快照 -50%（验效果型·差分）
+	player.mag_cap_mult = 0.9
+	update_floor_sign()
+	var a2n: String = _calamity_name("scarce_ammo")
+	var a2s: String = String(hud._floor_sign_label.text)
+	_s31_assert(a2n.contains("-50%") and not a2n.contains("-10%") and a2s.contains("-50%") and not a2s.contains("-10%"),
+		"A2 ammo 名义≠实际(live=0.9)", "name=%s | sign=%s" % [a2n, a2s], "含-50% 不含-10%")
+
+	# A2t ammo 真实 toxic tick 0.5→0.4→0.3（验效果型·真实时变；live 会随 tick 漂到 -70%）
+	_ct_reset_channels()
+	Game.floor_num = 5
+	_apply_floor_theme()
+	var hp_keep: int = player.hp
+	_calamity = "scarce_ammo"
+	_apply_calamity()
+	_theme_damage_tick()
+	player.hp = hp_keep
+	_theme_damage_tick()
+	player.hp = hp_keep
+	update_floor_sign()
+	var a2tn: String = _calamity_name("scarce_ammo")
+	var a2ts: String = String(hud._floor_sign_label.text)
+	_s31_assert(a2tn.contains("-50%") and not a2tn.contains("-70%") and a2ts.contains("-50%") and not a2ts.contains("-70%"),
+		"A2t ammo 真实 tick 至0.3 仍报-50%", "name=%s | sign=%s | mc=%s" % [a2tn, a2ts, str(player.mag_cap_mult)], "含-50% 不含-70%")
+
+	# A0 ammo 0 削减（合成前提守卫）
+	_calamity_ammo_mult_applied = 1.0
+	var a0: String = _calamity_name("scarce_ammo")
+	_s31_assert(a0.contains("弹药荒（弹匣不再削减）") and not a0.contains("-0%"), "A0 ammo 0=不再削减", a0, "含 弹匣不再削减 不含 -0%")
+	_calamity_ammo_mult_applied = 0.5
+
+	# O1 压力层 ore base=1.5 → -53%（验效果型；快照分母）
+	_ct_reset_channels()
+	_mod_diamond_mult = 1.0
+	diamond_mult = 1.0
+	Game.floor_num = 6
+	_apply_floor_theme()
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var o1: String = _calamity_name("scarce_ore")
+	_s31_assert(o1.contains("-53%"), "O1 pressure ore 快照分母=-53%", "base=%s | %s" % [str(_calamity_saved_diamond_mult), o1], "含-53%")
+
+	# O2 承 O1 改 live diamond=1.2，分母不变（验效果型）
+	diamond_mult = 1.2
+	var o2: String = _calamity_name("scarce_ore")
+	_s31_assert(o2.contains("-53%") and not o2.contains("-42%"), "O2 ore 改live后分母仍快照", o2, "含-53% 不含-42%")
+
+	# O3 常规 ore base=1.0 → -30%（验效果型·跨批回归；常态 _mod==saved==1.0）
+	_ct_reset_channels()
+	_mod_diamond_mult = 1.0
+	Game.floor_num = 1
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var o3: String = _calamity_name("scarce_ore")
+	_s31_assert(o3.contains("-30%"), "O3 常规 ore=-30%", o3, "含-30%")
+
+	# O4 barren ore base=0.7 → 不再削减（验效果型·跨批回归；barren 的 _mod==saved==0.7）
+	_ct_reset_channels()
+	_mod_diamond_mult = 0.7
+	diamond_mult = 0.7
+	Game.floor_num = 1
+	_calamity = "scarce_ore"
+	_apply_calamity()
+	var o4: String = _calamity_name("scarce_ore")
+	_s31_assert(o4.contains("不再削减") and not o4.contains("-0%"), "O4 barren ore=不再削减", o4, "含不再削减 不含-0%")
+
+	# W1 四条族名首词逐字保留（验效果型）
+	player.max_hp = 10
+	_calamity_frail_cut = 2
+	_calamity_saved_diamond_mult = 1.0
+	_calamity_speed_mult_applied = 1.25
+	_calamity_ammo_mult_applied = 0.5
+	var w1_bad: Array[String] = []
+	if not String(_calamity_name("frail")).contains("虚弱"): w1_bad.append("frail")
+	if not String(_calamity_name("frenzy")).contains("狂乱"): w1_bad.append("frenzy")
+	if not String(_calamity_name("scarce_ammo")).contains("弹药荒"): w1_bad.append("scarce_ammo")
+	if not String(_calamity_name("scarce_ore")).contains("残响枯竭"): w1_bad.append("scarce_ore")
+	_s31_assert(w1_bad.is_empty(), "W1 四首词逐字保留", str(w1_bad), "0 违例")
+
+	# 出口整体还原
+	_calamity = sv_cal
+	_calamity_theme_rule = sv_rule
+	_calamity_speed_mult_applied = sv_speed_app
+	_calamity_ammo_mult_applied = sv_ammo_app
+	Game.floor_num = sv_floor
+	player.max_hp = sv_mhp
+	player.hp = sv_hp
+	player.mag_cap_mult = sv_mc
+	diamond_mult = sv_dm
+	_mod_diamond_mult = sv_mod_dm
+	Game.calamity_speed_mult = sv_csm
+	update_floor_sign()
+	Dev.check(_s31_checked == _S31_DECLARED, "cal_theme_s31",
+		"自校验失败: s31 checked(%d) != declared(%d)" % [_s31_checked, _S31_DECLARED])
+	print("[SMOKE-CAL-THEME-S31] done checked=%d declared=%d" % [_s31_checked, _S31_DECLARED])
 
 
 ## S27 批三：modifier → (敌速倍率, 残响倍率)。纯函数：零 rng、零副作用、不读成员。
