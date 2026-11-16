@@ -1,12 +1,12 @@
 86c9466a751c0b932db142ae2626c891 *scripts/ally.gd
-c2f53a7abeaed6fa5a9cf52d8ce6900e *scripts/assets.gd
+c67525a089e783e702f4dd650116f5a8 *scripts/assets.gd
 fa7acbc36e849a88aad52b2b084a6986 *scripts/bomb.gd
 fb40c2fea74c106f5417856524cb9dd8 *scripts/boss.gd
 8ad6222d81e9e86153fd0890627f56ed *scripts/boss2.gd
 f91cc17f81aaef2cc6e399260bdc8c2f *scripts/boss3.gd
 aa687ff422fbe682440db19e48f5673e *scripts/bullet.gd
 dd4d872610243243f50b5b638581866f *scripts/crate.gd
-08aa68dc43556d52b91fc3c91ebcf3ef *scripts/data.gd
+b34ce072b74166bcf2c7e0b658c9f050 *scripts/data.gd
 b8499a95324fa66a90a7d698979a29b5 *scripts/dev_log.gd
 e10b4dcc5f7d1ae547212f101b688fcd *scripts/dev_overlay.gd
 24c4b7e2d40560adf3b967be319dce66 *scripts/door.gd
