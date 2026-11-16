@@ -257,6 +257,8 @@ func _ready() -> void:
 			_test_purify_cost()
 		if OS.get_environment("SMOKE_START_BUFFER") != "":
 			_test_start_buffer()
+		if OS.get_environment("SMOKE_S32_SHRINE") != "":
+			_smoke_s32_shrine_probe()
 
 
 func _process(delta: float) -> void:
@@ -1688,6 +1690,352 @@ func _smoke_cal_theme_s31_probe() -> void:
 	Dev.check(_s31_checked == _S31_DECLARED, "cal_theme_s31",
 		"自校验失败: s31 checked(%d) != declared(%d)" % [_s31_checked, _S31_DECLARED])
 	print("[SMOKE-CAL-THEME-S31] done checked=%d declared=%d" % [_s31_checked, _S31_DECLARED])
+
+
+## ---------------- Sprint 32：圣所随地形改写探针（SMOKE_S32_SHRINE） ----------------
+## 19 条（S1–S5 + M1–M9 + D1–D4 + P1）；P2–P5 是门外分跑门，不在此块计。
+## 前缀 [SMOKE-S32-SHRINE]（非 [SMOKE-SHRINE] 超集），计数独立；双门同布尔；统计行恒打印不判红。
+const _S32_DECLARED := 19
+var _s32_checked := 0
+const _S32_EIGHT := [Vector2i(3, 4), Vector2i(3, 5), Vector2i(4, 4), Vector2i(0, 1),
+	Vector2i(-2, 7), Vector2i(7, -3), Vector2i(1, 1), Vector2i(20, 20)]
+const _S32_FROZEN_F3 := "(3,4)=[blood_relic,ore_upgrade,heal] (3,5)=[greed_pact,heal,ward_boon] (4,4)=[blood_relic,greed_pact,heal] (0,1)=[blood_relic,ore_upgrade,ward_boon] (-2,7)=[blood_relic,ore_upgrade,heal] (7,-3)=[ore_upgrade,ward_boon,heal] (1,1)=[heal,ward_boon,blood_relic] (20,20)=[ward_boon,ore_upgrade,greed_pact]"
+
+
+func _s32_assert(ok: bool, nn: String, measured, expect) -> void:
+	_s32_checked += 1
+	var m := str(measured)
+	var e := str(expect)
+	Dev.check(ok, "s32_shrine", "%s | measured=%s expect=%s" % [nn, m, e])
+	print("[SMOKE-S32-SHRINE] #%02d %s measured=%s expect=%s ok=%s" % [_s32_checked, nn, m, e, str(ok)])
+
+
+func _s32_ids(offers: Array) -> Array:
+	var out: Array = []
+	for o in offers:
+		out.append(String((o as Dictionary).get("id", "?")))
+	return out
+
+
+## 在指定 floor/calamity 下扫 1681 网格，聚合 命中/首槽/次槽/重复/出现集合；出口还原现场
+func _s32_scan(floor_n: int, cal: String) -> Dictionary:
+	var sv_floor := Game.floor_num
+	var sv_cal := _calamity
+	Game.floor_num = floor_n
+	_calamity = cal
+	var n := 0
+	var hit := {}
+	var slot0 := {}
+	var slot1 := {}
+	var idset := {}
+	var dup := 0
+	for x in range(-20, 21):
+		for y in range(-20, 21):
+			var offers := _shrine_offers_for(Vector2i(x, y))
+			if offers.size() != 3:
+				continue
+			n += 1
+			var i0 := String(offers[0]["id"])
+			var i1 := String(offers[1]["id"])
+			var i2 := String(offers[2]["id"])
+			hit[i0] = int(hit.get(i0, 0)) + 1
+			hit[i1] = int(hit.get(i1, 0)) + 1
+			hit[i2] = int(hit.get(i2, 0)) + 1
+			idset[i0] = true
+			idset[i1] = true
+			idset[i2] = true
+			slot0[i0] = int(slot0.get(i0, 0)) + 1
+			slot1[i1] = int(slot1.get(i1, 0)) + 1
+			if i0 == i1 or i1 == i2 or i0 == i2:
+				dup += 1
+	Game.floor_num = sv_floor
+	_calamity = sv_cal
+	return {"n": n, "hit": hit, "slot0": slot0, "slot1": slot1, "idset": idset, "dup": dup}
+
+
+func _s32_rate(st: Dictionary, id: String) -> float:
+	var n := int(st["n"])
+	if n <= 0:
+		return 0.0
+	return float(int((st["hit"] as Dictionary).get(id, 0))) / float(n)
+
+
+func _s32_cnt(st: Dictionary, key: String, id: String) -> int:
+	return int((st[key] as Dictionary).get(id, 0))
+
+
+## 现行三段抽取基线（独立复算，用于 M8 等价）：返回 id 串
+func _s32_baseline_ids(floor_n: int, cal: String, coord: Vector2i) -> Array:
+	var sv_floor := Game.floor_num
+	var sv_cal := _calamity
+	Game.floor_num = floor_n
+	_calamity = cal
+	var pool: Array = []
+	for id in Data.SHRINE_OFFERS:
+		var o: Dictionary = Data.SHRINE_OFFERS[id]
+		if Game.floor_num < int(o.get("min_floor", 3)):
+			continue
+		if String(id) == "purify" and _calamity == "":
+			continue
+		pool.append(String(id))
+	var out: Array = []
+	if pool.size() >= 3:
+		var key := "%d_%d_%d" % [Game.run_seed, Game.floor_num, coord.x * 1000 + coord.y]
+		var used := {}
+		for i in 3:
+			var idx: int = Game.stable_hash("%s#%d" % [key, i]) % pool.size()
+			while used.has(idx):
+				idx = (idx + 1) % pool.size()
+			used[idx] = true
+			out.append(pool[idx])
+	Game.floor_num = sv_floor
+	_calamity = sv_cal
+	return out
+
+
+## 指定 floor/cal 下「偏好子集」的 id 列表（保声明序）——D4 独立复算分母
+func _s32_pref_pool_ids(floor_n: int, cal: String) -> Array:
+	var sv_floor := Game.floor_num
+	var sv_cal := _calamity
+	Game.floor_num = floor_n
+	_calamity = cal
+	var pref: Array = _shrine_theme_pref()[0]
+	var out: Array = []
+	for id in Data.SHRINE_OFFERS:
+		var o: Dictionary = Data.SHRINE_OFFERS[id]
+		if Game.floor_num < int(o.get("min_floor", 3)):
+			continue
+		if String(id) == "purify" and _calamity == "":
+			continue
+		if pref.has(String(id)):
+			out.append(String(id))
+	Game.floor_num = sv_floor
+	_calamity = sv_cal
+	return out
+
+
+func _smoke_s32_shrine_probe() -> void:
+	_s32_checked = 0
+	# 预扫七靶 + vines 灾祸靶（各 1681 网格）
+	var s1 := _s32_scan(9, "")
+	var s2 := _s32_scan(5, "frail")
+	var s3 := _s32_scan(4, "")
+	var s4 := _s32_scan(6, "")
+	var s5 := _s32_scan(14, "")
+	var s6 := _s32_scan(7, "frail")
+	var s7 := _s32_scan(7, "")
+	var s8 := _s32_scan(11, "frail")
+	var n1 := int(s1["n"])
+	var n3 := int(s3["n"])
+
+	# 统计行（恒打印、不判红）
+	print("[SMOKE-S32-SHRINE] rate T1 ice ward=%.4f wind=%.4f | T2 heal=%.4f ward=%.4f | T3 ore=%.4f ward=%.4f greed=%.4f | T4 wind=%.4f power=%.4f | T5 wind=%.4f power=%.4f | T8 heal=%.4f" % [
+		_s32_rate(s1, "ward_boon"), _s32_rate(s1, "wind_dance"),
+		_s32_rate(s2, "heal"), _s32_rate(s2, "ward_boon"),
+		_s32_rate(s3, "ore_upgrade"), _s32_rate(s3, "ward_boon"), _s32_rate(s3, "greed_pact"),
+		_s32_rate(s4, "wind_dance"), _s32_rate(s4, "power_surge"),
+		_s32_rate(s5, "wind_dance"), _s32_rate(s5, "power_surge"),
+		_s32_rate(s8, "heal")])
+	print("[SMOKE-S32-SHRINE] slot0 T1 ward=%d/%d | down@slot1 T1=%d T2=%d T3=%d" % [
+		_s32_cnt(s1, "slot0", "ward_boon"), n1,
+		_s32_cnt(s1, "slot1", "wind_dance"), _s32_cnt(s2, "slot1", "ward_boon"), _s32_cnt(s3, "slot1", "greed_pact")])
+
+	# S1 ice 偏好卡命中率 1.0000
+	var r1 := _s32_rate(s1, "ward_boon")
+	_s32_assert(r1 >= 0.99, "S1 ice pref命中率", "%.4f" % r1, ">=0.99 (1.0000)")
+
+	# S2 ice 低偏好压低且未消失
+	var r2 := _s32_rate(s1, "wind_dance")
+	_s32_assert(r2 >= 0.05 and r2 <= 0.20, "S2 ice down压低未消失", "%.4f" % r2, "[0.05,0.20] (0.1077)")
+
+	# S3 toxic 交叉（pref/down 各一）
+	var r3h := _s32_rate(s2, "heal")
+	var r3w := _s32_rate(s2, "ward_boon")
+	_s32_assert(r3h >= 0.99 and r3w >= 0.05 and r3w <= 0.20, "S3 toxic交叉",
+		"heal=%.4f ward=%.4f" % [r3h, r3w], "heal>=0.99 ward∈[0.05,0.20]")
+
+	# S4 vein 双 pref 同时抬升 + down 压低
+	var r4o := _s32_rate(s3, "ore_upgrade")
+	var r4w := _s32_rate(s3, "ward_boon")
+	var r4g := _s32_rate(s3, "greed_pact")
+	_s32_assert(r4o >= 0.70 and r4w >= 0.70 and r4g >= 0.20 and r4g <= 0.36, "S4 vein双pref+down",
+		"ore=%.4f ward=%.4f greed=%.4f" % [r4o, r4w, r4g], "ore,ward>=0.70 greed∈[0.20,0.36]")
+
+	# S5 T1 其余 7 张中性卡 各自 ∈ [0.22,0.33]（前提守卫）
+	var s5bad: Array[String] = []
+	for id in ["blood_relic", "ore_upgrade", "heal", "relic_suffix", "greed_pact", "shard_pact", "power_surge"]:
+		var rr := _s32_rate(s1, String(id))
+		if rr < 0.22 or rr > 0.33:
+			s5bad.append("%s=%.4f" % [id, rr])
+	_s32_assert(s5bad.is_empty(), "S5 中性7卡∈[0.22,0.33]", str(s5bad), "0 越界")
+
+	# M1 T1 偏好唯一 → 首槽恒 ward_boon
+	var m1 := _s32_cnt(s1, "slot0", "ward_boon")
+	_s32_assert(m1 == n1, "M1 首槽恒偏好卡", "%d/%d" % [m1, n1], "%d/%d" % [n1, n1])
+
+	# M2 down 不进第二槽（三靶各 0）
+	var m2 := _s32_cnt(s1, "slot1", "wind_dance") + _s32_cnt(s2, "slot1", "ward_boon") + _s32_cnt(s3, "slot1", "greed_pact")
+	_s32_assert(m2 == 0, "M2 down不进#1", str(m2), "0（三靶合计）")
+
+	# M3 三卡 id 两两不等（三靶 dup 0）
+	var m3 := int(s1["dup"]) + int(s2["dup"]) + int(s3["dup"])
+	_s32_assert(m3 == 0, "M3 三卡两两不等", str(m3), "0（三靶合计重复组）")
+
+	# M4 vein 首槽只在两张 pref 内且各约半 [800,880]
+	var m4_nonpref := 0
+	for id in (s3["slot0"] as Dictionary):
+		if String(id) != "ore_upgrade" and String(id) != "ward_boon":
+			m4_nonpref += int((s3["slot0"] as Dictionary)[id])
+	var m4o := _s32_cnt(s3, "slot0", "ore_upgrade")
+	var m4w := _s32_cnt(s3, "slot0", "ward_boon")
+	_s32_assert(m4_nonpref == 0 and m4o >= 800 and m4o <= 880 and m4w >= 800 and m4w <= 880,
+		"M4 vein首槽=两pref各约半", "nonpref=%d ore=%d ward=%d/%d" % [m4_nonpref, m4o, m4w, n3], "nonpref0 ore,ward∈[800,880]")
+
+	# M5 pressure 第 6 层单向上行（power_surge 未入池）
+	var m5w := _s32_rate(s4, "wind_dance")
+	var m5p := _s32_rate(s4, "power_surge")
+	_s32_assert(m5w >= 0.99 and m5p == 0.0, "M5 pressure首轮单向上行",
+		"wind=%.4f power=%.4f" % [m5w, m5p], "wind>=0.99 power=0")
+
+	# M6 pressure 第 14 层双向
+	var m6w := _s32_rate(s5, "wind_dance")
+	var m6p := _s32_rate(s5, "power_surge")
+	var m6s := _s32_cnt(s5, "slot1", "power_surge")
+	_s32_assert(m6w >= 0.99 and m6p >= 0.05 and m6p <= 0.20 and m6s == 0, "M6 pressure第14层双向",
+		"wind=%.4f power=%.4f #1=%d" % [m6w, m6p, m6s], "wind>=0.99 power∈[0.05,0.20] #1=0")
+
+	# M7 silent 有灾祸 → purify 唯一偏好
+	var m7 := _s32_rate(s6, "purify")
+	_s32_assert(m7 >= 0.99, "M7 silent灾祸 purify唯一", "%.4f" % m7, ">=0.99")
+
+	# M8 silent 无灾祸 → 整层无偏向（=现行基线，且 purify 0 次）
+	var svf8 := Game.floor_num
+	var svc8 := _calamity
+	Game.floor_num = 7
+	_calamity = ""
+	var m8_bad := 0
+	var m8_purify := 0
+	for x in range(-20, 21):
+		for y in range(-20, 21):
+			var c8 := Vector2i(x, y)
+			var got8 := _s32_ids(_shrine_offers_for(c8))
+			if got8.has("purify"):
+				m8_purify += 1
+			if got8 != _s32_baseline_ids(7, "", c8):
+				m8_bad += 1
+	Game.floor_num = svf8
+	_calamity = svc8
+	_s32_assert(m8_bad == 0 and m8_purify == 0, "M8 silent无灾祸=基线",
+		"bad=%d purify=%d" % [m8_bad, m8_purify], "bad=0 purify=0")
+
+	# M9 vines（down 空）≠ 只卖 heal：heal 1.0 且出现过 10 个不同 id
+	var m9h := _s32_rate(s8, "heal")
+	var m9n := (s8["idset"] as Dictionary).size()
+	_s32_assert(m9h >= 0.99 and m9n == 10, "M9 vines down空≠只卖heal",
+		"heal=%.4f distinct=%d" % [m9h, m9n], "heal>=0.99 distinct=10")
+
+	# D1 同 key 两次派生逐字相同，且 8 坐标互不全同（三靶各）
+	var d1_bad := 0
+	var d1_var_ok := true
+	for t in [[9, ""], [5, "frail"], [4, ""]]:
+		var svf1 := Game.floor_num
+		var svc1 := _calamity
+		Game.floor_num = int(t[0])
+		_calamity = String(t[1])
+		var d1_seen := {}
+		for c1 in _S32_EIGHT:
+			var a1 := _s32_ids(_shrine_offers_for(c1))
+			var b1 := _s32_ids(_shrine_offers_for(c1))
+			if a1 != b1:
+				d1_bad += 1
+			d1_seen[str(a1)] = true
+		if d1_seen.size() < 2:
+			d1_var_ok = false
+		Game.floor_num = svf1
+		_calamity = svc1
+	_s32_assert(d1_bad == 0 and d1_var_ok, "D1 同key两次一致且互不全同",
+		"bad=%d var_ok=%s" % [d1_bad, str(d1_var_ok)], "bad=0 var_ok=true")
+
+	# D2 零 Game.rng 消费（8 主题 × 1681 派生前后 seed/state 逐字不变）
+	var d2_seed := Game.rng.seed
+	var d2_state := Game.rng.state
+	var svf2 := Game.floor_num
+	var svc2 := _calamity
+	for f2 in range(4, 12):
+		Game.floor_num = f2
+		_calamity = ""
+		for x in range(-20, 21):
+			for y in range(-20, 21):
+				_shrine_offers_for(Vector2i(x, y))
+	Game.floor_num = svf2
+	_calamity = svc2
+	_s32_assert(Game.rng.seed == d2_seed and Game.rng.state == d2_state, "D2 零rng消费",
+		"seed %s->%s state %s->%s" % [str(d2_seed), str(Game.rng.seed), str(d2_state), str(Game.rng.state)], "seed/state 恒定")
+
+	# D3 零偏好等价（f=3 N=5 八坐标逐字 == 冻结串；f=1/2 返回 []）
+	var svf3 := Game.floor_num
+	var svc3 := _calamity
+	Game.floor_num = 3
+	_calamity = ""
+	var d3_parts: Array[String] = []
+	for c3 in _S32_EIGHT:
+		d3_parts.append("(%d,%d)=[%s]" % [c3.x, c3.y, ",".join(PackedStringArray(_s32_ids(_shrine_offers_for(c3))))])
+	var d3_str := " ".join(PackedStringArray(d3_parts))
+	Game.floor_num = 1
+	var d3_f1 := _shrine_offers_for(Vector2i(0, 0)).size()
+	Game.floor_num = 2
+	var d3_f2 := _shrine_offers_for(Vector2i(0, 0)).size()
+	Game.floor_num = svf3
+	_calamity = svc3
+	_s32_assert(d3_str == _S32_FROZEN_F3 and d3_f1 == 0 and d3_f2 == 0, "D3 零偏好=冻结基线",
+		d3_str, _S32_FROZEN_F3 + " | f1=%d f2=%d" % [d3_f1, d3_f2])
+
+	# D4 hash#0 逐字不动（T3 vein 8 坐标 offers[0] == 复算 pr[stable_hash(key#0)%2]）
+	var svf4 := Game.floor_num
+	var svc4 := _calamity
+	Game.floor_num = 4
+	_calamity = ""
+	var pr4 := _s32_pref_pool_ids(4, "")
+	var d4_ok := 0
+	if pr4.size() > 0:
+		for c4 in _S32_EIGHT:
+			var got0 := String((_shrine_offers_for(c4))[0]["id"])
+			var key4 := "%d_%d_%d" % [Game.run_seed, Game.floor_num, c4.x * 1000 + c4.y]
+			var exp0 := String(pr4[Game.stable_hash("%s#0" % key4) % pr4.size()])
+			if got0 == exp0:
+				d4_ok += 1
+	Game.floor_num = svf4
+	_calamity = svc4
+	_s32_assert(d4_ok == 8, "D4 hash#0逐字不动", "%d/8" % d4_ok, "8/8（pr.size=%d）" % pr4.size())
+
+	# P1 恒可解：9 层 × 1681（size==3、无空槽、无重复）
+	var p1_bad := 0
+	var p1_n := 0
+	var svf5 := Game.floor_num
+	var svc5 := _calamity
+	for f5 in [4, 5, 6, 7, 8, 9, 10, 11, 14]:
+		Game.floor_num = f5
+		_calamity = ""
+		for x in range(-20, 21):
+			for y in range(-20, 21):
+				var o5 := _shrine_offers_for(Vector2i(x, y))
+				p1_n += 1
+				if o5.size() != 3:
+					p1_bad += 1
+					continue
+				var a5 := String(o5[0]["id"])
+				var b5 := String(o5[1]["id"])
+				var c5 := String(o5[2]["id"])
+				if a5 == "" or b5 == "" or c5 == "" or a5 == b5 or b5 == c5 or a5 == c5:
+					p1_bad += 1
+	Game.floor_num = svf5
+	_calamity = svc5
+	_s32_assert(p1_bad == 0 and p1_n == 9 * 1681, "P1 恒可解(9层×1681)",
+		"bad=%d n=%d" % [p1_bad, p1_n], "bad=0 n=%d" % (9 * 1681))
+
+	Dev.check(_s32_checked == _S32_DECLARED, "s32_shrine",
+		"自校验失败: s32 checked(%d) != declared(%d)" % [_s32_checked, _S32_DECLARED])
+	print("[SMOKE-S32-SHRINE] done checked=%d declared=%d" % [_s32_checked, _S32_DECLARED])
 
 
 ## S27 批三：modifier → (敌速倍率, 残响倍率)。纯函数：零 rng、零副作用、不读成员。
@@ -3275,6 +3623,22 @@ var _shrine_offers: Array = []       # 本圣所房的三卡（stable_hash 派�
 ## 三卡选项集：stable_hash 纯派生（同 seed+同层+同坐标 = 同三选一），零 Game.rng 消费。
 ## 奖励执行复用既有接口（Relics.roll / Upgrades.roll 属玩家驱动的既有 rng 路径，
 ## 不新建 rng 流，已登记交付文档 §4.5 口径）
+## S32：本层主题的圣所偏好 —— 返回 [[更常…], [更少…]]（id 列表；「更少」允许为空）
+## 🔴 载体必须经 Data.theme_for_floor() 派生，禁读 _theme_rule live（探针只改 floor_num、不同步 live）
+## 🔴 方向来自主题自己的杠杆（成本相对性 / 伤害的时间形状 / 兑现前提），不是「难就卖强的」
+func _shrine_theme_pref() -> Array:
+	match String(Data.theme_for_floor(Game.floor_num).get("rule", "")):
+		"vein":     return [["ore_upgrade", "ward_boon"], ["greed_pact"]]
+		"toxic":    return [["heal"], ["ward_boon"]]
+		"pressure": return [["wind_dance"], ["power_surge"]]
+		"silent":   return [["purify"], []]
+		"magma":    return [["power_surge"], ["heal"]]
+		"ice":      return [["ward_boon"], ["wind_dance"]]
+		"swamp":    return [["wind_dance"], ["blood_relic"]]
+		"vines":    return [["heal"], []]
+	return [[], []]
+
+
 ## 表按 id 键存（同 RELIC_SUFFIXES 范式）；流动中的 offer 一律带 id 字段（面板/执行/探针统一）
 func _shrine_entry(id: String) -> Dictionary:
 	var e: Dictionary = (Data.SHRINE_OFFERS[id] as Dictionary).duplicate()
@@ -3294,15 +3658,39 @@ func _shrine_offers_for(coord: Vector2i) -> Array:
 	if pool.size() < 3:
 		return []   # 空池护栏：floor<3 / 过滤后不足三张（房型门槛已挡住正常流程，探针兜底）
 	var key := "%d_%d_%d" % [Game.run_seed, Game.floor_num, coord.x * 1000 + coord.y]
-	var picks: Array = []
-	var used := {}
-	for i in 3:
-		var idx: int = Game.stable_hash("%s#%d" % [key, i]) % pool.size()
-		while used.has(idx):   # 线性探查取不重复索引（pool >= 3 恒可解）
-			idx = (idx + 1) % pool.size()
-		used[idx] = true
-		picks.append(pool[idx])
-	return picks
+	# S32：按本层主题偏好改写「卖哪三张」（不改价格/效果/门槛/派生 key；零 rng，全 stable_hash）
+	# 🔴 候选序 = pool 原始声明序（经 min_floor / calamity 过滤后）——硬前置，换序则落卡变、D4 红
+	var td: Array = _shrine_theme_pref()
+	var pr: Array = []
+	for o in pool:
+		if td[0].has(String(o["id"])):
+			pr.append(o)
+	if pr.is_empty():
+		# 无偏好（1–3 层 / 偏好被门槛滤掉 / silent 无灾祸）→ 逐字走现行三段抽取
+		var picks: Array = []
+		var used := {}
+		for i in 3:
+			var idx: int = Game.stable_hash("%s#%d" % [key, i]) % pool.size()
+			while used.has(idx):   # 线性探查取不重复索引（pool >= 3 恒可解）
+				idx = (idx + 1) % pool.size()
+			used[idx] = true
+			picks.append(pool[idx])
+		return picks
+	else:
+		# 三段定向池：p0 取偏好子集（首槽）= 地形可读；p1 排除 p0+down（压低低偏好）；p2 只排 p0/p1（down 靠不进第二槽结构性压低，非永不出现）
+		var dn: Array = td[1]
+		var p0: Dictionary = pr[Game.stable_hash("%s#0" % key) % pr.size()]
+		var c1: Array = []
+		for o in pool:
+			if String(o["id"]) != String(p0["id"]) and not dn.has(String(o["id"])):
+				c1.append(o)
+		var p1: Dictionary = c1[Game.stable_hash("%s#1" % key) % c1.size()]
+		var c2: Array = []
+		for o in pool:
+			if String(o["id"]) != String(p0["id"]) and String(o["id"]) != String(p1["id"]):
+				c2.append(o)
+		var p2: Dictionary = c2[Game.stable_hash("%s#2" % key) % c2.size()]
+		return [p0, p1, p2]
 
 
 ## 代价可支付校验（不足 → 卡置灰不可选：防负数 / 防 max_hp 扣死——§4.6）
