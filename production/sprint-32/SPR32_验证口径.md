@@ -145,7 +145,7 @@
 | 777 | `rooms=(-1, -1),(-1, 0),(-2, 0),(0, -1),(0, 0),(0, 1),(0, 2),(1, 1),(2, -1),(2, 0),(2, 1)` / `kinds=treasure,cursed,super_secret,secret,start,elite,shop,elite,boss,combat,combat` |
 | 42 | `rooms=(-1, -1),(-1, 0),(0, -1),(0, -2),(0, -3),(0, 0),(0, 1),(1, -1),(1, -3),(2, -1),(2, 0)` / `kinds=treasure,secret,combat,combat,elite,start,super_secret,challenge,boss,combat,shop` |
 
-**PASS 五条同时成立**：① 17 条验效果型全绿；② 11 刀逐刀见红且红集合 ⊇ §四；③ `[ERR]`=0、`ok=false`=0、`checked=declared=23`；④ E1 三行 + G2/G3/G4 计数与基线一致；⑤ `data.gd` 冻结 OK。
+**PASS 五条同时成立**：① 17 条验效果型全绿；② 11 刀逐刀见红且红集合 ⊇ §四；③ `[ERR]`=0、`ok=false`=0、`checked=declared=19`（G1）且门外 P2–P5 各自单跑为绿；④ E1 三行 + G2/G3/G4 计数与基线一致；⑤ `data.gd` 冻结 OK。
 **指纹口径要说全**：`_smoke_fingerprint` 只打 `rooms=`/`kinds=`（`:333-348`），圣所出卡不在内 → 本批**零重定**；但**若哪天把出卡写进指纹，本批必须重定**（4 层以上出卡全变）。
 
 ## 六 实读偏差（以实读为准，逐条列）
