@@ -1699,6 +1699,8 @@ const _S32_DECLARED := 19
 var _s32_checked := 0
 const _S32_EIGHT := [Vector2i(3, 4), Vector2i(3, 5), Vector2i(4, 4), Vector2i(0, 1),
 	Vector2i(-2, 7), Vector2i(7, -3), Vector2i(1, 1), Vector2i(20, 20)]
+# _S32_FROZEN_F3 逐字串是在这个 run_seed 下算出来的，D3 比对前必须自钉同一个种子
+const _S32_FROZEN_SEED := 12345
 const _S32_FROZEN_F3 := "(3,4)=[blood_relic,ore_upgrade,heal] (3,5)=[greed_pact,heal,ward_boon] (4,4)=[blood_relic,greed_pact,heal] (0,1)=[blood_relic,ore_upgrade,ward_boon] (-2,7)=[blood_relic,ore_upgrade,heal] (7,-3)=[ore_upgrade,ward_boon,heal] (1,1)=[heal,ward_boon,blood_relic] (20,20)=[ward_boon,ore_upgrade,greed_pact]"
 
 
@@ -1975,6 +1977,8 @@ func _smoke_s32_shrine_probe() -> void:
 	# D3 零偏好等价（f=3 N=5 八坐标逐字 == 冻结串；f=1/2 返回 []）
 	var svf3 := Game.floor_num
 	var svc3 := _calamity
+	var svseed3 := Game.run_seed
+	Game.run_seed = _S32_FROZEN_SEED
 	Game.floor_num = 3
 	_calamity = ""
 	var d3_parts: Array[String] = []
@@ -1986,6 +1990,7 @@ func _smoke_s32_shrine_probe() -> void:
 	Game.floor_num = 2
 	var d3_f2 := _shrine_offers_for(Vector2i(0, 0)).size()
 	Game.floor_num = svf3
+	Game.run_seed = svseed3
 	_calamity = svc3
 	_s32_assert(d3_str == _S32_FROZEN_F3 and d3_f1 == 0 and d3_f2 == 0, "D3 零偏好=冻结基线",
 		d3_str, _S32_FROZEN_F3 + " | f1=%d f2=%d" % [d3_f1, d3_f2])
