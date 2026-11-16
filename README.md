@@ -56,7 +56,7 @@ Sprint 25–26 的主题是**「换名字 → 换灵魂」**：Sprint 25 把显�
 ## 已知限制
 
 - **冻结清单是工作树字节快照**，不是仓库归一化字节。`scripts/` 下 8 个文件为 CRLF（`assets` / `bullet` / `data` / `prop` / `secret_wall` / `slug` / `upgrade_panel` / `upgrades`）、26 个为 LF，无单文件内部混排。在 `core.autocrlf` 配置不同的环境 clone 后，这 8 行 md5 会对不上，属预期行为，不是文件被篡改
-- **深渊档下 Boss HP 不缩放**：三位 Boss 走独立的 `PrismWarden` 血量公式，不走 `Slug.setup()`（历史上也从未接 `enemy_hp_mult`）。Boss 的接触伤害正常随档位缩放，但血量不变，故高难度档 Boss 相对偏易。属设计措辞与实现结构的偏差，非 Sprint 21 新回归
+- **Boss 血量只接深渊档、刻意不接 `enemy_hp_mult`**：三位 Boss（`boss.gd` / `boss2.gd` / `boss3.gd`，同出 `PrismWarden` 骨架）走独立血量公式，**已折入** `abyss_hp_mult`——t=10 时血量 ×2.0，`SMOKE_ABYSS` 探针守着这条（`t=10（hp=2.00）warden/boss2 ×2.0`，`[ERR]`=0 即通过）。但**刻意不接** `enemy_hp_mult`：那是普通敌人的缩放（`slug.gd:86` 两者都接），接进 Boss 会动 E1 基线，属 P1 红线，`player.gd` 另有 `enemy_hp_mult=5.0` 的负对照断言把它锁死。所以在带 `enemy_hp_mult` 修正的局（如软弱 0.85）里 Boss 血量不受影响——这是刻意设计，不是遗漏，也不是「高难度档 Boss 偏易」
 - 全量日志偶现 `Lambda capture at index 0 was freed`（0–4 条随机）。已用同 env 同 seed 交叉对照确认 **HEAD 基线同样出现**，属既有缺陷，与本批改动无因果
 - 层签第二行的**主题手记**按 8 个楼层主题循环，第 9 层起文案会重复 —— 属文案量限制，不是逻辑缺陷。同一行的**本层房型概况**不受影响，房间数随楼层增长持续变化
 
