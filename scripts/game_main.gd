@@ -253,6 +253,8 @@ func _ready() -> void:
 			_test_oath_grant()
 		if OS.get_environment("SMOKE_PURIFY_COST") != "":
 			_test_purify_cost()
+		if OS.get_environment("SMOKE_START_BUFFER") != "":
+			_test_start_buffer()
 
 
 func _process(delta: float) -> void:
@@ -3381,6 +3383,10 @@ func _apply_codex_boons() -> void:
 				player.hp_changed.emit(player.hp, player.max_hp)
 			"suffix":
 				player.attach_suffix(_codex_boon_suffix())
+	# S29：发现度改写深渊起点——档数 1:1 折射为开局环盾，仅深渊局生效。
+	# 零 rng：codex_boons() 只读派生、tier 为菜单预置，落点在 run_seed 之前。
+	if abyss_tier > 0:
+		player.shield_charges += boons.size()
 	if _smoke:
 		print("[SMOKE-CODEX-BOON] applied: %s" % str(boons.keys()))
 
@@ -4419,3 +4425,242 @@ func _test_purify_cost() -> void:
 	Dev.check(_pc_checked == _PC_DECLARED, "purify_cost",
 		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_pc_checked, _PC_DECLARED])
 	print("[SMOKE-PURIFY-COST] done checked=%d declared=%d" % [_pc_checked, _PC_DECLARED])
+
+
+## ============================================================================
+## Sprint 29 批一 探针：发现度改写深渊起点（SMOKE_START_BUFFER=1）
+## 15 条断言，declared 字面量 15（A4 + B3 + C3 + D2 + G2 + H1）。批二式格式：每条无条件
+## 打 #NN + measured/expect + ok= 字段（判红双门：ok=false 主门、[ERR] start_buffer 辅门，
+## 两门读数不一致 = 有人改了 helper，按 FAIL）。
+## 造档：四类按计数填非法占位 id（只活在本探针写入的内存态，load_codex 会过滤掉）；
+## tier 直写深渊档字段（同 SMOKE_ABYSS 范式），不依赖菜单点击。
+## 🔴 调用分工是口径 §五 刀表的可复现前提：A01/A02/A03/B*/C*/D* 一律直调落地函数
+##    （射程只到该函数体），只有 A04 走完整 start_run()——「调用行被注释」这类漏接线
+##    只有 A04 抓得到，直调断言对它天然免疫。
+## ============================================================================
+
+const _SB_DECLARED := 15
+const _SB_TIER := 3                 # ABYSS_TIERS 合法档内任取（断言只看是否 >0）
+var _sb_checked := 0
+
+
+func _sb_assert(ok: bool, nn: String, what: String, measured, expect) -> void:
+	_sb_checked += 1
+	Dev.check(ok, "start_buffer", "%s %s | measured=%s expect=%s" % [nn, what, str(measured), str(expect)])
+	print("[SMOKE-START-BUFFER] #%02d %s measured=%s expect=%s ok=%s" % [
+		_sb_checked, nn + " " + what, str(measured), str(expect), str(ok)])
+
+
+## 造一档发现集：四类按计数填占位 id，suffixes/shrine 清空（不参与四类阈值判定）。
+## last_run 原样保留——A04 走 start_run 时契约/遗赠两段要读它，抹了会混进别的起点增量。
+func _sb_fill_codex(n_en: int, n_re: int, n_th: int, n_bo: int) -> void:
+	for kind in Game.CODEX_KINDS:
+		Game.codex[kind] = []
+	for i in n_en:
+		(Game.codex["enemies"] as Array).append("sb_e%d" % i)
+	for i in n_re:
+		(Game.codex["relics"] as Array).append("sb_r%d" % i)
+	for i in n_th:
+		(Game.codex["themes"] as Array).append("sb_t%d" % i)
+	for i in n_bo:
+		(Game.codex["bosses"] as Array).append("sb_b%d" % i)
+
+
+## 直调一次落地并读回本次落盾层数。读前把盾归零（合法前置：player 每局不重建，
+## 不清零会读到上一段残留），残响/血量上限/当前血量/词缀当场还原——
+## 保证每一次读数都从同一基线出发，否则「各档互不相同」这条差分就不成立。
+func _sb_shield_at(n_en: int, n_re: int, n_th: int, n_bo: int, tier: int) -> int:
+	_sb_fill_codex(n_en, n_re, n_th, n_bo)
+	abyss_tier = tier
+	var dia0: int = Game.diamonds
+	var mh1: int = player.max_hp
+	var hp1: int = player.hp
+	var suf1: Dictionary = player.relic_suffixes.duplicate()
+	player.shield_charges = 0
+	_apply_codex_boons()
+	var got: int = player.shield_charges
+	Game.diamonds = dia0
+	player.max_hp = mh1
+	player.hp = hp1
+	player.relic_suffixes = suf1
+	player.shield_charges = 0
+	return got
+
+
+func _test_start_buffer() -> void:
+	var tier0 := abyss_tier
+	var codex0: Dictionary = Game.codex.duplicate(true)
+	var shield0: int = player.shield_charges
+	var mh0: int = player.max_hp
+	var hp0: int = player.hp
+	var dia0: int = Game.diamonds
+	var suf0: Dictionary = player.relic_suffixes.duplicate()
+	var imm0: bool = player._immortal
+	var ward0: bool = player.sigil_ward
+	var inv0: float = player._invuln_t
+	var kin0: bool = player.has_kinetic
+	var lock0: bool = player.control_locked
+	var counters0: Dictionary = _oath_counters.duplicate()
+	var seed0: int = Game.rng.seed
+	var state0: int = Game.rng.state
+	var daily0: bool = Game.daily_mode
+	# 图鉴档原文快照：铭刻分支 attach_suffix→mark_codex→save_codex 会落盘（SMOKE 下
+	# codex_path() 走隔离档 _smoke_codex.cfg，真档永不受影响），出口按原文逐字写回。
+	var cfg0 := ""
+	var rfp := FileAccess.open(Game.codex_path(), FileAccess.READ)
+	if rfp != null:
+		cfg0 = rfp.get_as_text()
+		rfp.close()
+	print("[SMOKE-START-BUFFER] entry tier=%d boons=%d cfg_bytes=%d" % [
+		tier0, Game.codex_boons().size(), cfg0.length()])
+
+	# ---- A 差分（4）Δ = 同档「深渊局落盾 − 普通局落盾」，把被动那一层减干净 ----
+	var a01 := _sb_shield_at(0, 0, 0, 0, _SB_TIER) - _sb_shield_at(0, 0, 0, 0, 0)
+	_sb_assert(a01 == 0, "A01", "n=0 深渊局缓冲=0（早退使本批块不执行·前提守卫型恒过·不计覆盖）", a01, 0)
+	var a02 := _sb_shield_at(0, 0, 3, 2, _SB_TIER) - _sb_shield_at(0, 0, 3, 2, 0)
+	_sb_assert(a02 == 2, "A02", "n=2（bosses2+themes3）深渊局缓冲=2", a02, 2)
+	var a03 := _sb_shield_at(5, 4, 3, 2, _SB_TIER) - _sb_shield_at(5, 4, 3, 2, 0)
+	_sb_assert(a03 == 4, "A03", "n=4 满档深渊局缓冲=4（普通局 1 层被动 → 深渊局 5 层）", a03, 4)
+	# A04 全口径唯一走完整 start_run() 的断言（专抓漏接线）
+	_sb_fill_codex(5, 4, 3, 2)
+	abyss_tier = _SB_TIER
+	Game.daily_mode = false
+	Game.rng.seed = seed0
+	Game.rng.state = state0
+	player.shield_charges = 0
+	start_run()
+	_sb_assert(player.shield_charges == 5, "A04",
+		"真实 start_run（tier=T, n=4）落盾=5=1 被动+4 缓冲（调用行注释掉即红）", player.shield_charges, 5)
+
+	# ---- B 普通局反向守卫（3）----
+	var b01 := _sb_shield_at(0, 0, 3, 2, 0)
+	_sb_assert(b01 == 0, "B01", "n=2 普通局盾=0：无缓冲且无被动（gate 写反或恒真即红）", b01, 0)
+	var b02 := _sb_shield_at(5, 4, 3, 2, 0)
+	_sb_assert(b02 == 1, "B02", "n=4 普通局盾=1：只含被动那一层（普通局基线被污染即红）", b02, 1)
+	_sb_fill_codex(0, 0, 0, 0)
+	var b03: int = Game.codex_boons().size()
+	_sb_assert(b03 == 0, "B03", "n=0 构造自检派生档数（前提守卫型·构造正确性·不计覆盖）", b03, 0)
+
+	# ---- C 被动与缓冲共存（3）----
+	var c01 := _sb_shield_at(5, 0, 0, 0, 0)
+	_sb_assert(c01 == 1, "C01", "n=1（仅被动档）普通局盾=1：被动来源独立存在", c01, 1)
+	var c02 := _sb_shield_at(5, 0, 0, 0, _SB_TIER)
+	_sb_assert(c02 == 2, "C02", "n=1 深渊局盾=2=1 被动+1 缓冲（叠加非覆盖；写成覆盖赋值即红）", c02, 2)
+	var c03 := _sb_shield_at(5, 4, 3, 2, _SB_TIER)
+	_sb_assert(c03 == 5, "C03", "n=4 深渊局盾=5：不重复计数、无全局钳 3（盾字段本无上限）", c03, 5)
+
+	# ---- D 零 rng（2）seed 与 state 双比（只比其一会漏，S27 批二缺口②教训）----
+	_sb_fill_codex(5, 4, 3, 2)
+	abyss_tier = _SB_TIER
+	player.shield_charges = 0
+	var d_seed_a: int = Game.rng.seed
+	var d_state_a: int = Game.rng.state
+	_apply_codex_boons()
+	_sb_assert(Game.rng.seed == d_seed_a, "D01", "加盾前后 rng.seed 逐字不变（分支内混进抽取即红）",
+		"%d→%d" % [d_seed_a, Game.rng.seed], "不变")
+	_sb_assert(Game.rng.state == d_state_a, "D02", "加盾前后 rng.state 逐字不变（只比 seed 会漏）",
+		"%d→%d" % [d_state_a, Game.rng.state], "不变")
+	player.shield_charges = 0
+
+	# ---- G 兑现链（2，走查守卫：本批零改 player.gd，无专属刀，不计行为覆盖）----
+	# 满档 5 层逐层消耗。抵挡分支会置无敌 0.6s 且 start_run 末尾的过门会锁操作，
+	# headless 单帧内两者都不会自然解除 → 每次命中前手工归零，制造纯净单一入口语境。
+	var g_shield0: int = player.shield_charges
+	var g_hp0: int = player.hp
+	var g_imm0: bool = player._immortal
+	var g_ward0: bool = player.sigil_ward
+	var g_inv0: float = player._invuln_t
+	var g_kin0: bool = player.has_kinetic
+	var g_lock0: bool = player.control_locked
+	var g_blk0: int = int(_oath_counters.get("shield_blocks", 0))
+	player.hp = 100000
+	player._immortal = false
+	player.sigil_ward = false
+	player.has_kinetic = false
+	player.control_locked = false
+	player.shield_charges = 5
+	_oath_counters["shield_blocks"] = 0
+	var g_reads: Array[String] = ["0"]
+	var g_first_toast := ""
+	for i in 5:
+		player._invuln_t = 0.0
+		player.take_damage(1, Vector2.ZERO, null)
+		if i == 0:
+			g_first_toast = String(hud._toast.text)
+		g_reads.append(str(int(_oath_counters.get("shield_blocks", 0))))
+	_sb_assert(",".join(g_reads) == "0,1,2,3,4,5", "G01",
+		"满档 5 层逐层消耗·记账六次读数（走查守卫·不计覆盖）", ",".join(g_reads), "0,1,2,3,4,5")
+	_sb_assert(g_first_toast.contains("护盾抵挡"), "G02",
+		"首次消耗 toast 含「护盾抵挡」（只验标志·不计数值覆盖）", g_first_toast, "含「护盾抵挡」")
+	player.shield_charges = g_shield0
+	player.hp = g_hp0
+	player._immortal = g_imm0
+	player.sigil_ward = g_ward0
+	player._invuln_t = g_inv0
+	player.has_kinetic = g_kin0
+	player.control_locked = g_lock0
+	_oath_counters["shield_blocks"] = g_blk0
+
+	# ---- H 结构（1，静态门·前提守卫型，计 PASS 不计覆盖）----
+	# 口径 §二 把本条写成「加盾块行号 < run_seed 赋值行」，但块在落地函数内（本文件
+	# 三千行段）而 run_seed 赋值在 start_run 头部（数百行段），两行号恒不满足前者更小
+	# ——正确实现也会被这条判红。按同一条的括注「限 _apply_codex_boons() 函数体内定位」
+	# 落地成本批块物理位于该函数体内：刀三（块移出函数体）红、刀八（调用行注释）绿，
+	# 与 §五 红集合逐条一致。措辞请主理人裁定后回写口径。
+	var h_lo := -1
+	var h_hi := -1
+	var h_blk := -1
+	var hfp := FileAccess.open("res://scripts/game_main.gd", FileAccess.READ)
+	if hfp != null:
+		var hl: PackedStringArray = hfp.get_as_text().split("\n")
+		hfp.close()
+		var hs := -1
+		for i in hl.size():
+			if hl[i].begins_with("func _apply_codex_boons("):
+				hs = i
+				break
+		if hs >= 0:
+			var he := hl.size() - 1
+			for i in range(hs + 1, hl.size()):
+				if hl[i].begins_with("func ") or hl[i].begins_with("static func ") \
+						or hl[i].begins_with("class "):
+					he = i - 1
+					break
+			h_lo = hs + 2
+			h_hi = he + 1
+			for i in range(hs + 1, he + 1):
+				if hl[i].contains("abyss_tier") or hl[i].contains("boons.size()"):
+					h_blk = i + 1
+					break
+	_sb_assert(h_lo > 0 and h_blk >= h_lo and h_blk <= h_hi, "H01",
+		"本批加盾块物理位于落地函数体内（静态门·不计覆盖）",
+		"block=%d body=%d..%d" % [h_blk, h_lo, h_hi], "block 落在 body 区间内")
+
+	# ---- 出口还原 ----
+	abyss_tier = tier0
+	Game.codex = codex0
+	Game.diamonds = dia0
+	player.shield_charges = shield0
+	player.max_hp = mh0
+	player.hp = hp0
+	player.relic_suffixes = suf0
+	player._immortal = imm0
+	player.sigil_ward = ward0
+	player._invuln_t = inv0
+	player.has_kinetic = kin0
+	player.control_locked = lock0
+	player._knock = Vector2.ZERO
+	if is_instance_valid(player.sprite):
+		player.sprite.modulate = Color.WHITE
+	_oath_counters = counters0
+	Game.daily_mode = daily0
+	Game.rng.seed = seed0
+	Game.rng.state = state0
+	var wfp := FileAccess.open(Game.codex_path(), FileAccess.WRITE)
+	if wfp != null:
+		wfp.store_string(cfg0)
+		wfp.close()
+	Dev.check(_sb_checked == _SB_DECLARED, "start_buffer",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_sb_checked, _SB_DECLARED])
+	print("[SMOKE-START-BUFFER] done checked=%d declared=%d cfg_restored_bytes=%d" % [
+		_sb_checked, _SB_DECLARED, cfg0.length()])
