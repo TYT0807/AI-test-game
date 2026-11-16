@@ -97,9 +97,22 @@ S25（`5388808`）覆盖 11 音频 + 3 图集、S26（`be00c80` + `406f6e4`）�
 - `:53`「### 原生源石虫（游戏本体）」→「### 游魂聚合体（游戏本体）」
 - `:136`「- 原版素材：W、源石虫、浮游炮、爆炸、瓦片、道具 UI、BGM/音效（项目自带）」→ 改成不含第三方名的原创素材声明（例如「- 美术与音频：全部为本项目原创生成（拾痕者 / 游魂聚合体 / 残响悬铃 + 原创 BGM/音效）」）
 
-### 4.3 README
+### 4.3 `scripts/data.gd`：2 处注释（🔴 QA 抓出的缺口，别漏）
+
+- `:5`「## atlas="slug" 用原版源石虫图集（row 行号）」→ 改成「用游魂聚合体图集」
+- `:7`「# ---------- 原版源石虫（保留本体） ----------」→ 改成「游魂聚合体（保留本体）」
+
+🔴 这两处是 `data.gd` 注释，不进冻结的机制字段（只改注释、`atlas` 键名与数据一字不动），但**计入 G2 零悬空扫描面**。不改则 G2 必然红。
+
+### 4.4 README
 
 README:19/31-32 的「3 张图集与 13 个音频原创覆盖」表述属实（内容层），**不回改历史 Sprint 叙述**。只在「当前资产」相关段落补一句「资产文件名已于 S30 完成原创化，内容未改」——若 README 无合适位置，可不改，在交付文档里记一句即可。
+
+### 4.5 🔴 G2 扫描面边界（QA 收口，主理人确认）
+
+G2「零悬空」只扫**运行时 + 发货面**：`scripts/`、`resources/**/*.import`、`project.godot`、`玩法说明.md`、`README.md`。
+**不扫** `production/`（S25/26/30 历史叙述必须保留旧名作证据）、`_tools/`、`tests/`、`_backup/`（归档）。
+理由：历史文档里的旧名是「当时的事实」，回改等于篡改记录；发货面才是暴露面。
 
 ---
 
@@ -110,7 +123,7 @@ README:19/31-32 的「3 张图集与 13 个音频原创覆盖」表述属实（�
 | G1 字节不变 | 15 个资产 `git show HEAD:<旧路径> \| md5sum` 与工作树新路径 md5 逐字相同 |
 | G2 零悬空 | 全仓（排除 `_backup/`）grep `W.png` / `源石虫` / `Cowboy_` / `cowboy_` / `Journey of the Prairie King` / `T_W` / `W_CELL` / `W_ROW_` → **0 命中** |
 | G3 validate | 34/34、`problems=0`、`[ERR]`=0 |
-| G4 探针回归 | `SMOKE_CAL_THEME` / `SMOKE_OATH_GRANT` / `SMOKE_PURIFY_COST` / `SMOKE_START_BUFFER` / `SMOKE_META` / `SMOKE_ABYSS` / `SMOKE_RG7` / `SMOKE_SAVE` 全跑，`[ERR]`=0 |
+| G4 探针回归 | `SMOKE_CAL_THEME` / `SMOKE_OATH_GRANT` / `SMOKE_PURIFY_COST` / `SMOKE_START_BUFFER` / `SMOKE_META` / `SMOKE_ABYSS` / `SMOKE_RG7` / `SMOKE_SAVE` 全跑，`[ERR]`=0。🔴 **`SMOKE_SAVE` 必须 `--quit-after 3200`**——它挂在 `game_main.gd:274` 的 `_smoke_frame == 3000`，用 300 帧跑日志全空 = **假绿**（QA 抓出的陷阱）。其余探针 300 帧足够 |
 | G5 E1 | seed 12345/777/42 指纹逐字一致 |
 | G6 .import uid | 15 个 `.import` 的 `uid://` 改前改后逐字相同 |
 | G7 冻结 | 除 `assets.gd` 外 33 行 OK，**不自刷** |
@@ -127,6 +140,9 @@ README:19/31-32 的「3 张图集与 13 个音频原创覆盖」表述属实（�
 | 刀二 | 漏改一处 preload 路径 | G2 零悬空红 + G3 validate 红 |
 | 刀三 | `.import` 的 `source_file` 未改 | G6 + G3 红 |
 | 刀四 | `assets.gd` 改了 preload 但 `T_W`/`W_ROW_*` 常量名没改 | G2 红 |
+| 刀五 | `data.gd:5/7` 的「源石虫」注释没改 | G2 红（**QA 补的缺口**，实施单原版会自己打红自己） |
+| 刀六 | `SMOKE_SAVE` 用 300 帧跑（而非 3200） | 假绿——不是变异刀，是**门控陷阱**，写在此防复踩 |
+| 刀七 | 顺手补 `SFX["suffix"]` key（`player.gd:673` 在调但字典无此键） | 越界：机制改动，本批严禁；G4 会红（key 集合变了） |
 
 🔴 变异纪律：替换目标行、不新增行；注释里不写符号字面。
 
