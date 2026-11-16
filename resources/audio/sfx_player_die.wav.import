@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://djpvwaeh4v1oe"
-path="res://.godot/imported/cowboy_dead.wav-a0fbc7a0b98607b985043f471013d097.sample"
+path="res://.godot/imported/sfx_player_die.wav-a0fbc7a0b98607b985043f471013d097.sample"
 
 [deps]
 
-source_file="res://resources/audio/cowboy_dead.wav"
-dest_files=["res://.godot/imported/cowboy_dead.wav-a0fbc7a0b98607b985043f471013d097.sample"]
+source_file="res://resources/audio/sfx_player_die.wav"
+dest_files=["res://.godot/imported/sfx_player_die.wav-a0fbc7a0b98607b985043f471013d097.sample"]
 
 [params]
 

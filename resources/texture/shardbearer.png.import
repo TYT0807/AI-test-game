@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbgwxc2daht3l"
-path="res://.godot/imported/源石虫.png-d890df248a90ef1fe6cf8738686581aa.ctex"
+uid="uid://nen5xb0sopq0"
+path="res://.godot/imported/shardbearer.png-7036e35ad509cea79e04954ea2ee1b88.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://resources/texture/源石虫.png"
-dest_files=["res://.godot/imported/源石虫.png-d890df248a90ef1fe6cf8738686581aa.ctex"]
+source_file="res://resources/texture/shardbearer.png"
+dest_files=["res://.godot/imported/shardbearer.png-7036e35ad509cea79e04954ea2ee1b88.ctex"]
 
 [params]
 

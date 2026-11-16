@@ -2,9 +2,9 @@ extends Node
 ## 数据注册表：敌人数值、楼层刷怪池、精英/Boss 分配、词缀、房间元信息、障碍物。
 ## 新增内容只改这里 + 一张贴图，避免散落的魔法数。
 
-## atlas="slug" 用原版源石虫图集（row 行号）；tex= 用 resources/texture/monsters/ 下的贴图
+## atlas="slug" 用游魂聚合体图集（row 行号）；tex= 用 resources/texture/monsters/ 下的贴图
 const ENEMIES := {
-	# ---------- 原版源石虫（保留本体） ----------
+	# ---------- 游魂聚合体（保留本体） ----------
 	"rusher": {"name": "红虫", "atlas": "slug", "row": 0, "ai": "chase",
 		"hp": 3.0, "speed": 55.0, "dmg": 1, "xp": 1, "score": 10, "scale": 1.0},
 	"brute": {"name": "黑甲虫", "atlas": "slug", "row": 1, "ai": "chase",

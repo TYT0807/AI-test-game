@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://cmi2p223vg5nu"
-path="res://.godot/imported/Cowboy_Footstep.wav-569f5f1822a037afd3ff58840a2617d1.sample"
+path="res://.godot/imported/sfx_footstep.wav-569f5f1822a037afd3ff58840a2617d1.sample"
 
 [deps]
 
-source_file="res://resources/audio/Cowboy_Footstep.wav"
-dest_files=["res://.godot/imported/Cowboy_Footstep.wav-569f5f1822a037afd3ff58840a2617d1.sample"]
+source_file="res://resources/audio/sfx_footstep.wav"
+dest_files=["res://.godot/imported/sfx_footstep.wav-569f5f1822a037afd3ff58840a2617d1.sample"]
 
 [params]
 

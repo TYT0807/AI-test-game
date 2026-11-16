@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://cxpe7ihhbo321"
-path="res://.godot/imported/cowboy_monsterhit.wav-7a099c5610193b594ef27cfa7f5930a3.sample"
+path="res://.godot/imported/sfx_hit.wav-7a099c5610193b594ef27cfa7f5930a3.sample"
 
 [deps]
 
-source_file="res://resources/audio/cowboy_monsterhit.wav"
-dest_files=["res://.godot/imported/cowboy_monsterhit.wav-7a099c5610193b594ef27cfa7f5930a3.sample"]
+source_file="res://resources/audio/sfx_hit.wav"
+dest_files=["res://.godot/imported/sfx_hit.wav-7a099c5610193b594ef27cfa7f5930a3.sample"]
 
 [params]
 

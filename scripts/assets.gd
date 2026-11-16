@@ -2,8 +2,8 @@ extends Node
 ## 素材工厂：把现有图集切成帧，集中管理所有 rect 常量。
 ## 图集行号/列号标定有误时，只改这个文件。
 
-const T_W := preload("res://resources/texture/W.png")
-const T_SLUG := preload("res://resources/texture/源石虫.png")
+const T_SHARDBEARER := preload("res://resources/texture/shardbearer.png")
+const T_SLUG := preload("res://resources/texture/wraithswarm.png")
 const T_TURRET := preload("res://resources/texture/浮游炮.png")
 const T_BOOM := preload("res://resources/texture/爆炸特效.png")
 const T_TILES := preload("res://resources/texture/瓦片.png")
@@ -12,40 +12,40 @@ const T_UI := preload("res://resources/texture/道具ui.png")
 const T_ENEMY2 := preload("res://resources/texture/generated/虫群2.png")
 
 const SFX := {
-	"shoot": preload("res://resources/audio/Cowboy_gunshot.wav"),
-	"reload": preload("res://resources/audio/cowboy_gunload.wav"),
-	"boom": preload("res://resources/audio/cowboy_explosion.wav"),
-	"hit": preload("res://resources/audio/cowboy_monsterhit.wav"),
-	"die": preload("res://resources/audio/cowboy_monsterdie.wav"),
-	"player_die": preload("res://resources/audio/cowboy_dead.wav"),
-	"pickup": preload("res://resources/audio/cowboy_gopher.wav"),
-	"powerup": preload("res://resources/audio/cowboy_powerup.wav"),
-	"secret": preload("res://resources/audio/Cowboy_Secret.wav"),
+	"shoot": preload("res://resources/audio/sfx_shoot.wav"),
+	"reload": preload("res://resources/audio/sfx_reload.wav"),
+	"boom": preload("res://resources/audio/sfx_boom.wav"),
+	"hit": preload("res://resources/audio/sfx_hit.wav"),
+	"die": preload("res://resources/audio/sfx_enemy_die.wav"),
+	"player_die": preload("res://resources/audio/sfx_player_die.wav"),
+	"pickup": preload("res://resources/audio/sfx_pickup.wav"),
+	"powerup": preload("res://resources/audio/sfx_powerup.wav"),
+	"secret": preload("res://resources/audio/sfx_secret.wav"),
 	# Sprint 11 B：Boss 音效别名（走注册表，复用既有 wav——audio-director 口径）
-	"boss_intro": preload("res://resources/audio/Cowboy_Secret.wav"),
-	"boss_phase": preload("res://resources/audio/cowboy_powerup.wav"),
-	"boss_skill": preload("res://resources/audio/cowboy_gunload.wav"),
+	"boss_intro": preload("res://resources/audio/sfx_secret.wav"),
+	"boss_phase": preload("res://resources/audio/sfx_powerup.wav"),
+	"boss_skill": preload("res://resources/audio/sfx_reload.wav"),
 	# Sprint 13 E：圣所 / 灾祸事件别名（同口径复用既有 wav）
-	"shrine": preload("res://resources/audio/Cowboy_Secret.wav"),
-	"calamity": preload("res://resources/audio/cowboy_explosion.wav"),
+	"shrine": preload("res://resources/audio/sfx_secret.wav"),
+	"calamity": preload("res://resources/audio/sfx_boom.wav"),
 }
 
 const MUSIC := [
-	preload("res://resources/audio/1-27 Journey of the Prairie King (Overworld).mp3"),
-	preload("res://resources/audio/1-28 Journey of the Prairie King (The Outlaw).mp3"),
-	preload("res://resources/audio/1-29 Journey of the Prairie King (Final Boss & Ending).mp3"),
+	preload("res://resources/audio/bgm_overworld.mp3"),
+	preload("res://resources/audio/bgm_outlaw.mp3"),
+	preload("res://resources/audio/bgm_finale.mp3"),
 ]
 
-# ---- W 图集：160x288，5×9 格 32px；第 0-3 列是动画帧 ----
-const W_CELL := 32
-const W_ROW_IDLE := 2
-const W_ROW_WALK_DOWN := 0
-const W_ROW_WALK_UP := 3
-const W_ROW_SIDE := 6
-const W_ROW_ATTACK := 1
-const W_ROW_DIE := 8
+# ---- 拾痕者图集：160x288，5×9 格 32px；第 0-3 列是动画帧 ----
+const SHARDBEARER_CELL := 32
+const SHARDBEARER_ROW_IDLE := 2
+const SHARDBEARER_ROW_WALK_DOWN := 0
+const SHARDBEARER_ROW_WALK_UP := 3
+const SHARDBEARER_ROW_SIDE := 6
+const SHARDBEARER_ROW_ATTACK := 1
+const SHARDBEARER_ROW_DIE := 8
 
-# ---- 源石虫图集：96x192，3×6 格 32px；每行一种变体，3 帧行走 ----
+# ---- 游魂聚合体图集：96x192，3×6 格 32px；每行一种变体，3 帧行走 ----
 const S_CELL := 32
 const S_ROW_RUSHER := 0
 const S_ROW_BRUTE := 1
@@ -158,7 +158,7 @@ func monster(name: String) -> Texture2D:
 	return monsters.get(name)
 
 
-## 单帧怪物动画：walk/die 各一帧（Bob 由代码做），保持与源石虫接口一致
+## 单帧怪物动画：walk/die 各一帧（Bob 由代码做），保持与游魂聚合体接口一致
 func monster_frames(name: String) -> SpriteFrames:
 	var key := "mon_" + name
 	if _cache.has(key):
@@ -204,25 +204,25 @@ func icon(key: String) -> AtlasTexture:
 
 
 func w_rect(col: int, row: int) -> Rect2:
-	return Rect2(col * W_CELL, row * W_CELL, W_CELL, W_CELL)
+	return Rect2(col * SHARDBEARER_CELL, row * SHARDBEARER_CELL, SHARDBEARER_CELL, SHARDBEARER_CELL)
 
 
 func slug_rect(col: int, row: int) -> Rect2:
 	return Rect2(col * S_CELL, row * S_CELL, S_CELL, S_CELL)
 
 
-## 玩家 W 的全套动画
+## 玩家 拾痕者 的全套动画
 func w_frames() -> SpriteFrames:
 	if _cache.has("w"):
 		return _cache["w"]
 	var f := SpriteFrames.new()
 	f.remove_animation("default")
-	_add_anim(f, T_W, "idle", [w_rect(0, W_ROW_IDLE), w_rect(1, W_ROW_IDLE)], 3.0, true)
-	_add_anim(f, T_W, "walk_down", _row_rects(W_ROW_WALK_DOWN), 12.0, true)
-	_add_anim(f, T_W, "walk_up", _row_rects(W_ROW_WALK_UP), 12.0, true)
-	_add_anim(f, T_W, "walk_side", _row_rects(W_ROW_SIDE), 12.0, true)
-	_add_anim(f, T_W, "attack", _row_rects(W_ROW_ATTACK), 12.0, false)
-	_add_anim(f, T_W, "die", _row_rects(W_ROW_DIE), 6.0, false)
+	_add_anim(f, T_SHARDBEARER, "idle", [w_rect(0, SHARDBEARER_ROW_IDLE), w_rect(1, SHARDBEARER_ROW_IDLE)], 3.0, true)
+	_add_anim(f, T_SHARDBEARER, "walk_down", _row_rects(SHARDBEARER_ROW_WALK_DOWN), 12.0, true)
+	_add_anim(f, T_SHARDBEARER, "walk_up", _row_rects(SHARDBEARER_ROW_WALK_UP), 12.0, true)
+	_add_anim(f, T_SHARDBEARER, "walk_side", _row_rects(SHARDBEARER_ROW_SIDE), 12.0, true)
+	_add_anim(f, T_SHARDBEARER, "attack", _row_rects(SHARDBEARER_ROW_ATTACK), 12.0, false)
+	_add_anim(f, T_SHARDBEARER, "die", _row_rects(SHARDBEARER_ROW_DIE), 6.0, false)
 	_cache["w"] = f
 	return f
 
@@ -231,7 +231,7 @@ func _row_rects(row: int) -> Array:
 	return [w_rect(0, row), w_rect(1, row), w_rect(2, row), w_rect(3, row)]
 
 
-## 源石虫变体动画（walk 3 帧 + 共用死亡帧）
+## 游魂聚合体变体动画（walk 3 帧 + 共用死亡帧）
 func slug_frames(row: int) -> SpriteFrames:
 	var key := "slug_%d" % row
 	if _cache.has(key):
