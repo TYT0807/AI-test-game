@@ -4182,7 +4182,7 @@ func _og_restore() -> void:
 
 ## ============================================================================
 ## Sprint 28 批一 探针：净化代价（SMOKE_PURIFY_COST=1）
-## 23 条断言，declared 字面量 23。每条后无条件打印 #NN + 实测值 + ok= 字段
+## 24 条断言，declared 字面量 24。每条后无条件打印 #NN + 实测值 + ok= 字段
 ## （判红口径：Dev.check 只在失败时打 [ERR]；ok=false 计数为第二道门）。
 ## 净化驱动走真实 _on_shrine_chosen 全链（affordable → execute → 记账 → 回声桶）。
 ## settle_shards 会 save_sigils()：每次调用前后把 shards 还原到入口快照（直接赋值，不走 add_shards）。
@@ -4190,7 +4190,7 @@ func _og_restore() -> void:
 ##    注释命中也算一处；探针自己的记账式赋值一律走 Game.set("purified_run", …)）。
 ## ============================================================================
 
-const _PC_DECLARED := 23
+const _PC_DECLARED := 24
 var _pc_checked := 0
 
 
@@ -4222,6 +4222,14 @@ func _pc_purify_offer() -> Dictionary:
 	return o
 
 
+## 负向构造用卡：护盾祝福（残响 -5 → 盾 +1）——零 rng、效果可读数、代价走 spend 只动余额。
+## 必须真能落地：置灰早退会让负向断言变前提守卫型恒过（刀五级联伪影的教训）。
+func _pc_nonpurify_offer() -> Dictionary:
+	var o: Dictionary = Data.SHRINE_OFFERS["ward_boon"].duplicate()
+	o["id"] = "ward_boon"
+	return o
+
+
 func _test_purify_cost() -> void:
 	var shards0: int = int(Game.sigils["shards"])
 	var rng_seed0: int = Game.rng.seed
@@ -4237,7 +4245,7 @@ func _test_purify_cost() -> void:
 	print("[SMOKE-PURIFY-COST] entry shards=%d floors=%s purified=%s" % [
 		shards0, str(Game.calamity_floors), str(Game.purified_run)])
 
-	# ---- A 状态（5）----
+	# ---- A 状态（6）----
 	_pc_assert(Game.purified_run == false, "A01", "新局开局 purified_run=false", Game.purified_run, false)
 	Game.set("purified_run", true)
 	Game.reset()
@@ -4252,6 +4260,23 @@ func _test_purify_cost() -> void:
 	_pc_assert(Game.calamity_floors.has(2) == false, "A04", "erase 保留：本层已出灾祸表（删 erase 即红）", Game.calamity_floors.has(2), false)
 	_pc_assert(String(Data.SHRINE_OFFERS["purify"].get("cost_kind", "x")) == "" and int(Data.SHRINE_OFFERS["purify"].get("cost", -1)) == 0,
 		"A05", "purify cost_kind/cost 字段未动", "%s/%s" % [Data.SHRINE_OFFERS["purify"].get("cost_kind"), Data.SHRINE_OFFERS["purify"].get("cost")], "空串/0")
+	# A06 负向：非净化卡走完 execute 全链后，记账位必须仍为 false——刀三的唯一守卫。
+	# 起点归零是合法前置（同 B 组），reset 语义由 A02 独守，故本条只打「非净化不该记账」一个面。
+	var a06_shield0: int = player.shield_charges
+	var a06_dia0: int = Game.diamonds
+	Game.set("purified_run", false)
+	Game.calamity_floors = [2]
+	Game.floor_num = 3
+	Game.diamonds = 5
+	_shrine_offers = [_pc_nonpurify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	_on_shrine_chosen(0)
+	var a06_delta: int = player.shield_charges - a06_shield0
+	_pc_assert(Game.purified_run == false and a06_delta == 1, "A06",
+		"负向：非净化卡全链执行后不记账（记账挪通用入口即红；盾 +1 兼证链路真跑、置灰早退即红）",
+		"purified=%s 盾变化=%d" % [str(Game.purified_run), a06_delta], "false/1")
+	Game.diamonds = a06_dia0
+	player.shield_charges = a06_shield0
 
 	# ---- B 结算（6，M=10；META_RATE=2.0 → 基线 20 / ×1.5 = 30）----
 	Game.calamity_floors = []
@@ -4285,7 +4310,6 @@ func _test_purify_cost() -> void:
 	# ---- C 跨局（3）----
 	Game.reset()
 	Game.calamity_floors = [2]
-	Game.set("purified_run", false)
 	Game.sigils["shards"] = shards0
 	var c01 := Game.settle_shards(10)
 	_pc_assert(c01 == 30, "C01", "净化局 reset 后新局未净化有灾祸 → 恢复 ×1.5", c01, 30)
