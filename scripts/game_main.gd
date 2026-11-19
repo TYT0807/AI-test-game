@@ -32,6 +32,23 @@ const Meta := preload("res://scripts/meta.gd")
 const MenuScript := preload("res://scripts/menu.gd")
 const Relics := preload("res://scripts/relics.gd")
 const DungeonClass := preload("res://scripts/dungeon.gd")
+## MG-PW1（GUARD-3）武器可用集基线：主理人 2026-11-17 在**干净工作树**实测给定
+## （`production/sprint-36/SPR36_主理人裁定_G2与GUARD3基线与TA显示态.md` §2），⛔ 编程侧不自定基线。
+## 本串已按 **T-A 之后**（u_mw_* 三节点 default:true）登记；T-A 当天实测 print 必须逐字含这七把。
+## T-B1（14 把 bw_* 进 DEFS）与本批 S38 B1（6 把非弹幕族）确实让「无节点＝默认可用」的条目涌进这一路：
+## **2026-11-18 主理人已按 S36 R-2 §2 ＋ S38 B1 核验 §三 重登为 35 条中的武器段 27 条**（`SPR38_主理人核验_B1.md`）。
+## 🔴 本串记的是 **DEFS 成员资格**，⛔ 不得当作获取途径的证据——获取途径看 `Weapons.DROP_POOL` 与 V-E7 六条断言。
+## 断言判的是**集合相等**，不依赖 DEFS 迭代序。
+const META_WEAPON_POOL_BASELINE := [
+	# S36 T-B1 的 14 把 Boss 专武（无 gate 节点＝默认可用，W3=A 的本意）
+	"bw_prism_latch", "bw_seam_light", "bw_core_hammer", "bw_sixfold_ring", "bw_quiet_gauge",
+	"bw_tide_gauge", "bw_clinkant_fang", "bw_slack_half", "bw_cinder_rake", "bw_red_dial",
+	"bw_abyss_ledger", "bw_half_beat", "bw_black_silt", "bw_third_key",
+	# S38 B1 的 6 把非弹幕族（DEFS 有条目、零获取途径：HP-6 靠 DROP_POOL 守，不靠这一路）
+	"ml_cleaver", "ml_needler", "sp_thorn", "sh_bulwark", "th_kunai", "wd_whisper",
+	# 基础法器四件套（S40-B 去火药枪化：rifle→zhushan / shotgun→liechi / railgun→guanglei / launcher→fushe）＋弹道三连＋mw_*（T-A 之后 default:true）
+	"zhushan", "liechi", "guanglei", "fushe", "mw_swarm", "mw_arc", "mw_cluster",
+]
 
 const ARENA_W := 44
 const ARENA_H := 28
@@ -101,6 +118,10 @@ var _resonance_step := 5
 var _theme_rule := ""
 var _bfs_warned := false
 var _theme_t := 0.0
+# S38 T-N N9（实稿 §3.4）：spear「无视正面甲」的**本帧旁路标志**，由 `player._swing()` 置位/清零。
+# 🔴 它不是状态：近战结算是同步的一次函数调用，标志只在那次调用的栈内为真，函数返回前必被清掉。
+#    ⛔ 持久化、⛔ 存进存档、⛔ 跨帧留活——V-B7 的边界态专门抓「紧接下一发普通子弹又按 armor 减伤」。
+var _melee_pierce_armor := false
 var _room_spawned := 0
 var _spawn_cd := 0.0
 var _doors: Array = []
@@ -259,6 +280,22 @@ func _ready() -> void:
 			_test_start_buffer()
 		if OS.get_environment("SMOKE_S32_SHRINE") != "":
 			_smoke_s32_shrine_probe()
+		if OS.get_environment("SMOKE_SHRINE_CAL") != "":
+			_smoke_shrine_cal_probe()
+		if OS.get_environment("SMOKE_MELEE") != "":
+			# Sprint 38 B1：非弹幕形态族运行期探针。异步段要真等物理帧，⛔ 在 _ready 里就地跑完
+			call_deferred("_smoke_melee_probe")
+		if OS.get_environment("SMOKE_SWEEP") != "":
+			# Sprint 40 A 组：近战清扫漂浮弹幕运行期探针（同一理由走 call_deferred——S7 两条输入路径要真等物理帧）
+			call_deferred("_smoke_sweep_probe")
+		if OS.get_environment("SMOKE_PARRY") != "":
+			# Sprint 40 C 组：盾三层窗口＋眩晕运行期探针。⛔ 与 SMOKE_SWEEP 同进程双跑——两条 await 链
+			# 会交错推进、共用同一批战场实体与静态计数（parry_count / last_sweep_count 互相污染），
+			# 所以这里造错态要**响**（Dev.err 进 [ERR] 计数面），⛔ 静默跳过让 run.sh 拿 rc=0 蒙过去。
+			if OS.get_environment("SMOKE_SWEEP") != "":
+				Dev.err("parry", "SMOKE_PARRY 与 SMOKE_SWEEP 同进程双跑（异步段交错）⇒ 整条探针未跑")
+			else:
+				call_deferred("_smoke_parry_probe")
 
 
 func _process(delta: float) -> void:
@@ -2043,6 +2080,310 @@ func _smoke_s32_shrine_probe() -> void:
 	print("[SMOKE-S32-SHRINE] done checked=%d declared=%d" % [_s32_checked, _S32_DECLARED])
 
 
+## ---------------- Sprint 33：灾祸压低 dn 并集 + 赎回结算探针（SMOKE_SHRINE_CAL） ----------------
+## SC1–SC9 九条（实施单 §B2；判据出处 = 验证口径 §V-A..§V-E）。S32 的 19 条一条不动、不删、期望不反写。
+## 网格类全部自钉 run_seed=_S32_FROZEN_SEED；rng / 两本账 / shards 入口快照、出口还原。
+## 🔴 自戒（F01 纪律）：凡被全仓文本扫描的模式，探针源码一律拼接字面，不得出现完整字面（注释命中也算）。
+## 注：SC6 会真跑 _roll_calamity，日志里出现的 [SMOKE-CALAMITY]/banner 行是探针自造噪声，不入任何 churn 判定。
+const _SCL_DECLARED := 9
+var _scl_checked := 0
+## SC3 冻结串：run_seed=_S32_FROZEN_SEED、floor_num=9(ice)、_calamity="frail"、_S32_EIGHT 八坐标下
+## 三槽 id 串的逐字基线（采集即本探针首跑实测，之后任何改动都该在此变红）
+const _SCL_FROZEN_F3C := "(3,4)=[ward_boon,shard_pact,power_surge] (3,5)=[ward_boon,purify,greed_pact] (4,4)=[ward_boon,purify,greed_pact] (0,1)=[ward_boon,greed_pact,ore_upgrade] (-2,7)=[ward_boon,greed_pact,power_surge] (7,-3)=[ward_boon,relic_suffix,ore_upgrade] (1,1)=[ward_boon,purify,shard_pact] (20,20)=[ward_boon,greed_pact,shard_pact]"
+
+
+func _scl_assert(ok: bool, nn: String, what: String, measured, expect) -> void:
+	_scl_checked += 1
+	Dev.check(ok, "shrine_cal", "%s %s | measured=%s expect=%s" % [nn, what, str(measured), str(expect)])
+	print("[SMOKE-SHRINE-CAL] #%02d %s measured=%s expect=%s ok=%s" % [
+		_scl_checked, nn + " " + what, str(measured), str(expect), str(ok)])
+
+
+## 全仓 scripts/*.gd 拼接文本（SC1 禁后缀全仓 0 次的扫描底面）；任一文件读失败判红不静默
+func _scl_scripts_text() -> String:
+	var dir := DirAccess.open("res://scripts")
+	var parts: Array[String] = []
+	if dir != null:
+		dir.list_dir_begin()
+		var fn := dir.get_next()
+		while fn != "":
+			if not dir.current_is_dir() and fn.ends_with(".gd"):
+				var f := FileAccess.open("res://scripts/" + fn, FileAccess.READ)
+				if f != null:
+					parts.append(f.get_as_text())
+					f.close()
+				else:
+					parts.append("")   # 保留空位，让 miss 计数在下断言里显式红
+			fn = dir.get_next()
+	return "\n".join(PackedStringArray(parts))
+
+
+## 单坐标出卡的 id 三元组（本探针内反复用）
+func _scl_ids3(coord: Vector2i) -> Array:
+	return _s32_ids(_shrine_offers_for(coord))
+
+
+func _smoke_shrine_cal_probe() -> void:
+	_scl_checked = 0
+	var sv_seed := Game.run_seed
+	var sv_floor := Game.floor_num
+	var sv_cal := _calamity
+	var sv_rseed := Game.rng.seed
+	var sv_rstate := Game.rng.state
+	var sv_cfloors: Array = Game.calamity_floors.duplicate()
+	var sv_redeemed: Array = Game.redeemed_floors.duplicate()
+	var sv_purified: bool = Game.purified_run
+	var sv_shards: int = int(Game.sigils["shards"])
+	var sv_codex: Dictionary = Game.codex.duplicate(true)
+	var sv_counters: Dictionary = _oath_counters.duplicate()
+	var sv_offers: Array = _shrine_offers.duplicate()
+	var sv_coord: Vector2i = _shrine_coord
+	var sv_mh: int = player.max_hp
+	var sv_hp: int = player.hp
+	var sv_shield: int = player.shield_charges
+	var sv_dia: int = Game.diamonds
+	Game.run_seed = _S32_FROZEN_SEED
+
+	# ---- SC1 后缀字面锁（V-C1/C2）：禁后缀全仓 0 次；_shrine_offers_for 函数体内三式 + key 派生式各恰 1 次 ----
+	var all_src := _scl_scripts_text()
+	var bad_suf: Array[String] = []
+	for pat in ["#p" + "2", "#1" + "c", "#p" + "2c", "c" + "#"]:   # 拼接自戒：全仓扫描面含探针自身
+		if all_src.count(pat) != 0:
+			bad_suf.append("%s×%d" % [pat, all_src.count(pat)])
+	var fstart := all_src.find("func _shrine_offers" + "_for(")   # 同戒：find 串本身也是全仓字面
+	var fend := all_src.find("\nfunc ", fstart + 1)
+	var fn_src := all_src.substr(fstart, fend - fstart) if fstart >= 0 and fend > fstart else ""
+	# 下面四式只在函数体切片内数（切片不含探针自身），完整字面允许
+	var sc1_c0 := fn_src.count("%s#0\" % key")
+	var sc1_c1 := fn_src.count("%s#1\" % key")
+	var sc1_c2 := fn_src.count("%s#2\" % key")
+	var sc1_ck := fn_src.count("\"%d_%d_%d\" % [Game.run_seed, Game.floor_num, coord.x * 1000 + coord.y]")
+	_scl_assert(fn_src != "" and bad_suf.is_empty() and sc1_c0 == 1 and sc1_c1 == 1 and sc1_c2 == 1 and sc1_ck == 1,
+		"SC1", "后缀字面锁：#0/#1/#2 三式+key 派生式各恰 1、禁后缀全仓 0 次",
+		"bad=%s c=%d/%d/%d key=%d" % [str(bad_suf), sc1_c0, sc1_c1, sc1_c2, sc1_ck], "bad=0 c=1/1/1 key=1")
+
+	# ---- SC2 四灾祸两两可分（V-C6）：floor9(ice,pr=[ward_boon]) 同 seed 全 1681 网格逐坐标三槽比对 ----
+	# 🔴 判据面用全网格而非 _S32_EIGHT 八坐标抽样：ice 主题下 frail 与 scarce_ore 的 c1 只在首位分岔
+	#    （removed=blood vs removed=ore，其余六位同序），仅 h%7==0 的坐标才让 slot1 真的不同——
+	#    八坐标抽样实测两签名全等（s34a 首跑），漏掉了这个结构性近似。
+	Game.floor_num = 9
+	var sc2_sig := {}
+	var sc2_slot1 := {}
+	for cal2 in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		_calamity = cal2
+		var arr2: Array[String] = []
+		var s1cnt := {}
+		for x2 in range(-20, 21):
+			for y2 in range(-20, 21):
+				var ids2 := _scl_ids3(Vector2i(x2, y2))
+				arr2.append("%d_%d:%s|%s|%s" % [x2, y2, ids2[0], ids2[1], ids2[2]])
+				s1cnt[ids2[1]] = int(s1cnt.get(ids2[1], 0)) + 1
+		sc2_sig[cal2] = arr2
+		sc2_slot1[cal2] = str(s1cnt.keys())
+	var cal_keys: Array = sc2_sig.keys()
+	var sc2_bad: Array[String] = []
+	var sc2_pairs: Array[String] = []
+	for i2a in cal_keys.size():
+		for j2a in range(i2a + 1, cal_keys.size()):
+			var a_arr: Array = sc2_sig[cal_keys[i2a]]
+			var b_arr: Array = sc2_sig[cal_keys[j2a]]
+			var d2x := 0
+			for k2 in a_arr.size():
+				if String(a_arr[k2]) != String(b_arr[k2]):
+					d2x += 1
+			sc2_pairs.append("%s~%s=%d" % [cal_keys[i2a], cal_keys[j2a], d2x])
+			if d2x == 0:
+				sc2_bad.append("%s==%s" % [cal_keys[i2a], cal_keys[j2a]])
+	print("[SMOKE-SHRINE-CAL] stat SC2 差异坐标数 %s | slot1 档型 %s" % [
+		str(sc2_pairs), str(sc2_slot1)])
+	_scl_assert(sc2_bad.is_empty(), "SC2", "四灾祸网格签名两两不全等（6 对逐对差异坐标数≥1）",
+		str(sc2_bad) + " " + str(sc2_pairs), "0 对全等")
+
+	# ---- SC3 F3C 新冻结串（V-C7）：有灾祸+有偏好分支逐字进断言（D3 串只盖 _calamity=""，本条补有灾祸面）----
+	Game.floor_num = 9
+	_calamity = "frail"
+	var f3c_parts: Array[String] = []
+	for c3v in _S32_EIGHT:
+		f3c_parts.append("(%d,%d)=[%s]" % [c3v.x, c3v.y, ",".join(PackedStringArray(_scl_ids3(c3v)))])
+	var f3c := " ".join(PackedStringArray(f3c_parts))
+	_scl_assert(f3c == _SCL_FROZEN_F3C, "SC3", "有灾祸+有偏好网格冻结串（U4 已裁 ⇒ 采集条件解锁）",
+		f3c, _SCL_FROZEN_F3C)
+
+	# ---- SC4 dn 并集真实生效（V-B3，M-2/M-3 的正向依赖）：反证基准 = 同灾祸同 pool，只撤 cal_dn 并入 ----
+	# 🔴 判据面不采用 V-B3 原文的「与 `_calamity=""` 同坐标比」：门禁句使 purify 在有/无灾祸两态下入池与否不同
+	#    ⇒ pool 规模变 ⇒ pr/c1/c2 取模落点级联位移，与 dn 毫无关系也照样 diff（M-2/M-3 撤掉并入后仍 diff=6292
+	#    全绿＝把门禁效应误记成 dn 效应的假绿面，s34c_shrinecal.log）。故基线换 _scl_offers_unwidened。
+	Game.floor_num = 9
+	_calamity = ""
+	var empty_lu := {}
+	for x4a in range(-20, 21):
+		for y4a in range(-20, 21):
+			var ids4a := _scl_ids3(Vector2i(x4a, y4a))
+			empty_lu["%d_%d" % [x4a, y4a]] = [ids4a[1], ids4a[2]]
+	var sc4_diff := 0
+	var sc4_by := {}
+	var sc4_mix := 0   # 诊断用：旧判据（对空灾祸比）的差异数，含门禁混淆，不参与判绿
+	for cal4 in ["frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		_calamity = cal4
+		var d4x := 0
+		for x4b in range(-20, 21):
+			for y4b in range(-20, 21):
+				var co4 := Vector2i(x4b, y4b)
+				var ids4b := _scl_ids3(co4)
+				var uw4: Array = _scl_offers_unwidened(co4)
+				if uw4.size() == 3 and (ids4b[1] != uw4[1] or ids4b[2] != uw4[2]):
+					d4x += 1
+				var bl4: Array = empty_lu["%d_%d" % [x4b, y4b]]
+				if ids4b[1] != bl4[0] or ids4b[2] != bl4[1]:
+					sc4_mix += 1
+		sc4_by[cal4] = d4x
+		sc4_diff += d4x
+	_scl_assert(sc4_diff >= 1, "SC4", "存在 slot1/2 因 dn 变宽而变的坐标（撤并入 ⇒ 反证基准与生产全等 ⇒ 恒 0 即红）",
+		"diff=%d %s | 旧判据(对空灾祸)=%d 含门禁混淆" % [sc4_diff, str(sc4_by), sc4_mix], ">=1")
+
+	# ---- SC5 交集特例（V-B4）：id∈pr∩cal_down 被抬进 slot0 后不再出现于 slot1/2（floor4 vein，pr 含 ore_upgrade）----
+	Game.floor_num = 4
+	_calamity = "scarce_ore"
+	var sc5_case := 0
+	var sc5_viol := 0
+	for x5 in range(-20, 21):
+		for y5 in range(-20, 21):
+			var o5 := _shrine_offers_for(Vector2i(x5, y5))
+			if o5.size() != 3:
+				continue
+			if String(o5[0]["id"]) == "ore_upgrade":
+				sc5_case += 1
+				if String(o5[1]["id"]) == "ore_upgrade" or String(o5[2]["id"]) == "ore_upgrade":
+					sc5_viol += 1
+	_scl_assert(sc5_case >= 1 and sc5_viol == 0, "SC5", "pr∩cal_down 抬进首槽后后两槽无它（case≥1 为前提守卫面）",
+		"case=%d viol=%d" % [sc5_case, sc5_viol], "case>=1 viol=0")
+
+	# ---- SC6 重复登记负向靶（V-D4）：同层 40 连掷不重登记 + 两层真实赎回账无重复 + 两账交集空 ----
+	Game.reset()
+	Game.run_seed = _S32_FROZEN_SEED
+	Game.floor_num = 2
+	var sc6_hits := 0
+	for i6 in 40:
+		_roll_calamity()
+		_clear_calamity_effects()   # apply/clear 成对走，防 debuff 叠加（clear 的 match 需 _calamity 还在）
+		if Game.calamity_floors.has(2):
+			sc6_hits += 1
+	var sc6_cf_dup := 0
+	for f6 in Game.calamity_floors:
+		if Game.calamity_floors.count(f6) != 1:
+			sc6_cf_dup += 1
+	var pc6: Dictionary = Data.SHRINE_OFFERS["purify"].duplicate()
+	pc6["id"] = "purify"
+	Game.calamity_floors = [2, 3]
+	Game.floor_num = 2
+	_shrine_offers = [pc6]
+	_shrine_coord = Vector2i.ZERO
+	_on_shrine_chosen(0)
+	Game.floor_num = 3
+	_shrine_offers = [pc6.duplicate()]
+	_on_shrine_chosen(0)
+	var sc6_rd_dup := 0
+	for r6 in Game.redeemed_floors:
+		if Game.redeemed_floors.count(r6) != 1:
+			sc6_rd_dup += 1
+	var sc6_inter := 0
+	for r6b in Game.redeemed_floors:
+		if Game.calamity_floors.has(r6b):
+			sc6_inter += 1
+	_scl_assert(sc6_cf_dup == 0 and sc6_rd_dup == 0 and sc6_inter == 0 and sc6_hits >= 1 and Game.redeemed_floors == [2, 3],
+		"SC6", "同层连掷不重登记+赎回账无重复+两账交集空（has() 去重与层单调的负向靶）",
+		"cf_dup=%d rd_dup=%d inter=%d roll命中=%d rd=%s cf=%s" % [
+			sc6_cf_dup, sc6_rd_dup, sc6_inter, sc6_hits, str(Game.redeemed_floors), str(Game.calamity_floors)],
+		"全 0、命中≥1、rd=[2,3]")
+
+	# ---- SC7 结算实值三点（V-E3/E4）：整数落点 + is_equal_approx 比例，不得只验标志 ----
+	Game.reset()
+	Game.calamity_floors.assign([2, 3])   # N=2 R=0
+	Game.sigils["shards"] = sv_shards
+	var s7a := Game.settle_shards(1000)   # 基线 int(1000×2)=2000
+	Game.calamity_floors.assign([3])
+	Game.redeemed_floors.assign([2])      # N=1 R=1
+	Game.sigils["shards"] = sv_shards
+	var s7b := Game.settle_shards(1000)
+	Game.calamity_floors.assign([])
+	Game.redeemed_floors.assign([2, 3])   # N=0 R=2
+	Game.sigils["shards"] = sv_shards
+	var s7c := Game.settle_shards(1000)
+	var sc7_ok := s7a == 3000 and s7b == 2500 and s7c == 2000 \
+		and is_equal_approx(float(s7a) / 2000.0, 1.5) \
+		and is_equal_approx(float(s7b) / 2000.0, 1.25) \
+		and is_equal_approx(float(s7c) / 2000.0, 1.0)
+	_scl_assert(sc7_ok, "SC7", "结算三点 (2,0)→1.5 (1,1)→1.25 (0,2)→1.0：整数落点+实值比例双验",
+		"%d/%d/%d" % [s7a, s7b, s7c], "3000/2500/2000（÷2000=1.5/1.25/1.0）")
+
+	# ---- SC8 出卡零 rng（V-C3）：五态 × 1681 网格，rng seed/state 逐字不动 ----
+	Game.run_seed = _S32_FROZEN_SEED
+	Game.floor_num = 9
+	var s8_seed := Game.rng.seed
+	var s8_state := Game.rng.state
+	for cal8 in ["", "frail", "frenzy", "scarce_ammo", "scarce_ore"]:
+		_calamity = cal8
+		for x8 in range(-20, 21):
+			for y8 in range(-20, 21):
+				_shrine_offers_for(Vector2i(x8, y8))
+	_scl_assert(Game.rng.seed == s8_seed and Game.rng.state == s8_state, "SC8",
+		"五态×1681 出卡零 Game.rng 消费",
+		"seed %s→%s state_changed=%s" % [str(s8_seed), str(Game.rng.seed), str(Game.rng.state != s8_state)], "全不变")
+
+	# ---- SC9 门禁方向锁（V-A1/A2）：M7/M8 之外的独立第三式，方向写反即系统性假绿 ----
+	Game.floor_num = 9
+	_calamity = ""
+	var sc9_p9 := 0
+	for x9a in range(-20, 21):
+		for y9a in range(-20, 21):
+			if _scl_ids3(Vector2i(x9a, y9a)).has("purify"):
+				sc9_p9 += 1
+	Game.floor_num = 7
+	_calamity = ""
+	var sc9_p7 := 0
+	for x9b in range(-20, 21):
+		for y9b in range(-20, 21):
+			if _scl_ids3(Vector2i(x9b, y9b)).has("purify"):
+				sc9_p7 += 1
+	_calamity = "frail"
+	var sc9_n := 0
+	var sc9_p0 := 0
+	for x9c in range(-20, 21):
+		for y9c in range(-20, 21):
+			var o9 := _shrine_offers_for(Vector2i(x9c, y9c))
+			if o9.size() != 3:
+				continue
+			sc9_n += 1
+			if String(o9[0]["id"]) == "purify":
+				sc9_p0 += 1
+	var sc9_ratio := float(sc9_p0) / float(sc9_n) if sc9_n > 0 else 0.0
+	_scl_assert(sc9_p9 == 0 and sc9_p7 == 0 and sc9_ratio >= 0.99, "SC9",
+		"无灾祸网格 purify=0（9 层与 silent 7 层）+ silent 灾祸首槽 purify≥0.99",
+		"p9=%d p7=%d slot0=%.4f" % [sc9_p9, sc9_p7, sc9_ratio], "0/0/>=0.99")
+
+	# ---- 出口还原（rng/种子/层/灾祸/两本账/shards）----
+	Game.run_seed = sv_seed
+	Game.floor_num = sv_floor
+	_calamity = sv_cal
+	Game.rng.seed = sv_rseed
+	Game.rng.state = sv_rstate
+	Game.calamity_floors = sv_cfloors
+	Game.redeemed_floors = sv_redeemed
+	Game.set("purified_run", sv_purified)   # 记账赋值走 Game.set（F01 静态门自戒）
+	Game.sigils["shards"] = sv_shards
+	Game.codex = sv_codex.duplicate(true)
+	_oath_counters = sv_counters
+	_shrine_offers = sv_offers
+	_shrine_coord = sv_coord
+	player.max_hp = sv_mh
+	player.hp = sv_hp
+	player.shield_charges = sv_shield
+	Game.diamonds = sv_dia
+	Dev.check(_scl_checked == _SCL_DECLARED, "shrine_cal",
+		"自校验失败: shrine_cal checked(%d) != declared(%d)" % [_scl_checked, _SCL_DECLARED])
+	print("[SMOKE-SHRINE-CAL] done checked=%d declared=%d" % [_scl_checked, _SCL_DECLARED])
+
+
 ## S27 批三：modifier → (敌速倍率, 残响倍率)。纯函数：零 rng、零副作用、不读成员。
 ## 两个倍率的唯一来源，match 里不再写字面量（防「两处来源各自漂移」）。
 func _modifier_mult_pair(m: String) -> Vector2:
@@ -2136,6 +2477,30 @@ func _smoke_meta_probe() -> void:
 			var need := int(Meta.MIN_USABLE.get(kind, 1))
 			var have := _meta_usable(kind)
 			Dev.check(have >= need, "meta", "%s 可用条目 %d 少于需求 %d" % [kind, have, need])
+		# MG-PW1（GUARD-3）：武器池的**内容集**断言。旧版只有上一条那种数量下限——
+		# 池里换成别的武器照样绿，所以它守不住「可用的是不是这四把」。
+		# 🔴 语义陷阱（两条路不同源，别把它们当同一个池）：这一路走 _meta_pool_ids 过滤**整张 DEFS**
+		#    （Meta.content_available：没有 gate 节点＝默认可用，meta.gd:133-137），
+		#    而抽卡/货架走 Weapons.random_unlocked() 只过滤 DROP_POOL（weapons.gd:86-97）——
+		#    所以 Boss 专武进 DEFS 会进**这里**、不会进抽卡，正是 W3=A 要的效果。
+		# ⛔ 有序整串比较会假红（Dictionary 迭代序不保证跨版本稳定），判集合相等。
+		var want := {}
+		for id in META_WEAPON_POOL_BASELINE:
+			want[String(id)] = true
+		var have_ids := {}
+		for id in _meta_pool_ids("weapon"):
+			have_ids[String(id)] = true
+		var missing := []
+		for id in want:
+			if not have_ids.has(id):
+				missing.append(String(id))
+		var extra := []
+		for id in have_ids:
+			if not want.has(id):
+				extra.append(String(id))
+		Dev.check(missing.is_empty() and extra.is_empty(), "meta",
+			"武器可用集与基线不符：缺 [%s] 多 [%s]（基线变更须由主理人重新登记，不许就地改串）" % [
+				", ".join(missing), ", ".join(extra)])
 		print("[SMOKE-META] pool assert=OK pool=%d" % _meta_usable("upgrade"))
 	if OS.get_environment("SMOKE_META_UNLOCKTEST") != "":
 		_meta_unlock_test()
@@ -2260,18 +2625,78 @@ func _meta_apply_test() -> void:
 	Relics.apply("mr_kinetic", Game.main)
 	Dev.check(pl.has_kinetic, "meta", "mr_kinetic 的 apply 未生效")
 	print("[SMOKE-META-EXTRA] apply mr_kinetic has_kinetic=%s" % str(pl.has_kinetic))
-	# 3 把新武器：行为标志必须真的从 DEFS 传到子弹上
-	for w in ["mw_swarm", "mw_arc", "mw_cluster"]:
-		var d: Dictionary = Weapons.DEFS[w]
+	# S38 T-K K1：旧版这段只遍历**带 homing/arc/cluster 任一键**的条目，新 kind（近战族三键全无）
+	#   会被那句 `continue` 静默跳过——条目加得越多、探针覆盖面越窄，是新增的假绿面。
+	#   改成按 `kind` 分派的两段，⛔ 删旧断言凑数：段 A 逐字保留行为位传递，段 B 查扇形几何＋挥击守恒。
+	# 🔴 三段计数（段 A 条目数／段 B 条目数／未分派条目数）加起来必须等于 DEFS 总数，
+	#    并且**打印出来**：没有分母的 `checked=N declared=N` 只是把静默跳过换了个说法。
+	var n_a := 0
+	var n_a_bits := 0
+	var n_b := 0
+	var n_none := 0
+	for wid in Weapons.DEFS:
+		var d: Dictionary = Weapons.DEFS[wid]
+		var k := String(d.get("kind", ""))
+		if Weapons.is_melee_kind(k):
+			# ── 段 B：非弹幕形态（melee / spear / shieldbash）
+			n_b += 1
+			var miss := ""
+			for f in Weapons.MELEE_FIELDS:
+				if not d.has(String(f)):
+					miss += String(f) + " "
+			Dev.check(miss == "", "meta",
+				"近战条目 %s 缺 MELEE_FIELDS 字段 [%s]（缺一个＝_swing 读它时取默认值，机检查不到）" % [String(wid), miss])
+			var reach_v := float(d.get("reach", 0.0))
+			var deg := float(d.get("arc_deg", 0.0))
+			Dev.check(reach_v > 0.0, "meta", "近战条目 %s reach=%f 非正（扇形半径为零＝永不命中）" % [String(wid), reach_v])
+			Dev.check(deg > 0.0 and deg <= 180.0, "meta",
+				"近战条目 %s arc_deg=%f 不在 (0,180]（>180 的扇形在 angle_difference 上是重叠角，读不出边界）" % [String(wid), deg])
+			# 守恒：count 取 mag-1，⛔ 让整弹打完踩进过载分支（那是 V-C1 的口径，见 _melee_probe_swing ③）
+			var cnt := maxi(1, int(d.get("mag", 1)) - 1)
+			var r: Dictionary = _melee_probe_swing(String(wid), cnt)
+			Dev.check(bool(r.get("ok", false)), "meta", "近战条目 %s 的挥击探针没跑起来：%s" % [String(wid), String(r.get("why", ""))])
+			Dev.check(int(r.get("swings", -1)) == cnt, "meta",
+				"近战条目 %s 挥击计数不守恒：请求 %d 实测 %d（少的那几次＝配额／过载分支吞了输入）" % [
+					String(wid), cnt, int(r.get("swings", -1))])
+			Dev.check(int(r.get("draws", -1)) == int(r.get("swings", 0)), "meta",
+				"近战条目 %s 每次有效挥击未恰消费 1 抽：swings=%d draws=%d（HP-2）" % [
+					String(wid), int(r.get("swings", -1)), int(r.get("draws", -1))])
+			Dev.check(int(r.get("enemies", -1)) == 0, "meta",
+				"近战探针跑在敌人生成之后（在场 %d 个）：守恒账里会混入击杀掉落抽取，这是探针摆放问题、不是近战实现问题" % int(r.get("enemies", -1)))
+			Dev.check(bool(r.get("state_ok", false)), "meta",
+				"近战条目 %s 的 rng.state 与独立复算不符（自报计数器与真实流两套账，V-E1a 的假绿面）" % String(wid))
+			print("[SMOKE-META-EXTRA] melee-swing id=%s kind=%s count=%d swings=%d draws=%d mag_left=%d state_ok=%s" % [
+				String(wid), k, cnt, int(r.get("swings", -1)), int(r.get("draws", -1)),
+				int(r.get("mag_left", -1)), str(r.get("state_ok", false))])
+			continue
+		if k == "" or not Weapons.KIND_PROJECTILE.has(k):
+			n_none += 1
+			Dev.check(false, "meta",
+				"武器 %s 的 kind=%s 不在两段口径任一档（新增形态没接进分派＝探针静默跳过它）" % [String(wid), k])
+			continue
+		# ── 段 A：弹幕形态（projectile / throw / wand）——旧断言逐字保留
+		n_a += 1
+		if not d.has("homing") and not d.has("arc") and not d.has("cluster"):
+			continue
+		n_a_bits += 1
+		var hm := bool(d.get("homing", false))
+		var ac := int(d.get("arc", 0))
+		var cl := int(d.get("cluster", 0))
+		Dev.check(hm or ac > 0 or cl > 0, "meta",
+			"武器 %s 声明了行为位却全为零（行为位＝哑位）" % String(wid))
 		var b := BulletScript.new()
 		b.setup(Vector2.ZERO, Vector2.RIGHT, 100.0, 1.0, true, Color.WHITE, 1.0, 0, 0.0, 1.4, 0, 0.0,
-			false, false, bool(d.get("homing", false)), int(d.get("arc", 0)), int(d.get("cluster", 0)))
-		var ok := b.homing == bool(d.get("homing", false)) and b.arc == int(d.get("arc", 0)) \
-			and b.cluster == int(d.get("cluster", 0))
-		Dev.check(ok, "meta", "武器 %s 的行为标志未传到子弹" % w)
+			false, false, hm, ac, cl)
+		var ok := b.homing == hm and b.arc == ac and b.cluster == cl
+		Dev.check(ok, "meta", "武器 %s 的行为标志未传到子弹" % String(wid))
 		print("[SMOKE-META-EXTRA] apply weapon %s homing=%s arc=%d cluster=%d" % [
-			w, str(b.homing), b.arc, b.cluster])
+			String(wid), str(b.homing), b.arc, b.cluster])
 		b.free()
+	Dev.check(n_a + n_b + n_none == Weapons.DEFS.size(), "meta",
+		"kind 分派覆盖面漏了：段A=%d 段B=%d 未分派=%d 合计 %d ≠ DEFS %d" % [
+			n_a, n_b, n_none, n_a + n_b + n_none, Weapons.DEFS.size()])
+	print("[S38-K1] DEFS=%d 段A(弹幕)=%d 其中带行为位=%d 段B(近战)=%d 未分派=%d" % [
+		Weapons.DEFS.size(), n_a, n_a_bits, n_b, n_none])
 
 
 ## 端到端：走真实购买路径（Game.meta_unlock）—— 扣费 / 入集 / 重复购买被拒
@@ -2374,8 +2799,8 @@ func _apply_sigil_contract() -> void:
 			if _smoke:
 				print("[SMOKE-SIGIL] vigor injected: player.max_hp=%d" % player.max_hp)
 		"arsenal":
-			player.weapon_slots[1] = "shotgun"
-			player.slot_mags["shotgun"] = player.mag_cap_for("shotgun")
+			player.weapon_slots[1] = "liechi"
+			player.slot_mags["liechi"] = player.mag_cap_for("liechi")
 			player.weapon_changed.emit(player.weapon_slots, player.slot)
 		"purse":
 			Game.diamonds = 15
@@ -2696,7 +3121,7 @@ func _room_cleared() -> void:
 				if abyss_tier > 0:
 					Game.meta["abyss_best_tier"] = maxi(int(Game.meta.get("abyss_best_tier", 0)), abyss_tier)
 			drop_pickup(_arena_center() + Vector2(0, 30), "stairs")
-			drop_pickup(_arena_center() + Vector2(-34, -10), "weapon", 1, _random_weapon())
+			drop_pickup(_arena_center() + Vector2(-34, -10), "weapon", 1, _boss_weapon_drop())
 			drop_pickup(_arena_center() + Vector2(34, -10), "relic", 1, Relics.roll(1)[0]["id"])
 			hud.banner("%s 已被击溃！楼梯出现了" % Data.enemy(Data.boss_for_floor(Game.floor_num)).get("name", "Boss"))
 			Game.sfx("secret")
@@ -2723,6 +3148,39 @@ func _room_cleared() -> void:
 
 func _random_weapon() -> String:
 	return Weapons.random_unlocked()
+
+
+## S36 T-B3：Boss 房定向掉落——只掉「这一只 Boss 名下的专武子集」中的一把。
+## 🔴 刻意绕开 _random_weapon()→Weapons.random_unlocked()：那条路只过滤 DROP_POOL（三把基础枪），
+##    专武永远进不去；且它每调一次就消耗一发 Game.rng，掉落结果会随随机流位置漂移。
+## 这里是 stable_hash 纯派生（同 run_seed＋同层 = 同一把），零新增 rng 消费（AGENTS §4 E1）。
+## ⚠️ 已知代价（实稿 §6.2）：shotgun/railgun/launcher 从此不出主题 Boss 房——按裁定接受，勿加补偿。
+## 第四组常规守关怪（§6.3 裁定不加专武）名下无子集 ⇒ 原样退回旧路径，不动它们的掉落语义。
+func _boss_weapon_drop() -> String:
+	var ids := Weapons.boss_weapon_ids(_codex_boss_at_floor(Game.floor_num))
+	if ids.is_empty():
+		return _random_weapon()
+	# HP-3 key 拼法（实施单逐字要求，⛔ 自创）：seed／层／房坐标三段 + "#序号"，
+	# 与盘上既有范式同源（`:1795`、`:4063`）。单发取用固定 i=0，同局同层同房 = 同一把。
+	var coord := dungeon.current
+	var key := "%d_%d_%d" % [Game.run_seed, Game.floor_num, coord.x * 1000 + coord.y]
+	return String(ids[Game.stable_hash("%s#%d" % [key, 0]) % ids.size()])
+
+
+## 本层 Boss 房里「这一只」的图鉴 id，供定向掉落查子集。
+## 🔴 ⛔ 用 Data.boss_for_floor 取：它返回的是主题 Boss（skeleton_king / demon / dragon / boss），
+##    与 CODEX_BOSS_NAMES 三键无交集 ⇒ boss_weapon_ids 恒空 ⇒ 定向掉落静默退回随机池，
+##    T-B3 看着像做完了、实际一枪没响（C3 静态表门查不出这条，因为它只读 DEFS/BOSS_WEAPON）。
+## 优先链与生成侧（_enter_room 的 third > sovereign > warden）逐字对齐，含同一对表外测试钩；
+## 常规守关层返回 ""，调用方据此退回 _random_weapon()，不动旧掉落语义。
+func _codex_boss_at_floor(n: int) -> String:
+	if _is_third_floor(n) or OS.get_environment("SMOKE_FORCE_THIRD_BOSS") != "":
+		return "third_boss"
+	if _is_sovereign_floor(n) or OS.get_environment("SMOKE_FORCE_SOVEREIGN") != "":
+		return "pyrothalassian"
+	if _is_warden_floor(n):
+		return "prism_warden"
+	return ""
 
 
 func _arena_center() -> Vector2:
@@ -3644,6 +4102,16 @@ func _shrine_theme_pref() -> Array:
 	return [[], []]
 
 
+## S33 方案β：灾祸→压低名单（每种灾祸打空一种经济支柱，圣所对该支柱卡「少卖」而非「禁卖」）
+## 🔴 只并进 dn（c1 少一张 ⇒ p1 落点变 ⇒ c2/p2 随之变）；pool 构造与顺序、派生 key、三个 hash 后缀、c2 判定式逐字不动
+const CALAMITY_SHRINE_DOWN := {
+	"frail": ["blood_relic"],          # 体弱当层卖血契 = 劝人拿最薄的本钱去赌
+	"frenzy": ["ward_boon"],           # 狂乱当层护佑承诺的是它给不了的东西
+	"scarce_ammo": ["shard_pact"],     # 弹药稀缺当层，契约类钻石承诺兑现不了
+	"scarce_ore": ["ore_upgrade"],     # 缺矿当层，淬炼升级是画饼
+}
+
+
 ## 表按 id 键存（同 RELIC_SUFFIXES 范式）；流动中的 offer 一律带 id 字段（面板/执行/探针统一）
 func _shrine_entry(id: String) -> Dictionary:
 	var e: Dictionary = (Data.SHRINE_OFFERS[id] as Dictionary).duplicate()
@@ -3683,7 +4151,17 @@ func _shrine_offers_for(coord: Vector2i) -> Array:
 		return picks
 	else:
 		# 三段定向池：p0 取偏好子集（首槽）= 地形可读；p1 排除 p0+down（压低低偏好）；p2 只排 p0/p1（down 靠不进第二槽结构性压低，非永不出现）
+		# ↑ c2 本批逐字不动（S32 原样）：S33 的灾祸经「dn 变宽 → c1 少一张 → p1 落点变 → c2 随之变」级联改写第二/三槽
 		var dn: Array = td[1]
+		# S33：灾祸压低名单并入 dn（取「存在于本层 pool」的交集；无灾祸 ⇒ 交集空 ⇒ dn 逐字同 S32）
+		var cal_dn: Array = CALAMITY_SHRINE_DOWN.get(_calamity, [])
+		if not cal_dn.is_empty():
+			var dn_wide: Array = td[1].duplicate()   # 不 mutate td[1]（主题表是共享常量载体）
+			for o in pool:
+				var oid := String(o["id"])
+				if cal_dn.has(oid) and not dn_wide.has(oid):
+					dn_wide.append(oid)
+			dn = dn_wide
 		var p0: Dictionary = pr[Game.stable_hash("%s#0" % key) % pr.size()]
 		var c1: Array = []
 		for o in pool:
@@ -3696,6 +4174,48 @@ func _shrine_offers_for(coord: Vector2i) -> Array:
 				c2.append(o)
 		var p2: Dictionary = c2[Game.stable_hash("%s#2" % key) % c2.size()]
 		return [p0, p1, p2]
+
+
+## SC4 反证基准（S33 探针专用，零生产调用点）：与 `_shrine_offers_for` 偏好分支逐字同构，
+## 只撤掉「cal_down 并入 dn」那一段（dn 恒 = td[1]）——用来把「dn 变宽」这一根因单独隔离出来。
+## 🔴 不得拿 `_calamity = ""` 当反证基线：门禁句让 purify 在有/无灾祸两态下入不入池不同 ⇒ pool 规模本身变
+##    ⇒ pr/c1/c2 取模落点级联位移，即使 dn 一字不并 slot1/2 也照变。刀 M-2/M-3 实测对旧判据 diff=6292 全绿
+##    ＝该判据把门禁效应误记成 dn 效应（假绿），故此处必须同灾祸、同 pool，只撤 dn。
+## ⛔ 本函数是三段抽取的独立复刻，不是对生产的包装：包装会让 M-2 变成自我比较、永不红。
+##    漂移防护＝生产若改 key/后缀/三段结构，SC1 与 D 组冻结网格同步变红，helper 不会静默失真。
+##    helper 自身零 rng、零记账位、不写任何状态（只读 _calamity / Game.floor_num / run_seed）。
+func _scl_offers_unwidened(coord: Vector2i) -> Array:
+	var pool: Array = []
+	for id in Data.SHRINE_OFFERS:
+		var o: Dictionary = Data.SHRINE_OFFERS[id]
+		if Game.floor_num < int(o.get("min_floor", 3)):
+			continue
+		if String(id) == "purify" and _calamity == "":
+			continue
+		pool.append(_shrine_entry(String(id)))
+	if pool.size() < 3:
+		return []
+	var key := "%d_%d_%d" % [Game.run_seed, Game.floor_num, coord.x * 1000 + coord.y]
+	var td: Array = _shrine_theme_pref()
+	var pr: Array = []
+	for o in pool:
+		if td[0].has(String(o["id"])):
+			pr.append(o)
+	if pr.is_empty():
+		return []   # 无偏好分支不经 dn，反证面只在偏好分支
+	var dn: Array = td[1]   # ← 唯一与生产不同处：不并 cal_dn
+	var p0: Dictionary = pr[Game.stable_hash("%s#0" % key) % pr.size()]
+	var c1: Array = []
+	for o in pool:
+		if String(o["id"]) != String(p0["id"]) and not dn.has(String(o["id"])):
+			c1.append(o)
+	var p1: Dictionary = c1[Game.stable_hash("%s#1" % key) % c1.size()]
+	var c2: Array = []
+	for o in pool:
+		if String(o["id"]) != String(p0["id"]) and String(o["id"]) != String(p1["id"]):
+			c2.append(o)
+	var p2: Dictionary = c2[Game.stable_hash("%s#2" % key) % c2.size()]
+	return [String(p0["id"]), String(p1["id"]), String(p2["id"])]
 
 
 ## 代价可支付校验（不足 → 卡置灰不可选：防负数 / 防 max_hp 扣死——§4.6）
@@ -3741,8 +4261,9 @@ func _shrine_execute(offer: Dictionary) -> void:
 			# 先清空会走空分支把 debuff 永久固化（max_hp/弹匣/掉率/敌速）
 			_clear_calamity_effects()
 			_calamity = ""
-			Game.purified_run = true   # S28 批一：代价的单一来源——本局确定放弃 ×1.5
-			Game.calamity_floors.erase(Game.floor_num)   # 记录如实；本行不再承担代价（代价见 Game.purified_run）
+			Game.redeemed_floors.append(Game.floor_num)   # S33：赎回记账的单一来源（F01 模式乙数它，第二处即红）
+			Game.purified_run = true   # S28 批一：本局净化过——S33 起仅作文案读数，代价改由赎回账计（作者 2026-11-17 裁决）
+			Game.calamity_floors.erase(Game.floor_num)   # 记录如实；本行不再承担代价（代价按未赎回份额计，见 settle_shards）
 			oath_count("purify_used")   # Sprint 16 A：净化誓约计数
 		"ward_boon":
 			player.shield_charges += 1
@@ -3973,7 +4494,9 @@ func _codex_boon_suffix() -> String:
 
 func give_player_weapon(id: String) -> void:
 	player.give_weapon(id)
-	hud.flash_toast("获得 %s（Q 切换）" % Weapons.DEFS[id]["name"])
+	# T-C2：反超句「比它自己更疼」的倍数由 Data.WEAPON_SURPASS_RATIO／BOSS_PULSE_BASE 实算派生，
+	# ⛔ 手写百分比——写死就会和 DEFS 的 dmg/interval 漂移，C3 断言绿而屏上句子假。
+	hud.flash_toast("获得 %s（Q 切换）%s" % [Weapons.DEFS[id]["name"], Weapons.surpass_note(id)])
 	Game.sfx("secret")
 
 
@@ -4110,8 +4633,1573 @@ func _smoke_rngcount_probe() -> void:
 		Upgrades.roll(3)
 		Relics.roll(2)
 		Weapons.random_unlocked()
-	print("[SMOKE-META-EXTRA] rng count upgrades=%d relics=%d weapons=%d" % [
-		Upgrades.rng_draws, Relics.rng_draws, Weapons.rng_draws])
+	# S38 T-K K3：攻击动作侧的抽取入口以前看不见。近战这一路走 `_melee_probe_swing`，
+	# 🔴 两档（默认／全解锁）逐字相同的**依据**是它的守恒复算：每次有效挥击恒 1 抽，
+	#    与解锁表、`crit_chance`（探针内归零，只消结果不消抽取）、弹匣加成、敌人在否都无关。
+	#    ⛔ 把 `melee=` 做成"读自报计数器"就完事——那等于让被测方自己出具体检报告。
+	var mp := _melee_probe_swing("ml_cleaver", 3)
+	print("[SMOKE-META-EXTRA] rng count upgrades=%d relics=%d weapons=%d melee=%d" % [
+		Upgrades.rng_draws, Relics.rng_draws, Weapons.rng_draws, int(mp.get("draws", -1))])
+	# 🔴 两档必须**两行都真跑真打**：⛔ 只跑默认档然后声称"全解锁档同理"——那是把结论写进前提。
+	#    full 档按最坏值压上近战可能读到的三个解锁位（crit_chance / crit_boom / mag_bonus）。
+	#    比对的是**去掉档名标签后的正文**：⛔ 拿整行相等当判据，标签自己就会让它恒假（第一版就是这么红的）。
+	var body_a := _melee_tier_probe("default")
+	var body_b := _melee_tier_probe("full")
+	Dev.check(body_a == body_b, "meta",
+		"V-E1b 两档不逐字相同：默认[%s] 全解锁[%s]" % [body_a, body_b])
+	print("[SMOKE-META-EXTRA] rng melee tier=default %s" % body_a)
+	print("[SMOKE-META-EXTRA] rng melee tier=full %s" % body_b)
+
+
+## K3 的单档近战抽取探针（`_smoke_rngcount_probe` 用），返回**不含档名**的正文。
+## 只碰这三个字段、跑完即还原，⛔ 在这里做整套"全解锁模拟"（那会把 apply 链路的账混进抽取守恒里，
+## apply 有它自己的门 `_meta_apply_test`）。
+func _melee_tier_probe(tier: String) -> String:
+	var pl = player
+	if pl == null or not is_instance_valid(pl):
+		return "UNAVAILABLE（player 无效）"
+	var s_crit := float(pl.crit_chance)
+	var s_boom := bool(pl.crit_boom)
+	var s_bonus := int(pl.mag_bonus)
+	if tier == "full":
+		pl.crit_chance = 0.95
+		pl.crit_boom = true
+		pl.mag_bonus = 3
+	var r: Dictionary = _melee_probe_swing("ml_cleaver", 3)
+	pl.crit_chance = s_crit
+	pl.crit_boom = s_boom
+	pl.mag_bonus = s_bonus
+	return "swings=%d draws=%d state_ok=%s enemies=%d" % [
+		int(r.get("swings", -1)), int(r.get("draws", -1)),
+		str(r.get("state_ok", false)), int(r.get("enemies", -1))]
+
+
+## S38 T-K K1／T-N：近战挥击探针的**唯一**入口——装枪 → 同步挥 count 次 → 与独立复算对账 → 原样还原。
+## 🔴 四件事必须在这里一次做完，⛔ 让每个探针各写一套（各写一套＝各留一种污染面）：
+##    ①快照/还原玩家状态（双槽、弹匣、三个计时器、暴击率、准星、`Game.rng.state`、两个近战计数器），
+##      探针跑完世界要回到进来之前的样子，否则后面每一条门都在测自己的残留；
+##    ②ground truth 用**独立复算**：拿快照 state 起一台 scratch RNGPCG 推进实测挥次数再比 state。
+##      ⛔ 拿 `melee_rng_draws` 的自报数当证据——那是被测方自己的账本，自报只能证明它没改自己的数；
+##    ③弹匣给 count+1：⛔ 让循环里出现 `_start_reload()` 那条零抽取分支（V-C1 的口径），
+##      混进来守恒账就变成「守恒 + 一次过载」的糊账；
+##    ④crit 归零只消**结果**不消**抽取**（HP-2 说的正是抽取与结果无关）：全解锁档带着 mx_critboom 时
+##      一次暴击会在扇形里 `explode()`，那会把别处的 rng 消费混进近战账，两档也就无从逐字比对。
+func _melee_probe_swing(id: String, count: int) -> Dictionary:
+	var pl = player
+	if pl == null or not is_instance_valid(pl):
+		return {"ok": false, "why": "player 无效或未入树"}
+	if not Weapons.DEFS.has(id):
+		return {"ok": false, "why": "DEFS 无 %s" % id}
+	if count < 1:
+		return {"ok": false, "why": "count=%d < 1（零次挥击的守恒断言恒真）" % count}
+	var s_slots: Array = pl.weapon_slots.duplicate(true)
+	var s_slot := int(pl.slot)
+	var s_mags: Dictionary = pl.slot_mags.duplicate(true)
+	var s_reload := float(pl._reload_t)
+	var s_cd := float(pl._fire_cd)
+	var s_swap := float(pl._swap_t)
+	var s_crit := float(pl.crit_chance)
+	var s_aim: Vector2 = pl._aim
+	var s_state := int(Game.rng.state)
+	var s_sw := Player.melee_swings
+	var s_dr := Player.melee_rng_draws
+	var n_before := 0
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e) and not e.dead:
+			n_before += 1
+	pl.give_weapon(id)
+	pl.slot_mags[id] = count + 1
+	pl._reload_t = 0.0
+	pl._swap_t = 0.0
+	pl._aim = Vector2.RIGHT
+	pl.crit_chance = 0.0
+	for i in count:
+		pl._swing()
+	var d_sw := Player.melee_swings - s_sw
+	var d_dr := Player.melee_rng_draws - s_dr
+	var mag_left := int(pl.slot_mags.get(id, -1))
+	var oracle := RandomNumberGenerator.new()
+	oracle.state = s_state
+	for i in count:  # 🔴 复算次数取请求值 count，⛔ 取 d_sw（实现自报数）：实现连挥击计数一起不涨时这条神谕会退化成同源自比较，#48 已实测漏抓过刀9
+		oracle.randf()
+	var state_ok := int(Game.rng.state) == int(oracle.state)
+	# 还原：rng 流、玩家状态、计数器账本三样一起退回，探针不留痕
+	Game.rng.state = s_state
+	pl.weapon_slots = s_slots
+	pl.slot = s_slot
+	pl.slot_mags = s_mags
+	if not s_mags.has(id):
+		# give_weapon 写进来的探针键：⛔ 留在表里＝下一局 mag() 读到上一把探针的余弹
+		pl.slot_mags.erase(id)
+	pl._reload_t = s_reload
+	pl._fire_cd = s_cd
+	pl._swap_t = s_swap
+	pl.crit_chance = s_crit
+	pl._aim = s_aim
+	Player.melee_swings = s_sw
+	Player.melee_rng_draws = s_dr
+	pl.weapon_changed.emit(pl.weapon_slots, pl.slot)
+	pl.mag_changed.emit(pl.mag(), pl.mag_cap())
+	return {"ok": true, "id": id, "count": count, "swings": d_sw, "draws": d_dr,
+		"state_ok": state_ok, "mag_left": mag_left, "enemies": n_before}
+
+
+# ---------------- Sprint 38 B1：非弹幕形态族运行期探针（SMOKE_MELEE） ----------------
+## 观测面纪律（🔴 三条，⛔ 事后觉得"差不多"就拆掉）：
+##    ①伤害一律取 `hp` 差额，⛔ 取 `Game.damage_number` 的文本——那条走 `str(int(amount))`
+##      （game_state.gd 的 damage_number），0.54 与 0.6 会被截成同一个数，V-B6／V-D3 的账就废了；
+##    ②`Game.rng.state` 每次挥击前钉回 `_ML_STATE0`，⛔ 拿上一段的落点当下一段的起点——
+##      那样 Δstate 跨摆位不可比，V-E2「命中 0／1／5 个抽取相同」根本无从判；
+##    ③敌人一律 `speed=0 / dmg=0 / hp=1e9` 且几何段**同步**挥击：AI 每物理帧把 `_face` 改成指向玩家
+##      （slug.gd `_physics_process` 里那句），V-B6／V-B7 要的正是"我指定的朝向"，中间隔一帧这两条自己就失效。
+## 三段异步（C2 复位／C4 切换窗／D4 反向弹幕）各自 await，且全程把 `_spawn_cd` 顶高——
+## 🔴 ⛔ 让刷怪插进几何段：那会把"探针摆的靶"和"房间生成的活物"混进同一个扇形，命中数就不是断言了。
+## 🔴 卫生规则（主理人核验 §一，V-H #2）：`declared` 必须是**循环展开后的实数**，
+##    ⛔ 写成"调用点数 × 猜测条目数"；循环集合一变（例：`_ML_BASE3` 3→4 条会 +2）就同步改这里，
+##    实跑数不符时探针末尾那条自校验会直接红，不会静默漏断言。
+##    87（B1 首轮）→ 88（A3x）→ 91（D5 三条）→ 94（C2c 三条：主理人 §十一.2 记的是 +2，
+##    编程侧多加了「give_weapon 确实执行」那条反证——⛔ 没有它，"捡武器"这条路一旦静默失败，
+##    "旧复位不生效"会因为"根本没发生任何事"而假绿。偏差已在交付报告里向主理人点明）。
+const _ML_DECLARED := 94
+const _ML_STATE0 := 20261118
+# V-A3 基准值（口径表逐字）：[dmg, reach, arc_deg, interval, mag, reload]
+const _ML_BASE3 := {
+	"ml_cleaver": [1.80, 46.0, 110.0, 0.55, 4.0, 0.9],
+	"sp_thorn": [2.40, 78.0, 42.0, 0.72, 3.0, 1.1],
+	"sh_bulwark": [1.20, 34.0, 150.0, 0.90, 3.0, 1.3],
+}
+const _ML_OUTSIDE_FIELDS := ["count", "spread", "speed", "life", "pierce", "explosive"]
+
+var _ml_checked := 0
+var _ml_enemies: Array = []
+
+
+func _ml_assert(ok: bool, nn: String, measured, expect) -> void:
+	_ml_checked += 1
+	var m := str(measured)
+	var e := str(expect)
+	Dev.check(ok, "melee", "%s | measured=%s expect=%s" % [nn, m, e])
+	print("[SMOKE-MELEE] #%02d %s measured=%s expect=%s ok=%s" % [_ml_checked, nn, m, e, str(ok)])
+
+
+func _ml_close(a: float, b: float) -> bool:
+	return absf(a - b) < 0.001
+
+
+## 清空敌人组：⛔ queue_free——那要等一物理帧，下一段摆位会把旧敌人一起算进扇形
+func _ml_clear() -> void:
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e):
+			e.free()
+	_ml_enemies = []
+
+
+## 摆位工具（V-B 说的"极坐标靶"）。⛔ 走 spawn_slug：它会 mark_codex（污染图鉴档）、
+## 按楼层缩放 hp、还会 clamp 到场外——本探针要的是"我放的坐标就是它所在的坐标"。
+func _ml_place(variant: String, r: float, ang_deg: float, face := "right") -> Slug:
+	var pl = player
+	return _ml_place_at(variant, pl.global_position + Vector2.from_angle(deg_to_rad(ang_deg)) * r, face)
+
+
+func _ml_place_at(variant: String, pos: Vector2, face: String) -> Slug:
+	var pl = player
+	var e := SlugScript.new()
+	entities.add_child(e)
+	e.setup(variant, 0, 1, "")
+	e.global_position = pos
+	e.speed = 0.0
+	e.dmg = 0
+	e.hp = 1.0e9
+	e.max_hp = 1.0e9
+	if face == "player":
+		e._face = (pl.global_position - pos).normalized()
+	elif face == "away":
+		e._face = (pos - pl.global_position).normalized()
+	else:
+		e._face = Vector2.RIGHT
+	_ml_enemies.append(e)
+	return e
+
+
+## 装备：直接写三样（slots / slot / slot_mags）。⛔ 用 give_weapon——它会把 `_reload_t` 归零、
+## 按当前灾祸系数灌满配额，V-C 那组要的是"配额从第 1 发起算"的可控起点。
+func _ml_equip(id: String, mag_left: int) -> void:
+	var pl = player
+	var keys: Array = pl.slot_mags.keys()
+	for k in keys:
+		pl.slot_mags.erase(k)
+	pl.weapon_slots[0] = id
+	pl.weapon_slots[1] = ""
+	pl.slot = 0
+	pl.slot_mags[id] = mag_left
+	pl._reload_t = 0.0
+	pl._fire_cd = 0.0
+	pl._swap_t = 0.0
+	pl._aim = Vector2.RIGHT
+	# 🔴 三个「会改基准值的基准值」在这里钉死：`mag_cap_of` 折 `mag_bonus`（V-C3 的 floor(4×0.5)=2
+	#    只有在 bonus=0 时才是那个数）、`skill_active()` 一真就整条免配额（V-C1 直接失效）、
+	#    crit 两开关决定 V-D2/D3 走不走爆炸分支。跑完由 `_ml_restore_stats` 还原。
+	pl.mag_bonus = 0
+	pl.mag_cap_mult = 1.0
+	pl.skill_t = 0.0
+	pl.crit_chance = 0.0
+	pl.crit_boom = false
+	# 🔴 实测教训（首轮 8 条红）：⛔ 假定 SMOKE 局的乘区是 1.0——本文件 `_ready` 的烟雾台架在
+	#    `SMOKE=1` 时就把 `bullet_dmg_mult` 拍到 10.0（见上面 game_main 开头那段 dev 火力钩），
+	#    于是 V-B1 的「阔刃一刀 1.8」实测 18.0、V-B6 的 0.54 实测 5.4。绝对伤害断言一律先把
+	#    乘区钉成 1.0，需要倍率的条目（V-D1）用 `_ml_shot` 的 `mods` 在装备**之后**显式施加，
+	#    跑完由 `_ml_restore_stats` 还原。`stats0` 打印行是对账用的原始值。
+	pl.damage_mult = 1.0
+	pl.bullet_dmg_mult = 1.0
+
+
+func _ml_stats() -> Dictionary:
+	var pl = player
+	return {"dmg_mult": float(pl.damage_mult), "bdmg": float(pl.bullet_dmg_mult),
+		"bscale": float(pl.bullet_scale), "crit": float(pl.crit_chance), "boom": bool(pl.crit_boom),
+		"chain": float(pl.chain_chance), "poison": float(pl.poison_chance), "fire": bool(pl.set_fire),
+		"frost": float(pl.frost_chance), "bounce": int(pl.bounce_count), "pierce": int(pl.pierce_bonus),
+		"cap_mult": float(pl.mag_cap_mult), "mbonus": int(pl.mag_bonus),
+		"auto": bool(pl.autopilot), "skill": float(pl.skill_t)}
+
+
+func _ml_restore_stats(s: Dictionary) -> void:
+	var pl = player
+	pl.damage_mult = float(s["dmg_mult"])
+	pl.bullet_dmg_mult = float(s["bdmg"])
+	pl.bullet_scale = float(s["bscale"])
+	pl.crit_chance = float(s["crit"])
+	pl.crit_boom = bool(s["boom"])
+	pl.chain_chance = float(s["chain"])
+	pl.poison_chance = float(s["poison"])
+	pl.set_fire = bool(s["fire"])
+	pl.frost_chance = float(s["frost"])
+	pl.bounce_count = int(s["bounce"])
+	pl.pierce_bonus = int(s["pierce"])
+	pl.mag_cap_mult = float(s["cap_mult"])
+	pl.mag_bonus = int(s["mbonus"])
+	pl.autopilot = bool(s["auto"])
+	pl.skill_t = float(s["skill"])
+
+
+## 一次「摆位 → 钉 state → 同步挥一击 → 取 hp 差额」的最短路径。
+## spots = [[r, Δθ], ...]；Δθ 是相对 `_aim`（本探针一律把 `_aim` 钉在世界角 0°）的夹角。
+func _ml_shot(id: String, spots: Array, face := "right", variant := "goblin", mag_left := 99,
+		crit := 0.0, boom := false, mods := {}) -> Dictionary:
+	var pl = player
+	_ml_clear()
+	var before: Array = []
+	for s in spots:
+		before.append(_ml_place(variant, float(s[0]), float(s[1]), face).hp)
+	_ml_equip(id, mag_left)
+	pl.crit_chance = crit
+	pl.crit_boom = boom
+	var pre_mods := {}
+	for k in mods:
+		pre_mods[k] = pl.get(String(k))
+		pl.set(String(k), mods[k])
+	Game.rng.state = _ML_STATE0
+	var sw0 := Player.melee_swings
+	var dr0 := Player.melee_rng_draws
+	pl._swing()
+	var deltas: Array = []
+	for i in _ml_enemies.size():
+		deltas.append(float(before[i]) - float(_ml_enemies[i].hp))
+	# N-5（主理人核验 §九）：`mods` 用完**就地**还原。旧写法把 `bullet_scale=3.0` 一路留到探针末尾的
+	# `_ml_restore_stats`，中途任何提前 return／崩掉都会把脏倍率漏给后面的探针段（跨探针隐性污染）。
+	for k in mods:
+		pl.set(String(k), pre_mods[k])
+	return {"deltas": deltas, "swings": Player.melee_swings - sw0,
+		"draws": Player.melee_rng_draws - dr0, "state": int(Game.rng.state)}
+
+
+func _ml_count_bullets() -> int:
+	var n := 0
+	for c in entities.get_children():
+		if c is Bullet:
+			n += 1
+	return n
+
+
+## 切出某个脚本里一个函数体的源码段（剥掉注释行，⛔ 让"禁止事项写在注释里"被当成命中）。
+## 🔴 V-B9 的自证与 V-D5 的源码级判据**共用这一份**（主理人核验 §五："两处逻辑同源，别各修各的"），
+##    手法与 `validate.gd` 切 `_swing()` 段一致。段取空/取错会让上游断言退化成"空串==空串"的恒真比较，
+##    ⇒ 凡是用它做判据的条款都必须配一条**段本体反证**（长度＋一个必然在场的 token）。
+func _ml_src_segment(path: String, head: String) -> String:
+	var seg := ""
+	var in_fn := false
+	for ln in FileAccess.get_file_as_string(path).split("\n"):
+		var s := String(ln)
+		if s.begins_with(head):
+			in_fn = true
+			continue
+		if in_fn and s.begins_with("func "):
+			break
+		if in_fn and not s.strip_edges().begins_with("#"):
+			seg += s + "\n"
+	return seg
+
+
+## V-D5 专用：主动遗物的**可观测效果字段**快照。
+## 🔴 主理人核验 §五 明令：⛔ 拿 `_ml_stats()` 或 `slot_mags` 凑数——那张表全是玩家乘区，
+##    与遗物无关，凑出来的就是恒真断言。`orbit` 一栏顺带当"计时确实在推进"的在场证据
+##    （环盾轨道节点只由 `_tick_relic_shield()` 建，帧不推进就永远是 false）。
+func _ml_relic_state() -> Dictionary:
+	var pl = player
+	return {
+		"cd_orb": float(pl.active_relic_cds.get("orb_shield", 0.0)),
+		"cd_dash": float(pl.active_relic_cds.get("dash_dodge", 0.0)),
+		"cd_volley": float(pl.active_relic_cds.get("volley_burst", 0.0)),
+		"cd_toxic": float(pl.active_relic_cds.get("toxic_freeze", 0.0)),
+		"shield_t": float(pl.relic_shield_t),
+		"suppress_t": float(pl.relic_suppress_t),
+		"orbit": pl._relic_shield_orbit != null and is_instance_valid(pl._relic_shield_orbit),
+	}
+
+
+## V-D5 专用：把主动遗物计时推到"活着"的状态，跑 4 个物理帧，其中 `with_swing` 决定每帧前是否
+## 真挥一击；返回**相对衰减**。两条轨迹的差值＝"近战额外吃掉了多少遗物计时"。
+## 🔴 用「同帧数空转」当对照，⛔ 去预测精确帧数——`physics_frame` 信号与 `player._physics_process`
+##    的先后有一帧抖动面，绝对帧数断言会抖出假红；对照法只依赖"两趟走了同样多的帧"。
+##    ⚠️ 本函数会 await，只能在异步段调；`_ml_equip` 已把 `crit_boom/skill/mag` 钉死 ⇒ 挥击不会
+##    引出爆炸、换弹或子弹，观测面干净。
+func _ml_relic_decay(with_swing: bool) -> Dictionary:
+	var pl = player
+	_ml_clear()
+	_ml_equip("sh_bulwark", 99)
+	pl.active_relic_cds = {"orb_shield": 9.0, "dash_dodge": 6.0, "volley_burst": 12.0, "toxic_freeze": 10.0}
+	pl.relic_shield_t = 5.0
+	pl.relic_suppress_t = 4.0
+	var a := _ml_relic_state()
+	for i in 4:
+		if with_swing:
+			pl._swing()
+		await get_tree().physics_frame
+	var b := _ml_relic_state()
+	var out := {}
+	for k in a:
+		out[k] = bool(b[k]) if k == "orbit" else float(a[k]) - float(b[k])
+	return out
+
+
+func _ml_wait_frames(n: int) -> void:
+	for i in n:
+		await get_tree().physics_frame
+
+
+## 主探针：V-A3／V-B1..B9／V-C1..C4／V-D1..D4／V-E1..E5 逐条对号。
+func _smoke_melee_probe() -> void:
+	_ml_checked = 0   # R7 §15.1.4 入口复位：双驱动下 checked 翻倍会假红（对照 _ct/_s31/_s32/_scl）
+	var pl = player
+	if pl == null or not is_instance_valid(pl) or not Game.playing:
+		Dev.err("melee", "SMOKE_MELEE 前置不成立：player=%s playing=%s（整条探针未跑，⛔ 记 PASS）" % [
+			str(pl != null), str(Game.playing)])
+		return
+	var st0 := _ml_stats()
+	var s_spawn := _spawn_cd
+	var s_swings := Player.melee_swings
+	var s_draws := Player.melee_rng_draws
+	_spawn_cd = 1.0e9		# 异步段防刷怪混进扇形（跑完还原）
+	_ml_clear()
+	# 开局乘区如实打印：绝对伤害断言的基准是"钉成 1.0 之后"，这条是给人看的对账行
+	print("[SMOKE-MELEE] stats0 dmg_mult=%.3f bdmg=%.3f bscale=%.3f crit=%.2f boom=%s mbonus=%d capmult=%.2f auto=%s" % [
+		st0["dmg_mult"], st0["bdmg"], st0["bscale"], st0["crit"], st0["boom"],
+		st0["mbonus"], st0["cap_mult"], st0["auto"]])
+
+	# ── V-A3｜表值与规格外字段 ───────────────────────────────────────────────
+	for id in _ML_BASE3:
+		var d: Dictionary = Weapons.DEFS[id]
+		var got: Array = [float(d["dmg"]), float(d["reach"]), float(d["arc_deg"]),
+			float(d["interval"]), float(d["mag"]), float(d["reload"])]
+		_ml_assert(str(got) == str(_ML_BASE3[id]), "A3 钉值(实稿§3.2/3.4/3.5) %s" % id, got, _ML_BASE3[id])
+		var found := ""
+		for f in _ML_OUTSIDE_FIELDS:
+			if d.has(f):
+				found += f + " "
+		_ml_assert(found == "", "A3 规格外字段 %s" % id, found, "（无）")
+	# A3x｜第四把 melee 的**存在性**断言（主理人裁定 §四.2）：`ml_needler` 的数值属配平域、主理人不预先钉，
+	# ⇒ ⛔ 不进 `_ML_BASE3`（那等于让探针把编程侧的配平当规格，以后调它数值必红得没道理）。
+	# 它只由静态门 `_check_weapon_kinds()` 守形式不变量（reach>0／arc_deg∈(0,180]／interval>0／mag≥1／reload>0／无规格外字段）。
+	_ml_assert(Weapons.DEFS.has("ml_needler"), "A3x ml_needler 在场（数值属配平域，主理人未钉）",
+		Weapons.DEFS.has("ml_needler"), true)
+
+	# ── V-E7／HP-6｜B1 阶段六把新 id **零获取途径**：DROP_POOL 一行不改 ⇒ 取模分母不变 ──
+	for nid in ["ml_cleaver", "ml_needler", "sp_thorn", "sh_bulwark", "th_kunai", "wd_whisper"]:
+		_ml_assert(not Weapons.DROP_POOL.has(nid), "E7 %s 不在 DROP_POOL（本批拿不到）" % nid,
+			Weapons.DROP_POOL.has(nid), false)
+
+	# ── V-B1／B2｜阔刃扇形边界（半角 55°、reach 46）───────────────────────────
+	var r1 := _ml_shot("ml_cleaver", [[40.0, 0.0]])
+	_ml_assert(_ml_close(float(r1["deltas"][0]), 1.80), "B1 r40 Δ0 恰一次全额", r1["deltas"][0], 1.80)
+	for deg in [50.0, -50.0]:
+		var rr := _ml_shot("ml_cleaver", [[40.0, deg]])
+		_ml_assert(_ml_close(float(rr["deltas"][0]), 1.80), "B1 r40 Δ%s 命中" % str(deg), rr["deltas"][0], 1.80)
+	for deg in [60.0, -60.0]:
+		var rr := _ml_shot("ml_cleaver", [[40.0, deg]])
+		_ml_assert(_ml_close(float(rr["deltas"][0]), 0.0), "B1 r40 Δ%s 不命中（半角 55）" % str(deg), rr["deltas"][0], 0.0)
+	var r2 := _ml_shot("ml_cleaver", [[52.0, 0.0]])
+	_ml_assert(_ml_close(float(r2["deltas"][0]), 0.0), "B2 r52 超 reach 不命中", r2["deltas"][0], 0.0)
+
+	# ── V-B3｜多目标各吃全额（⛔ 只打最近一只是 spear 的语义）──────────────────
+	var r3 := _ml_shot("ml_cleaver", [[40.0, 0.0], [40.0, 20.0], [40.0, -20.0]])
+	for i in 3:
+		_ml_assert(_ml_close(float(r3["deltas"][i]), 1.80), "B3 第%d只全额" % (i + 1), r3["deltas"][i], 1.80)
+
+	# ── V-B4｜荆刺窄扇（半角 21°、reach 78）＋ 同距命中数不多于阔刃 ─────────────
+	for deg in [15.0, -15.0]:
+		var rr := _ml_shot("sp_thorn", [[70.0, deg]])
+		_ml_assert(_ml_close(float(rr["deltas"][0]), 2.40), "B4 荆刺 r70 Δ%s 命中" % str(deg), rr["deltas"][0], 2.40)
+	for deg in [25.0, -25.0]:
+		var rr := _ml_shot("sp_thorn", [[70.0, deg]])
+		_ml_assert(_ml_close(float(rr["deltas"][0]), 0.0), "B4 荆刺 r70 Δ%s 不命中（半角 21）" % str(deg), rr["deltas"][0], 0.0)
+	# 🔴 同距比较必须落在**两把都够得着**的距离上：首轮我拿 r=70（荆刺的 reach）比，阔刃 reach=46
+	#    当然 0 命中，于是"荆刺≤阔刃"测成 1≤0——那是我把摆位距离写错，不是实现错。
+	#    Δ=±30° 在阔刃半角 55° 内、在荆刺半角 21° 外——正是这条设计断言要的对照。
+	var spots := [[40.0, 0.0], [40.0, 30.0], [40.0, -30.0]]
+	var n_sp: Array = _ml_shot("sp_thorn", spots)["deltas"]
+	var n_cl: Array = _ml_shot("ml_cleaver", spots)["deltas"]
+	var hit_sp := 0
+	var hit_cl := 0
+	for i in 3:
+		if float(n_sp[i]) > 0.0:
+			hit_sp += 1
+		if float(n_cl[i]) > 0.0:
+			hit_cl += 1
+	_ml_assert(hit_sp <= hit_cl and hit_sp == 1, "B4 同距命中数 荆刺≤阔刃（设计断言）",
+		"%d<=%d" % [hit_sp, hit_cl], "1<=3")
+
+	# ── V-B5｜稳壁命中带减速标记；未命中的不受影响（反证面）─────────────────────
+	var r5 := _ml_shot("sh_bulwark", [[30.0, 0.0], [30.0, 80.0]])
+	_ml_assert(_ml_close(float(_ml_enemies[0]._slow_mult), 0.6), "B5 命中者速度系数", _ml_enemies[0]._slow_mult, 0.6)
+	_ml_assert(_ml_close(float(_ml_enemies[0]._slow_t), 1.2), "B5 命中者减速时长", _ml_enemies[0]._slow_t, 1.2)
+	_ml_assert(_ml_close(float(_ml_enemies[1]._slow_mult), 1.0) and _ml_close(float(r5["deltas"][1]), 0.0),
+		"B5 未命中者不受影响", "%s/%s" % [_ml_enemies[1]._slow_mult, r5["deltas"][1]], "1.0/0.0")
+
+	# ── V-B6｜from_dir 是玩家→敌人单位向量 ⇒ 正面甲照常生效（这条是"近战没把减伤写废"的唯一证据）
+	var r6a := _ml_shot("ml_cleaver", [[40.0, 0.0]], "player", "knight")
+	_ml_assert(_ml_close(float(r6a["deltas"][0]), 0.54), "B6 盾骑士正面挨阔刃（armor 0.7）", r6a["deltas"][0], 0.54)
+	var r6b := _ml_shot("ml_cleaver", [[40.0, 0.0]], "away", "knight")
+	_ml_assert(_ml_close(float(r6b["deltas"][0]), 1.80), "B6 绕背全额", r6b["deltas"][0], 1.80)
+
+	# ── V-B7｜spear 无视护甲 ＋ 旁路标志结算内清零（跨帧泄漏反证）───────────────
+	var r7 := _ml_shot("sp_thorn", [[70.0, 0.0]], "player", "knight")
+	_ml_assert(_ml_close(float(r7["deltas"][0]), 2.40), "B7 荆刺正面捅盾骑士＝全额", r7["deltas"][0], 2.40)
+	_ml_assert(_melee_pierce_armor == false, "B7 结算后旁路标志已清零", _melee_pierce_armor, false)
+	var kn: Slug = _ml_enemies[0]
+	var hp_before := kn.hp
+	var to_kn: Vector2 = (kn.global_position - pl.global_position).normalized()
+	kn.take_damage(1.0, to_kn, false)		# 子弹路径调的就是这个入口（bullet.gd `_handle_hit`）
+	_ml_assert(_ml_close(float(hp_before - kn.hp), 0.30), "B7 紧接下一次 take_damage 重新按 armor 减伤",
+		hp_before - kn.hp, 0.30)
+
+	# ── V-B8／V-A2｜无敌挥空仍算一次动作、零伤害事件；dead 目标不命中；一条子弹都不生成
+	var kills0 := Game.kills
+	var bul0 := _ml_count_bullets()
+	var r8 := _ml_shot("ml_cleaver", [])
+	_ml_assert(int(r8["swings"]) == 1 and int(r8["draws"]) == 1, "B8 空场挥击仍算一次动作",
+		"%d/%d" % [r8["swings"], r8["draws"]], "1/1")
+	_ml_assert(Game.kills == kills0, "B8 空场零伤害事件（kills 不变）", Game.kills, kills0)
+	var dead_e := _ml_place("goblin", 40.0, 0.0)
+	dead_e.dead = true
+	var hp_dead := dead_e.hp
+	_ml_equip("ml_cleaver", 99)
+	pl._swing()
+	_ml_assert(dead_e.hp == hp_dead, "B8 组内 dead==true 的敌人不命中", dead_e.hp, hp_dead)
+	_ml_assert(_ml_count_bullets() == bul0, "A2 近战全程零 spawn_player_bullet（子弹节点数）",
+		_ml_count_bullets(), bul0)
+
+	# ── V-B9｜近战不破坏木箱／暗墙（实稿未授予）──────────────────────────────
+	_ml_clear()
+	var crate := CrateScript.new()
+	crate.position = pl.global_position + Vector2(40.0, 0.0)
+	entities.add_child(crate)
+	_ml_equip("ml_cleaver", 99)
+	for i in 3:
+		pl._swing()
+	_ml_assert(int(crate.hp) == 3, "B9 木箱在 reach 内挨三刀血量不变", crate.hp, 3)
+	_ml_assert(crate.is_in_group("crates"), "B9 木箱确在 crates 组（反证：不是摆错位置所以没挨打）",
+		crate.is_in_group("crates"), true)
+	crate.free()
+	# 暗墙同一断言（`secret_wall.gd` 只有 `bomb_hit()` 一条受伤入口，近战既不调它也不进 explode）
+	var swall: Node2D = SecretWallScript.new()
+	swall.position = pl.global_position + Vector2(40.0, 0.0)
+	entities.add_child(swall)
+	_ml_equip("ml_cleaver", 99)
+	for i in 3:
+		pl._swing()
+	_ml_assert(int(swall.hp) == 1, "B9 暗墙挨三刀 hp 仍为 1（未被开）", swall.hp, 1)
+	swall.free()
+	# 🔴 反证面（⛔ 让 B9 停在"恒真"）：木箱／暗墙血量不变，可能只是因为"根本没扫到它们"——
+	#    条款要的是"扫到了也不破坏"这层语义，所以另加一条源码级证据：`_swing` 函数体内
+	#    不许出现破坏通路的目标组名／入口（crates / secret_walls / bomb_hit）。注释行剔除，
+	#    ⛔ 让"禁止事项写在注释里"被当成命中。
+	var swing_body := _ml_src_segment("res://scripts/player.gd", "func _swing()")
+	_ml_assert(swing_body.length() > 200 and not swing_body.contains("crates") \
+			and not swing_body.contains("secret_walls") and not swing_body.contains("bomb_hit"),
+		"B9 自证·_swing 源码段存在（%d 行）且无破坏通路入口" % swing_body.count("\n"),
+		"crates=%s secret_walls=%s bomb_hit=%s" % [swing_body.contains("crates"),
+			swing_body.contains("secret_walls"), swing_body.contains("bomb_hit")],
+		"false/false/false")
+
+	# ── V-E1／E2／E5｜抽取守恒（ground truth＝独立复算，⛔ 只读自报计数器）────
+	_ml_assert(Player.melee_rng_draws - s_draws == Player.melee_swings - s_swings,
+		"E1 全程累计 draws==swings", "%d/%d" % [Player.melee_rng_draws - s_draws, Player.melee_swings - s_swings],
+		"相等")
+	var e2_zero: int = _ml_shot("ml_cleaver", [])["state"]
+	var e2_one: int = _ml_shot("ml_cleaver", [[40.0, 0.0]])["state"]
+	var e2_five: int = _ml_shot("ml_cleaver", [[40.0, 0.0], [40.0, 20.0], [40.0, -20.0], [30.0, 40.0], [30.0, -40.0]])["state"]
+	_ml_assert(e2_one == e2_zero, "E2 命中 1 个与命中 0 个的 Δstate 相同", e2_one, e2_zero)
+	_ml_assert(e2_five == e2_zero, "E2 命中 5 个与命中 0 个的 Δstate 相同", e2_five, e2_zero)
+	# E5＋E1 的 200 次输入（含过载期无效输入）：mag=4 ⇒ 4 次有效 + 196 次无效
+	_ml_clear()
+	_ml_equip("ml_cleaver", 4)
+	Game.rng.state = _ML_STATE0
+	var sw1 := Player.melee_swings
+	var dr1 := Player.melee_rng_draws
+	for i in 200:
+		pl._swing()
+	var d_sw2 := Player.melee_swings - sw1
+	var d_dr2 := Player.melee_rng_draws - dr1
+	var oracle := RandomNumberGenerator.new()
+	oracle.state = _ML_STATE0
+	for i in 4:  # 🔴 次数由探针自钉（= 上面的 mag 配额 4，与 #47 的 expect 同源）；⛔ 取 d_sw2＝拿实现的自报数当独立复算，刀9 那种"连挥击计数一起不涨"的实现会让神谕退化成同源自比较（实测漏抓）
+		oracle.randf()
+	_ml_assert(d_sw2 == 4 and d_dr2 == 4, "E5 过载期无效输入不增计数（200 次输入 ⇒ 4 次有效）",
+		"%d/%d" % [d_sw2, d_dr2], "4/4")
+	_ml_assert(int(Game.rng.state) == int(oracle.state), "E1 200 次输入的 state 与复算一致",
+		Game.rng.state, oracle.state)
+
+	# ── V-D1／D2｜乘区与暴击（⛔ bullet_scale 参与；抽取次数不随暴击结果变）────
+	var rd1 := _ml_shot("ml_cleaver", [[40.0, 0.0]], "right", "goblin", 99, 0.0, false, {"damage_mult": 1.5})
+	_ml_assert(_ml_close(float(rd1["deltas"][0]), 2.70), "D1 damage_mult=1.5 同步放大", rd1["deltas"][0], 2.70)
+	var rd1b := _ml_shot("ml_cleaver", [[40.0, 0.0]], "right", "goblin", 99, 0.0, false, {"bullet_dmg_mult": 1.5})
+	_ml_assert(_ml_close(float(rd1b["deltas"][0]), 2.70), "D1 bullet_dmg_mult=1.5 同步放大", rd1b["deltas"][0], 2.70)
+	var rd1c := _ml_shot("ml_cleaver", [[40.0, 0.0]], "right", "goblin", 99, 0.0, false, {"bullet_scale": 3.0})
+	_ml_assert(_ml_close(float(rd1c["deltas"][0]), 1.80), "D1 bullet_scale 不参与近战伤害", rd1c["deltas"][0], 1.80)
+	var rd2a := _ml_shot("ml_cleaver", [[40.0, 0.0]], "right", "goblin", 99, 0.0)
+	_ml_assert(_ml_close(float(rd2a["deltas"][0]), 1.80), "D2 crit_chance=0 永不暴击", rd2a["deltas"][0], 1.80)
+	pl.crit_chance = 1.0
+	var rd2b := _ml_shot("ml_cleaver", [[40.0, 0.0]], "right", "goblin", 99, 1.0)
+	_ml_assert(_ml_close(float(rd2b["deltas"][0]), 3.60), "D2 crit_chance=1 必暴击（×2.0）", rd2b["deltas"][0], 3.60)
+	_ml_assert(int(rd2a["draws"]) == int(rd2b["draws"]), "D2 暴击与否不改本次动作的 rng 消费数",
+		"%d/%d" % [rd2a["draws"], rd2b["draws"]], "1/1")
+
+	# ── V-D3｜致命共振在近战上的落点（参数逐字对齐 bullet.gd:119 那条）─────────
+	# A＝被挥中的那只（暴击 3.6 ＋ 自家爆炸 2.16），B＝扇外 21px（只吃爆炸，衰减 1-0.4×21/42＝0.8）
+	# ⚠️ crit 两开关必须在 `_ml_equip` **之后**写：那条装备路径会把它钉回 0（V-D2 的反面需要这个默认）。
+	_ml_clear()
+	var eA := _ml_place("goblin", 40.0, 0.0)
+	var eB := _ml_place_at("goblin", eA.global_position + Vector2(21.0, 0.0), "right")
+	var hpA := eA.hp
+	var hpB := eB.hp
+	_ml_equip("ml_cleaver", 99)
+	pl.crit_chance = 1.0
+	pl.crit_boom = true
+	pl._swing()
+	_ml_assert(_ml_close(float(hpA - eA.hp), 5.76), "D3 暴击目标＝近战全额＋自家爆炸", hpA - eA.hp, 5.76)
+	_ml_assert(_ml_close(float(hpB - eB.hp), 1.728), "D3 扇外第二只吃的爆炸伤（系数 0.6×衰减 0.8）",
+		hpB - eB.hp, 1.728)
+	_ml_clear()
+	var eC := _ml_place("goblin", 40.0, 0.0)
+	var eD := _ml_place_at("goblin", eC.global_position + Vector2(21.0, 0.0), "right")
+	var hpD := eD.hp
+	_ml_equip("ml_cleaver", 99)
+	pl.crit_chance = 0.0
+	pl._swing()
+	_ml_assert(_ml_close(float(hpD - eD.hp), 0.0), "D3 非暴击 ⇒ 无爆炸", hpD - eD.hp, 0.0)
+
+	# ── V-D4｜近战一律不吃这六个钩子（挂上后总伤害不变）────────────────────────
+	for hook in [["chain", 1.0], ["poison", 1.0], ["frost", 1.0], ["bounce", 4], ["pierce", 3]]:
+		pl.set(String(hook[0]), hook[1])
+		var rh := _ml_shot("ml_cleaver", [[40.0, 0.0]])
+		_ml_assert(_ml_close(float(rh["deltas"][0]), 1.80), "D4 %s 挂上后近战伤害不变" % String(hook[0]),
+			rh["deltas"][0], 1.80)
+	pl.set("chain", 0.0)
+	pl.set("poison", 0.0)
+	pl.set("frost", 0.0)
+	pl.set("bounce", 0)
+	pl.set("pierce", 0)
+	pl.set_fire = true
+	var rf := _ml_shot("ml_cleaver", [[40.0, 0.0]])
+	_ml_assert(_ml_close(float(rf["deltas"][0]), 1.80), "D4 set_fire 挂上后近战伤害不变", rf["deltas"][0], 1.80)
+	pl.set_fire = false
+	# 🔴 反向断言：⛔ 只测"近战不吃"就收工——那抓不住"为了近战不吃而把弹幕侧一起关掉"的改法。
+	#    弹幕侧六个钩子各留一条源码在场证明（死数＝每串在 bullet.gd 恰 1 次），
+	#    另配一条**真跑**的淬毒回归（下面 await 段），源码门与运行门分开标注。
+	var bsrc := FileAccess.get_file_as_string("res://scripts/bullet.gd")
+	for needle in ["pl.chain_chance > 0.0", "pl.poison_chance > 0.0", "pl.set_fire",
+			"frost > 0.0", "bounce > 0", "pierce > 0"]:
+		_ml_assert(bsrc.count(needle) == 1, "D4 反向·源码 bullet.gd 钩子仍在 [%s]" % needle,
+			bsrc.count(needle), 1)
+
+	# ── V-C1｜配额见底＝架式过载：第 5 次输入不结算、进 0.9s 过载、期间再输入不重置计时
+	_ml_clear()
+	var eX := _ml_place("goblin", 40.0, 0.0)
+	_ml_equip("ml_cleaver", 4)
+	for i in 4:
+		pl._swing()
+	var hpX := eX.hp
+	var reload_seen := float(pl._reload_t)
+	_ml_assert(_ml_close(reload_seen, 0.9), "C1 第 4 发打完进入 0.9s 过载", pl._reload_t, 0.9)
+	pl._swing()
+	_ml_assert(_ml_close(float(hpX - eX.hp), 0.0), "C1 第 5 次输入不结算伤害", hpX - eX.hp, 0.0)
+	var mag_after := int(pl.mag())
+	var t_after := float(pl._reload_t)
+	pl._swing()
+	_ml_assert(int(pl.mag()) == mag_after, "C1 过载期间再输入仍无效（配额不动）", pl.mag(), mag_after)
+	_ml_assert(_ml_close(float(pl._reload_t), t_after), "C1 过载期间再输入不许重置计时", pl._reload_t, t_after)
+
+	# ── V-C3｜弹药荒把近战配额减半（X3 已接受此后果；⛔ 为近战开形态豁免）──────
+	pl.mag_cap_mult = 0.5
+	_ml_assert(pl.mag_cap_of("ml_cleaver") == 2, "C3 scarce_ammo 下阔刃配额 floor(4×0.5)",
+		pl.mag_cap_of("ml_cleaver"), 2)
+	pl.mag_cap_mult = 1.0
+	_ml_assert(pl.mag_cap_of("ml_cleaver") == 4, "C3 系数恢复后配额回 4", pl.mag_cap_of("ml_cleaver"), 4)
+
+	# ── V-C4｜双槽满时捡新武器替换当前槽（give_weapon 现有语义，一行不改）───────
+	_ml_equip("ml_cleaver", 4)
+	pl.weapon_slots[1] = "sp_thorn"
+	pl.give_weapon("sh_bulwark")
+	_ml_assert(String(pl.weapon_slots[0]) == "sh_bulwark" and String(pl.weapon_slots[1]) == "sp_thorn",
+		"C4 双槽满捡新武器＝替换当前槽", "%s/%s" % [pl.weapon_slots[0], pl.weapon_slots[1]],
+		"sh_bulwark/sp_thorn")
+
+	# ── 异步段：C2 复位／C2b 过载中切枪／C4 切换窗／E3 autopilot／D4 反向弹幕 ──────
+	# 🔴 实测教训（#82 首轮红在 measured=0 expect=3）：烟雾台架把 `autopilot` 全程开着（见 stats0
+	#    `auto=true`），await 的那几十帧里玩家会**自己开枪把配额吃掉**——于是"切过去的那把不被误灌"
+	#    看起来像复位灌错了武器。异步段一律先关掉自动驾驶，E3 要的那段再单独打开（下面）。
+	pl.autopilot = false
+	_ml_clear()
+	_ml_equip("ml_cleaver", 1)
+	var eY := _ml_place("goblin", 40.0, 0.0)
+	pl._swing()						# 第 1 发有效 → 配额见底 → 过载
+	_ml_assert(float(pl._reload_t) > 0.0, "C2 过载已开启（await 前置）", pl._reload_t > 0.0, true)
+	var waited := 0
+	while pl._reload_t > 0.0 and waited < 240:
+		await get_tree().physics_frame
+		waited += 1
+	_ml_assert(pl.mag() == pl.mag_cap_of("ml_cleaver"), "C2 过载结束自动复位配额（无需额外操作）",
+		pl.mag(), pl.mag_cap_of("ml_cleaver"))
+	_ml_assert(_ml_close(float(eY.hp), eY.max_hp) or eY.hp > 0.0, "C2 复位期间探针敌人未被打死",
+		eY.hp > 0.0, true)
+	# C2 边界态（口径 V-C2 右栏）：过载中切枪 ⇒ 切枪语义优先，且**复位必须落在起手那把**。
+	# 🔴 这正是 `_start_reload()` 从"回调里取 cur_weapon()"改成"开始时钉 wid"的原因：
+	#    旧写法在这里会把 thorn 的配额灌满、cleaver 永远停在 0（近战卡死在过载）。
+	_ml_equip("ml_cleaver", 1)
+	pl.weapon_slots[1] = "sp_thorn"
+	pl.slot_mags["sp_thorn"] = 3
+	pl._swing()							# 一发打空配额 → 进 0.9s 过载
+	_ml_assert(float(pl._reload_t) > 0.0, "C2b 切枪前过载已开启", pl._reload_t > 0.0, true)
+	pl.swap_weapon()
+	_ml_assert(String(pl.cur_weapon()) == "sp_thorn" and _ml_close(float(pl._reload_t), 0.0),
+		"C2b 过载中切枪：切枪语义优先（_reload_t 归零、当前槽变 thorn）",
+		"%s/%.2f" % [pl.cur_weapon(), pl._reload_t], "sp_thorn/0.00")
+	var waited0 := 0
+	while float(pl.slot_mags["ml_cleaver"]) < 4.0 and waited0 < 240:
+		await get_tree().physics_frame
+		waited0 += 1
+	_ml_assert(int(pl.slot_mags["ml_cleaver"]) == pl.mag_cap_of("ml_cleaver"),
+		"C2b 延时复位落在起手那把（cleaver 回满 4）", pl.slot_mags["ml_cleaver"], 4)
+	_ml_assert(int(pl.slot_mags["sp_thorn"]) == 3, "C2b 切过去的那把不被误灌（thorn 仍是 3）",
+		pl.slot_mags["sp_thorn"], 3)
+	# C2c（主理人核验 §八）：过载中**捡武器**。`give_weapon()` 把 `_reload_t` 清成 0 只是"看起来取消了换弹"，
+	# 它在飞的 `safe_delay` 回调取消不了 ⇒ 旧武器照样被灌满（玩家白得一次复位）。修法＝`_reload_gen` 代数令牌。
+	_ml_equip("ml_cleaver", 1)
+	pl._swing()							# 打掉唯一一发 → 0.9s 过载 + 复位回调已在飞
+	_ml_assert(int(pl.slot_mags["ml_cleaver"]) == 0 and float(pl._reload_t) > 0.0,
+		"C2c 前提守卫·阔刃配额见底且复位确已在飞（令牌已发，⛔ 验效果）",
+		"%s/%s" % [pl.slot_mags["ml_cleaver"], pl._reload_t > 0.0], "0/true")
+	pl.give_weapon("sp_thorn")			# 清 _reload_t ＋ 令牌 +1 ⇒ 旧回调必须自己认账失效
+	var waited5 := 0
+	while waited5 < 120:				# 远超 reload 0.9s（约 54 帧）：给了旧回调充分的落地机会
+		await get_tree().physics_frame
+		waited5 += 1
+	_ml_assert(int(pl.slot_mags["ml_cleaver"]) == 0,
+		"C2c 捡武器后旧 pending 复位不生效（cleaver 在 120 帧后仍停在 0）", pl.slot_mags["ml_cleaver"], 0)
+	_ml_assert(int(pl.slot_mags["sp_thorn"]) == pl.mag_cap_for("sp_thorn"),
+		"C2c 反证·give_weapon 确实执行且配额系统没坏（否则上一条是假绿）",
+		pl.slot_mags["sp_thorn"], pl.mag_cap_for("sp_thorn"))
+	# C4：Q 切换在近战上生效（_swap_t=0.25）＋ 切换窗内不许挥出第一发
+	_ml_equip("ml_cleaver", 4)
+	pl.weapon_slots[1] = "sp_thorn"
+	pl.slot = 0
+	var sw2 := Player.melee_swings
+	pl.autopilot = true
+	pl.swap_weapon()
+	_ml_assert(_ml_close(float(pl._swap_t), 0.25), "C4 近战 Q 切换 _swap_t=0.25", pl._swap_t, 0.25)
+	await get_tree().physics_frame
+	_ml_assert(Player.melee_swings == sw2, "C4 切换窗内（_swap_t>0）不许挥击", Player.melee_swings - sw2, 0)
+	var waited2 := 0
+	while pl._swap_t > 0.0 and waited2 < 120:
+		await get_tree().physics_frame
+		waited2 += 1
+	await get_tree().physics_frame
+	_ml_assert(Player.melee_swings > sw2, "E3／C4 切换完成后 autopilot 挥出近战（分派真走了 _swing）",
+		Player.melee_swings > sw2, true)
+	_ml_assert(Player.melee_rng_draws - s_draws == Player.melee_swings - s_swings,
+		"E3 autopilot 全程 draws==swings",
+		"%d/%d" % [Player.melee_rng_draws - s_draws, Player.melee_swings - s_swings], "相等")
+	# D4 反向·真跑一条：弹幕侧淬毒钩子仍生效（⛔ 只留源码门）
+	pl.autopilot = false
+	pl.poison_chance = 1.0
+	_ml_clear()
+	var eZ := _ml_place("goblin", 90.0, 0.0)
+	eZ.hp = 1.0e9
+	_ml_equip("zhushan", 30)
+	spawn_player_bullet(pl.global_position, Vector2.RIGHT, 300.0, 1.0, 0, Color.WHITE, 1.0)
+	var waited3 := 0
+	while eZ._poison_t <= 0.0 and is_instance_valid(eZ) and waited3 < 120:
+		await get_tree().physics_frame
+		waited3 += 1
+	_ml_assert(is_instance_valid(eZ) and float(eZ._poison_t) > 0.0, "D4 反向·弹幕侧 poison_chance 仍生效",
+		eZ._poison_t if is_instance_valid(eZ) else -1.0, ">0")
+	pl.poison_chance = 0.0
+
+	# ── V-D5｜主动遗物与近战无关（主理人裁定 §五：调用级＋源码级＋段本体反证；⛔ 不开新 env、⛔ 不注输入）──
+	# 状态级用「同帧数空转」当对照（`_ml_relic_decay`）：两趟唯一差别是有没有那四次挥击，
+	# ⇒ 近战若多扣/重置了任何遗物计时，两条轨迹就会分叉。⛔ 去预测精确帧数（信号与 _physics_process 有一帧抖动面）。
+	var dS := await _ml_relic_decay(true)
+	var dN := await _ml_relic_decay(false)
+	_ml_assert(str(dS) == str(dN) and bool(dS["orbit"]) and float(dS["shield_t"]) > 0.0,
+		"D5 四次近战挥击与同帧数空转的主动遗物计时衰减逐字相同（附环盾轨道在场＋计时确在推进两道防空转）",
+		str(dS), str(dN))
+	var d5seg := _ml_src_segment("res://scripts/player.gd", "func _swing()")
+	_ml_assert(not d5seg.contains("relic") and not d5seg.contains("give_player_relic"),
+		"D5 _swing() 源码段内不引用任何遗物入口（盾击不会顺手消耗环盾）", d5seg.count("relic"), 0)
+	_ml_assert(d5seg.contains("take_damage") and d5seg.length() > 200,
+		"D5 反证·该段确为 _swing 本体（⛔ 让上两条退化成空串比空串）",
+		"%d/%s" % [d5seg.length(), d5seg.contains("take_damage")], "%d/true" % d5seg.length())
+
+	_ml_restore_stats(st0)
+	_ml_clear()
+	_spawn_cd = s_spawn
+	Dev.check(_ml_checked == _ML_DECLARED, "melee",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_ml_checked, _ML_DECLARED])
+	print("[SMOKE-MELEE] done checked=%d declared=%d swings_total=%d draws_total=%d" % [
+		_ml_checked, _ML_DECLARED, Player.melee_swings - s_swings, Player.melee_rng_draws - s_draws])
+
+
+# ---------------- Sprint 40 A 组：近战清扫漂浮弹幕运行期探针（SMOKE_SWEEP） ----------------
+## 组织照上面的 `SMOKE_MELEE` 块（主理人 R1 §2-b1 批准落点与本范式），观测面纪律四条：
+##    ①敌弹一律本探针经 `BulletScript.new()`＋`setup(...)` 显式摆：`spawn_enemy_bullet()` 把七个行为参位
+##      钉死为零（P0 盘点：全仓敌弹唯一入口 `game_main.gd:3947`，调用点 slug.gd:180/277/426），
+##      从生产入口出发**造不出** V-S1 要的 8 个反例；
+##    ②每档清扫前把 `Game.rng.state` 钉回 `_SW_STATE0`，⛔ 拿上一档落点当下一档起点（跨摆位的 Δstate 不可比）；
+##    ③几何段⛔ 隔帧：一律同步直调 `pl._swing()`——隔一物理帧 slug 的 AI 会改朝向、玩家也会走位，
+##      扇区就不再是我摆的那个扇区；只有 S7 故意走输入层（`Input.action_press`／`autopilot`），
+##      那是 V-S4 要的「手动路径与 autopilot 路径同权」等价面；
+##    ④`declared` 是循环展开后的实数（V-H #2），末尾自校验不等即红，⛔ 静默漏断言。
+## 🔴 判据独立性（主理人 R1 §2-b2 裁「M-5 让位于单一真源条款」）：本探针**允许**调 `is_sweepable()`，
+##    但「这 8 颗应当不可扫」的期望集在 `_SW_CASES` 里**逐条硬编码**——独立性由摆位方式保证；
+##    ⛔ 在此再抄一遍那七个条件（抄一份＝删哪一项都可能两边同时动，正是 S33「门槛行复制 3 份」那类假绿）。
+const _SW_STATE0 := 20261118
+const _SW_DECLARED := 56
+# 九条摆位＝1 正例 + 7 个行为位反例（各占一位）+ 1 颗「友方全零弹」反例；第三列＝期望「可扫与否」，写死。
+const _SW_CASES := [
+	["S1 正例·全零敌弹", {}, true],
+	["S1 反例①pierce≠0", {"pierce": 1}, false],
+	["S1 反例②explosive≠0", {"explosive": 1.0}, false],
+	["S1 反例③bounce≠0", {"bounce": 1}, false],
+	["S1 反例④frost≠0", {"frost": 0.5}, false],
+	["S1 反例⑤homing", {"homing": true}, false],
+	["S1 反例⑥arc≠0", {"arc": 1}, false],
+	["S1 反例⑦cluster≠0", {"cluster": 1}, false],
+	["S1 反例⑧friendly 全零弹", {"friendly": true}, false],
+]
+
+var _sw_checked := 0
+
+
+## 计数与落盘行照 `_ml_assert`：`[SMOKE-SWEEP] #NN` 一条一行，机检面按标签取数
+func _sw_assert(ok: bool, nn: String, measured, expect) -> void:
+	_sw_checked += 1
+	var m := str(measured)
+	var e := str(expect)
+	Dev.check(ok, "sweep", "%s | measured=%s expect=%s" % [nn, m, e])
+	print("[SMOKE-SWEEP] #%02d %s measured=%s expect=%s ok=%s" % [_sw_checked, nn, m, e, str(ok)])
+
+
+## 摆一颗弹：距玩家 `r`、相对世界角 `ang_deg`（0°＝东＝`_ml_equip` 钉住的那个朝向）张角处的漂浮死物。
+## `ov` 覆盖行为参位 ⇒ V-S1 的七个反例各占一位；`friendly=true` 时**故意**把这颗玩家弹塞进
+## `enemy_bullets` 组——真实路径里友方弹不在该组，塞进来才让 `is_sweepable()` 里 `not friendly`
+## 那一项有牙（删掉它 ⇒ S2「反例仍在树」当场报红，V-S1 反向刀要的正是这个形状）。
+## `life_v` 给到 30s：⛔ 让 `_life -= delta` 的自然过期在异步段里把弹提前收走——那是另一种失效原因，
+## 会冒充「清扫没扫」；`speed=0` 同理（弹不乱跑，接触伤害与 `_impact()` 自毁都排除掉）。
+func _sw_place(r: float, ang_deg: float, ov := {}) -> Bullet:
+	var pl = player
+	var dir := Vector2.from_angle(deg_to_rad(ang_deg))
+	var b := BulletScript.new()
+	b.setup(pl.global_position + dir * r, dir, float(ov.get("speed", 120.0)),
+		float(ov.get("dmg", 1.0)), bool(ov.get("friendly", false)), Color(0.80, 0.45, 1.00), 0.85,
+		int(ov.get("pierce", 0)), float(ov.get("explosive", 0.0)), 30.0,
+		int(ov.get("bounce", 0)), float(ov.get("frost", 0.0)), false, false,
+		bool(ov.get("homing", false)), int(ov.get("arc", 0)), int(ov.get("cluster", 0)))
+	entities.add_child(b)
+	if bool(ov.get("friendly", false)):
+		b.add_to_group("enemy_bullets")
+	return b
+
+
+## 清场：已 `queue_free()` 的弹⛔ 再 `free()`（同帧里它还 `is_instance_valid`），跳过它们并等一物理帧出树
+func _sw_clear() -> void:
+	for b in get_tree().get_nodes_in_group("enemy_bullets"):
+		if is_instance_valid(b) and not b.is_queued_for_deletion():
+			b.free()
+	await get_tree().physics_frame
+
+
+## 「这颗弹已经不在了」的统一观法：同步段里它是 `queued_for_deletion`（queue_free 排到帧尾），
+## 异步段等过一物理帧后节点**已真删**——那时调任何方法都报 "previously freed instance"，
+## 所以必须先 `is_instance_valid` 短路（S6① 第一次跑就撞在这里）。
+## 🔴 参数⛔ 标 `: Bullet`：已释放的实例过不了类型检查（Godot 报 "…is not a subclass of the expected
+##    type"，第二次跑就撞在这），只能收 Variant 并由 `is_instance_valid` 兜住。
+func _sw_gone(b) -> bool:
+	return not is_instance_valid(b) or b.is_queued_for_deletion()
+
+
+## 把弹钉在「玩家身前 `r`、扇心方向」——S7 两条输入路径专用：⛔ 让「玩家走位把弹甩出扇区」这种
+## 与清扫无关的失效冒充红灯（扇区几何由 S3 的同步段负责，本段只证这条代码路径也会扫）
+func _sw_pin_in_sector(b, r: float) -> void:
+	if is_instance_valid(b) and not b.is_queued_for_deletion():
+		b.global_position = player.global_position + player._aim * r
+
+
+## 主探针：S1 谓词 9／S2 扇区清理 11／S3 几何一致 8／S4 rng 守恒 9／S5 计数与配额 11／S6 不串味 4／S7 输入层 4
+func _smoke_sweep_probe() -> void:
+	_sw_checked = 0
+	var pl = player
+	if pl == null or not is_instance_valid(pl) or not Game.playing:
+		Dev.err("sweep", "SMOKE_SWEEP 前置不成立：player=%s playing=%s（整条探针未跑，⛔ 记 PASS）" % [
+			str(pl != null), str(Game.playing)])
+		print("[SMOKE-SWEEP] UNEXECUTED done checked=0 declared=%d" % _SW_DECLARED)
+		return
+	var st0 := _ml_stats()
+	var s_spawn := _spawn_cd
+	var s_state := Game.rng.state
+	_spawn_cd = 1.0e9		# 异步段防刷怪混进扇形（跑完还原）
+	_ml_clear()
+	await _sw_clear()
+	var s_sweep := Player.bullets_swept
+	var s_swings := Player.melee_swings
+	var s_draws := Player.melee_rng_draws
+	var reach_c := float(Weapons.DEFS["ml_cleaver"]["reach"])
+	var reach_b := float(Weapons.DEFS["sh_bulwark"]["reach"])
+	print("[SMOKE-SWEEP] base0 reach(cleaver/bulwark)=%.0f/%.0f swept=%d swings=%d draws=%d state=%d" % [
+		reach_c, reach_b, Player.bullets_swept, Player.melee_swings, Player.melee_rng_draws, s_state])
+
+	# ── S1｜谓词面（9 条）＋ S2｜扇区清理面（11 条）：同一批摆位跑两面，⛔ 给判据换现场 ──
+	var made: Array[Bullet] = []
+	for c in _SW_CASES:
+		made.append(_sw_place(20.0, 0.0, c[1]))
+	for i in _SW_CASES.size():
+		var want: bool = bool(_SW_CASES[i][2])
+		_sw_assert(made[i].is_sweepable() == want, "%s（oracle 与硬编码期望同号）" % String(_SW_CASES[i][0]),
+			made[i].is_sweepable(), want)
+	_ml_equip("ml_cleaver", 4)
+	var s2_base := Player.bullets_swept
+	pl._swing()
+	_sw_assert(made[0].is_queued_for_deletion(), "S2 正例（全零敌弹）已被刃风排掉",
+		made[0].is_queued_for_deletion(), true)
+	for i in range(1, _SW_CASES.size()):
+		_sw_assert(not made[i].is_queued_for_deletion(),
+			"S2 %s 仍在树（携带机制的弹⛔ 被刃风吃掉）" % String(_SW_CASES[i][0]),
+			made[i].is_queued_for_deletion(), false)
+	_sw_assert(Player.bullets_swept - s2_base == 1, "S2 bullets_swept 增量恰为 1（⛔ 把反例也计进去）",
+		Player.bullets_swept - s2_base, 1)
+	_sw_assert(Player.last_sweep_count == 1, "S2 last_sweep_count==最近一次的清扫数",
+		Player.last_sweep_count, 1)
+	await _sw_clear()
+
+	# ── S3｜几何一致（8 条）：清扫扇区必须**等于**伤害扇区，⛔ 另立第二套半径/半角常数 ──
+	# ①②夹在两把武器 reach 之间的那颗：bulwark(34) 扫不到、cleaver(46) 扫得到 ⇒ 清扫范围确实随武器变
+	var mid_r := (reach_b + reach_c) * 0.5
+	var b1 := _sw_place(mid_r, 0.0)
+	_ml_equip("sh_bulwark", 3)
+	pl._swing()
+	_sw_assert(not b1.is_queued_for_deletion(), "S3 %.1fpx 的弹：bulwark(reach %.0f) 扫不到" % [mid_r, reach_b],
+		b1.is_queued_for_deletion(), false)
+	_ml_equip("ml_cleaver", 4)
+	pl._swing()
+	_sw_assert(b1.is_queued_for_deletion(), "S3 同一颗弹：cleaver(reach %.0f) 扫得到（两把武器不同范围）" % reach_c,
+		b1.is_queued_for_deletion(), true)
+	await _sw_clear()
+	# ③恰在 reach 上＝含等号（与 enemies 循环同式 `> reach → continue`，边界登记）
+	var b2 := _sw_place(reach_c, 0.0)
+	_ml_equip("ml_cleaver", 4)
+	pl._swing()
+	_sw_assert(b2.is_queued_for_deletion(), "S3 恰在 reach=%.0f 上的弹被扫（含等号）" % reach_c,
+		b2.is_queued_for_deletion(), true)
+	await _sw_clear()
+	# ④±180° 环绕：玩家朝东（`_aim` 钉 0°）、弹在西偏北 1° ⇒ ⛔ 读成扇内（裸减法会把它算进去）
+	var b3 := _sw_place(reach_c * 0.5, 179.0)
+	_ml_equip("ml_cleaver", 4)
+	pl._swing()
+	_sw_assert(not b3.is_queued_for_deletion(), "S3 西偏北 1°（角差 179°＞半角 55°）不在扇内",
+		b3.is_queued_for_deletion(), false)
+	await _sw_clear()
+	# ⑤⑥半角两侧（bulwark arc_deg=150 ⇒ 半角 75°；半径取 reach 的 0.6 倍排除半径干扰）
+	var b4 := _sw_place(reach_b * 0.6, 74.0)
+	_ml_equip("sh_bulwark", 3)
+	pl._swing()
+	_sw_assert(b4.is_queued_for_deletion(), "S3 74°（＜半角 75°）在扇内", b4.is_queued_for_deletion(), true)
+	var b5 := _sw_place(reach_b * 0.6, 80.0)
+	_ml_equip("sh_bulwark", 3)
+	pl._swing()
+	_sw_assert(not b5.is_queued_for_deletion(), "S3 80°（＞半角）不在扇内", b5.is_queued_for_deletion(), false)
+	await _sw_clear()
+	# ⑦⑧怪与弹同位同距：一次挥击**同时**打怪与扫弹（⛔ 「扫到弹就不打人」的互斥实现）
+	var e7 := _ml_place("goblin", 20.0, 0.0)
+	var hp7 := float(e7.hp)
+	var b6 := _sw_place(20.0, 0.0)
+	_ml_equip("ml_cleaver", 4)
+	pl._swing()
+	_sw_assert(float(e7.hp) < hp7, "S3 混战同拍：敌人掉血",
+		float(e7.hp) if is_instance_valid(e7) else -1.0, "<%.1f" % hp7)
+	_sw_assert(b6.is_queued_for_deletion(), "S3 混战同拍：同位同距的弹也被扫（互不阻断）",
+		b6.is_queued_for_deletion(), true)
+	_ml_clear()
+	await _sw_clear()
+
+	# ── S4｜rng 守恒（9 条）：V-S3 判据①——清扫 N 颗不改变主流落点；N∈{0,1,5,20} ──
+	_ml_equip("ml_cleaver", 99)
+	var s4_sw0 := Player.melee_swings
+	var s4_dr0 := Player.melee_rng_draws
+	var ref_state := 0
+	for n in [0, 1, 5, 20]:
+		await _sw_clear()
+		for i in n:
+			_sw_place(18.0, 0.0)
+		Game.rng.state = _SW_STATE0
+		var seed0 := Game.rng.seed
+		var st_a := Game.rng.state
+		var s4_sw := Player.melee_swings
+		var s4_dr := Player.melee_rng_draws
+		var s4_sp := Player.bullets_swept
+		pl._swing()
+		var st_b := Game.rng.state
+		print("[SMOKE-SWEEP] SW-RNG N=%d seed=%d->%d state=%d->%d swept+%d swings+%d draws+%d" % [
+			n, seed0, Game.rng.seed, st_a, st_b, Player.bullets_swept - s4_sp,
+			Player.melee_swings - s4_sw, Player.melee_rng_draws - s4_dr])
+		_sw_assert(Game.rng.seed == seed0, "S4 N=%d 清扫前后 seed 逐字不变" % n, Game.rng.seed, seed0)
+		if n == 0:
+			ref_state = st_b		# 参考档＝一颗都没扫的那次落点（⛔ 与自身比＝常量自比较）
+		else:
+			_sw_assert(int(st_b) == ref_state,
+				"S4 N=%d 落点 state==N=0 参考档落点 ⇒ 清扫颗数不进主流序列" % n, st_b, ref_state)
+	_sw_assert(Player.melee_rng_draws - s4_dr0 == Player.melee_swings - s4_sw0,
+		"S4 四档全程 draws 增量==swings 增量（V-S3 判据②：抽取只跟挥击走）",
+		"%d/%d" % [Player.melee_rng_draws - s4_dr0, Player.melee_swings - s4_sw0], "相等")
+	var sw_src := _ml_src_segment("res://scripts/player.gd", "func _swing()")
+	var sw_cut := sw_src.substr(maxi(sw_src.find("is_sweepable"), 0))
+	_sw_assert(sw_src.find("is_sweepable") >= 0 and not sw_cut.contains("Game.rng"),
+		"S4 清扫段源码零 Game.rng（V-S3 反证面第③条：⛔ 命中相关的抽取）", sw_cut.count("Game.rng"), 0)
+	await _sw_clear()
+
+	# ── S5｜计数与配额（11 条）：V-S4 各行＋主理人 R1 §2-b3 的过载五条 ──
+	# 空挥：扇区内没弹 ⇒ 仍算一次动作（swings+1、draws+1），但 swept 增量为 0
+	var s5_sw := Player.melee_swings
+	var s5_dr := Player.melee_rng_draws
+	var s5_sp := Player.bullets_swept
+	_ml_equip("ml_cleaver", 4)
+	pl._swing()
+	_sw_assert(Player.melee_swings - s5_sw == 1, "S5 空挥仍算一次动作", Player.melee_swings - s5_sw, 1)
+	_sw_assert(Player.bullets_swept - s5_sp == 0, "S5 空挥 swept+0（⛔ 空挥也抽一次＝HP-3 禁的第③条）",
+		Player.bullets_swept - s5_sp, 0)
+	# 同一物理帧 5 颗 ⇒ 增量恰为 5（⛔ 每帧上限、⛔ 只清最近一颗）
+	for i in 5:
+		_sw_place(20.0, float(i) * 8.0 - 16.0)
+	var s5_sp2 := Player.bullets_swept
+	_ml_equip("ml_cleaver", 4)
+	pl._swing()
+	_sw_assert(Player.bullets_swept - s5_sp2 == 5, "S5 同帧 5 颗一次挥击全清（增量恰为 5）",
+		Player.bullets_swept - s5_sp2, 5)
+	_sw_assert(Player.last_sweep_count == 5, "S5 last_sweep_count 跟到最近一次的 5", Player.last_sweep_count, 5)
+	# 过载早退五条（R1 §2-b3 逐字）：清扫必须排在 `_swing()` 的过载 return **之后** ⇒ 白嫖清场成立即红
+	await _sw_clear()
+	_ml_equip("ml_cleaver", 0)
+	var b7 := _sw_place(20.0, 0.0)
+	var s7_sp := Player.bullets_swept
+	var s7_sw := Player.melee_swings
+	var s7_dr := Player.melee_rng_draws
+	pl._swing()
+	_sw_assert(Player.bullets_swept - s7_sp == 0, "S5 过载那一拍 swept 增量==0（⛔ 白嫖清场）",
+		Player.bullets_swept - s7_sp, 0)
+	_sw_assert(Player.melee_swings - s7_sw == 0, "S5 过载那一拍不算一次动作（swings+0，N7/V-C1）",
+		Player.melee_swings - s7_sw, 0)
+	_sw_assert(Player.melee_rng_draws - s7_dr == 0, "S5 过载那一拍零主流抽取（draws+0）",
+		Player.melee_rng_draws - s7_dr, 0)
+	_sw_assert(float(pl._reload_t) > 0.0, "S5 过载早退确实走进 _start_reload()", pl._reload_t, ">0")
+	# 🔴 正向命名（主理人 A 组核验件收的一条）：这条过去印的是 `measured=false expect=false`——
+	#    "假＝好"，读日志的人得先在脑子里取一次反；被刀咬红时面上写 `measured=true`，看着像"弹没了"，
+	#    而 true 在那一刻的含义恰恰相反。改名 `bullet_still_in_tree` 后判据与文案同向。
+	var bullet_still_in_tree := not b7.is_queued_for_deletion()
+	_sw_assert(bullet_still_in_tree, "S5 过载那一拍扇区里的弹仍在（清扫排在 return 之后）",
+		bullet_still_in_tree, true)
+	# 过载的另半边（V-S4 第 4 行）：skill_active 时照常清理**且**不扣配额（免配额≠配额归零）
+	await _sw_clear()
+	_ml_equip("ml_cleaver", 0)
+	for i in 3:
+		_sw_place(20.0, float(i) * 10.0 - 10.0)
+	pl.skill_cd = 0.0
+	pl.activate_skill()
+	var s5_sp3 := Player.bullets_swept
+	pl._swing()
+	_sw_assert(Player.bullets_swept - s5_sp3 == 3 and pl.skill_active(),
+		"S5 skill_active 时照常清理（与近战伤害同权；附「过载技能真开着」防空转）",
+		"%d/%s" % [Player.bullets_swept - s5_sp3, str(pl.skill_active())], "3/true")
+	_sw_assert(int(pl.slot_mags["ml_cleaver"]) == 0, "S5 skill_active 不扣配额（本来就 0，⛔ 扣成负数）",
+		pl.slot_mags["ml_cleaver"], 0)
+	pl.skill_t = 0.0
+	await _sw_clear()
+
+	# ── S6｜不与既有系统串味（4 条）：V-S5 环盾行＋A6（⛔ 用清扫触发 ON_SHIELD_BREAK） ──
+	# 环盾全程**开着**（`relic_shield_t=5.0`）：阴性那条才有牙——不是「盾没开所以没触发」的前提守卫型恒过
+	var sv_shield_t := float(pl.relic_shield_t)
+	var sv_suffix = pl.relic_suffixes.get("orb_shield", null)
+	var sv_cd = pl._suffix_cds.get("s_frostburst", null)
+	pl.relic_suffixes["orb_shield"] = "s_frostburst"
+	pl._suffix_cds.erase("s_frostburst")
+	pl.relic_shield_t = 5.0
+	# ①阳性对照：环盾吃掉 64px 内的弹 ⇒ `suffix_fires` 这本账确实会动
+	var bp := _sw_place(20.0, 0.0, {"speed": 0.0})
+	var o1 := int(_oath_counters.get("suffix_fires", 0))
+	await get_tree().physics_frame
+	var d1 := int(_oath_counters.get("suffix_fires", 0)) - o1
+	_sw_assert(d1 == 1 and _sw_gone(bp),
+		"S6 阳性对照：环盾吃弹确实记一次 suffix_fires（⛔ 让下一条的==0 是假绿）",
+		"%d/%s" % [d1, str(_sw_gone(bp))], "1/true")
+	await _sw_clear()
+	# ②阴性：同样位置、同样三颗，但抢在盾结算之前（同步段零物理帧）被刃风吃掉 ⇒ 词缀一次都不许触发
+	for i in 3:
+		_sw_place(20.0, float(i) * 12.0 - 12.0, {"speed": 0.0})
+	var o2 := int(_oath_counters.get("suffix_fires", 0))
+	var s6_sp := Player.bullets_swept
+	_ml_equip("ml_cleaver", 99)
+	pl._swing()
+	var d2 := int(_oath_counters.get("suffix_fires", 0)) - o2
+	_sw_assert(d2 == 0 and Player.bullets_swept - s6_sp == 3,
+		"S6 近战清弹不触发 ON_SHIELD_BREAK 词缀，且三颗真被扫走（两本账各记各的）",
+		"%d/%d" % [d2, Player.bullets_swept - s6_sp], "0/3")
+	# ③双计闸：同帧里已被 `queue_free()`（＝模拟环盾刚吃掉）的弹仍在组内、`is_instance_valid` 仍为真
+	#    ⇒ 刃风⛔ 再计一次。这条同时钉住实现里那个 `is_queued_for_deletion()`：删掉它增量变 1 ⇒ 红
+	var bq := _sw_place(20.0, 0.0, {"speed": 0.0})
+	bq.queue_free()
+	var s6_sp2 := Player.bullets_swept
+	pl._swing()
+	_sw_assert(Player.bullets_swept - s6_sp2 == 0,
+		"S6 已被环盾排队删除的弹不被刃风二次计数（is_instance_valid 挡不住）",
+		Player.bullets_swept - s6_sp2, 0)
+	await get_tree().physics_frame
+	_sw_assert(_ml_count_bullets() == 0, "S6 被清扫的弹确实出了 enemy_bullets 组（⛔ 靠残留撑上一条）",
+		_ml_count_bullets(), 0)
+	pl.relic_shield_t = sv_shield_t
+	if sv_suffix == null:
+		pl.relic_suffixes.erase("orb_shield")
+	else:
+		pl.relic_suffixes["orb_shield"] = sv_suffix
+	if sv_cd == null:
+		pl._suffix_cds.erase("s_frostburst")
+	else:
+		pl._suffix_cds["s_frostburst"] = sv_cd
+
+	# ── S7｜两条输入路径同权（4 条）：V-S4 的 autopilot 行＋R1 §2-b1「驱动方式优先走输入层」 ──
+	# 🔴 本段⛔ 直调 `_swing()`：手动＝喂 `Input.action_press("shoot")` 让 `_update_aim_and_fire` 自己分派；
+	#    autopilot＝E3 走过的那同一条分派。弹每帧钉在扇心，排除走位假红（几何由 S3 负责）。
+	await _sw_clear()
+	_ml_equip("ml_cleaver", 99)
+	var s7b_sw := Player.melee_swings
+	var s7b_dr := Player.melee_rng_draws
+	var s7b_sp := Player.bullets_swept
+	pl.autopilot = false
+	var bm := _sw_place(20.0, 0.0, {"speed": 0.0, "dmg": 0.0})
+	Input.action_press("shoot")
+	var w0 := 0
+	while Player.bullets_swept == s7b_sp and w0 < 90:
+		await get_tree().physics_frame
+		w0 += 1
+		_sw_pin_in_sector(bm, 20.0)
+	Input.action_release("shoot")
+	_sw_assert(Player.melee_swings - s7b_sw > 0,
+		"S7 前置·手动输入层确实挥出了击（⛔ 让下一条因一次没挥而假绿）", Player.melee_swings - s7b_sw, ">0")
+	_sw_assert(Player.bullets_swept - s7b_sp > 0, "S7 手动（Input.action_press 射击）那一拍同样清扫",
+		Player.bullets_swept - s7b_sp, ">0")
+	await _sw_clear()
+	var eg := _ml_place("goblin", 52.0, 0.0)		# autopilot 要 `_nearest_enemy()` 非空才开火
+	var s7c_sw := Player.melee_swings
+	var s7c_sp := Player.bullets_swept
+	var ba := _sw_place(20.0, 0.0, {"speed": 0.0, "dmg": 0.0})
+	pl.autopilot = true
+	var w1 := 0
+	while Player.bullets_swept == s7c_sp and w1 < 90:
+		await get_tree().physics_frame
+		w1 += 1
+		_sw_pin_in_sector(ba, 20.0)
+	pl.autopilot = false
+	_sw_assert(Player.bullets_swept - s7c_sp > 0, "S7 autopilot（E3 同一条分派）那一拍同样清扫",
+		Player.bullets_swept - s7c_sp, ">0")
+	_sw_assert(Player.melee_rng_draws - s7b_dr == Player.melee_swings - s7b_sw,
+		"S7 两条输入路径全程 draws==swings",
+		"%d/%d" % [Player.melee_rng_draws - s7b_dr, Player.melee_swings - s7b_sw], "相等")
+	_ml_clear()
+	await _sw_clear()
+
+	Game.rng.state = s_state
+	_ml_restore_stats(st0)
+	_spawn_cd = s_spawn
+	Dev.check(_sw_checked == _SW_DECLARED, "sweep",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_sw_checked, _SW_DECLARED])
+	print("[SMOKE-SWEEP] done checked=%d declared=%d swept_total=%d swings_total=%d draws_total=%d" % [
+		_sw_checked, _SW_DECLARED, Player.bullets_swept - s_sweep,
+		Player.melee_swings - s_swings, Player.melee_rng_draws - s_draws])
+
+
+# ---------------- Sprint 40 C 组：盾三层窗口 ＋ 眩晕的运行期探针（SMOKE_PARRY） ----------------
+## 组织照上面的 `_smoke_sweep_probe`，摆位工具**复用** `_sw_place`/`_sw_clear`/`_sw_gone` 与
+## `_ml_equip`/`_ml_place`/`_ml_clear`/`_ml_src_segment`（⛔ 复制第二份摆位代码＝两处各自腐烂）。
+## 观测面纪律四条：
+##    ①本探针 `autopilot=false`——窗口帧数与结算次数都要我摆我数，⛔ 让 autopilot 自己那一发挥击／
+##      走位混进账（它还会抽主流 rng，P6 的守恒面当场花）；跑完由 `st0` 还原。
+##    ②几何面与优先级面**同步直调** `pl._update_shield_scan()`：隔一帧就混进真管线那一跑，两套账。
+##    ③帧计数面（P2/P4 松开/P8/P9）**必须真等物理帧**——递减发生在 `_physics_process`，
+##      直调永远证不了「每拍减一」；这条与 ②是反着用的两把锁，⛔ 拿②的面冒充③。
+##    ④`declared` 是循环展开后的实数，末尾自校验不等即红，⛔ 静默漏断言（V-H #2）。
+## 🔴 判据独立性：P3/P6 里「不可清扫＝不可盾反」的期望集用**摆位方式**硬编码（pierce=1 那颗、
+##    塞进 `enemy_bullets` 的友方那颗），⛔ 在探针里再抄一遍 `is_sweepable()` 的七个条件（M-5 例外条款同 A 组）。
+const _PD_STATE0 := 20261119
+const _PD_DECLARED := 70
+
+var _pd_checked := 0
+
+
+## 落盘行照 `_sw_assert`：`[SMOKE-PARRY] #NN` 一条一行，机检面按标签取数
+func _pd_assert(ok: bool, nn: String, measured, expect) -> void:
+	_pd_checked += 1
+	var m := str(measured)
+	var e := str(expect)
+	Dev.check(ok, "parry", "%s | measured=%s expect=%s" % [nn, m, e])
+	print("[SMOKE-PARRY] #%02d %s measured=%s expect=%s ok=%s" % [_pd_checked, nn, m, e, str(ok)])
+
+
+## 把盾的三层窗口钉回「刚起手」态：P3~P7 每个同步面开头都要调一次，
+## ⛔ 让上一面残留的冷却/帧数决定这一面走 PARRY 还是 BLOCK（那是最阴的假绿：两面互相喂状态）。
+func _pd_open(pl, frames: int) -> void:
+	pl._stance_t = 1.0
+	pl._parry_frames_left = frames
+	pl._parry_hit_cd = 0
+
+
+func _smoke_parry_probe() -> void:
+	_pd_checked = 0
+	var pl = player
+	if pl == null or not is_instance_valid(pl) or not Game.playing:
+		Dev.err("parry", "SMOKE_PARRY 前置不成立：player=%s playing=%s（整条探针未跑，⛔ 记 PASS）" % [
+			str(pl != null), str(Game.playing)])
+		print("[SMOKE-PARRY] UNEXECUTED done checked=0 declared=%d" % _PD_DECLARED)
+		return
+	var st0 := _ml_stats()
+	var s_spawn := _spawn_cd
+	var s_state := Game.rng.state
+	var s_auto := bool(pl.autopilot)
+	var s_shield_t := float(pl.relic_shield_t)
+	var s_invuln := float(pl._invuln_t)
+	var s_charges := int(pl.shield_charges)
+	var s_locked := bool(pl.control_locked)
+	var s_mortal := bool(pl._immortal)
+	var s_ward := bool(pl.sigil_ward)
+	var s_abyss := float(abyss_dmg_mult)
+	var s_frames_left := int(pl._parry_frames_left)
+	var s_hit_cd := int(pl._parry_hit_cd)
+	var s_stance := float(pl._stance_t)
+	# 🔴 `_ml_equip()` 会把 `slot_mags` 整表清空、覆写 `weapon_slots[0..1]` 与四个时序基准
+	#    （见 :4826）——`_ml_restore_stats()` 那张表全是玩家乘区，管不到这些 ⇒ 武器账另存另还，
+	#    ⛔ 探针跑完玩家手里还端着稳壁、弹仓是空的（同进程后面的 `[SMOKE]` 面就在这张残桌上继续跑）。
+	var s_slots: Array = pl.weapon_slots.duplicate(true)
+	var s_slot := int(pl.slot)
+	var s_mags: Dictionary = pl.slot_mags.duplicate(true)
+	var s_reload := float(pl._reload_t)
+	var s_cd := float(pl._fire_cd)
+	var s_swap := float(pl._swap_t)
+	var s_aim: Vector2 = pl._aim
+	_spawn_cd = 1.0e9		# 异步段防刷怪混进来（跑完还原）
+	_ml_clear()
+	await _sw_clear()
+	pl.autopilot = false
+	pl.relic_shield_t = 0.0
+	pl._invuln_t = 0.0
+	pl.shield_charges = 0
+	pl.control_locked = false
+	pl._immortal = false
+	pl.sigil_ward = false
+	abyss_dmg_mult = 1.0
+	var reach_b := float(Weapons.DEFS["sh_bulwark"]["reach"])
+	var p_parry0 := Player.parry_count
+	var p_block0 := Player.block_count
+	var p_abs0 := Player.shield_absorbed_dmg
+	var p_hp0 := int(pl.hp)
+	pl.hp = 20	# 垫高：本探针要真吞两发减伤弹（P4 环/P7 重弹），⛔ 让"恰好被打死"把后面的面全带走；收尾按 p_hp0 还原真值
+	print("[SMOKE-PARRY] base0 reach(bulwark)=%.0f PARRY_FRAMES=%d PARRY_HIT_CD=%d BLOCK_MULT=%.2f parry=%d block=%d abs=%d hp=%d" % [
+		reach_b, Player.PARRY_FRAMES, Player.PARRY_HIT_CD, Player.BLOCK_MULT,
+		Player.parry_count, Player.block_count, Player.shield_absorbed_dmg, p_hp0])
+
+	# ── P1｜三层谓词真值表（10 条）：RAISE/PARRY/BLOCK 的互斥与 kind 闸在最前 ──
+	_ml_equip("sh_bulwark", 30)
+	pl._stance_t = 0.0
+	pl._parry_frames_left = 0
+	pl._parry_hit_cd = 0
+	_pd_assert(not pl._shield_raise(), "P1 架式关（_stance_t=0）⇒ RAISE 假", pl._shield_raise(), false)
+	_pd_assert(not pl._shield_parry(), "P1 RAISE 假 ⇒ PARRY 假（⛔ 完美窗单独活着）", pl._shield_parry(), false)
+	_pd_assert(not pl._shield_block(), "P1 RAISE 假 ⇒ BLOCK 假", pl._shield_block(), false)
+	pl._stance_open()
+	_pd_assert(pl._shield_raise(), "P1 起手拍 shieldbash ∧ _stance_t>0 ⇒ RAISE 真", pl._shield_raise(), true)
+	_pd_assert(pl._shield_parry(), "P1 起手拍 ⇒ PARRY 真（裁定件 C1「起手即开窗」）", pl._shield_parry(), true)
+	_pd_assert(not pl._shield_block(), "P1 PARRY 真 ⇒ BLOCK 假（宽窄两层互斥）", pl._shield_block(), false)
+	pl._parry_frames_left = 0
+	_pd_assert(not pl._shield_parry(), "P1 完美窗耗尽 ⇒ PARRY 假", pl._shield_parry(), false)
+	_pd_assert(pl._shield_block(), "P1 RAISE ∧ not PARRY ⇒ BLOCK 真（架式还没到期就还有宽窗）",
+		pl._shield_block(), true)
+	_ml_equip("ml_cleaver", 30)
+	pl._stance_t = 1.0
+	pl._parry_frames_left = Player.PARRY_FRAMES
+	_pd_assert(not pl._shield_raise(), "P1 双账反证：cleaver 就算架式开着也⛔ 举盾（kind 闸）",
+		pl._shield_raise(), false)
+	_pd_assert(not pl._shield_parry(), "P1 双账反证：kind 闸 ⇒ PARRY 同假（⛔「架式已关、窗还开着」）",
+		pl._shield_parry(), false)
+
+	# ── P2｜窗长＝整整 12 物理帧（7 条）：起手拍读 12、逐拍减一、十二拍归零 ──
+	_ml_equip("sh_bulwark", 30)
+	_pd_assert(round(0.20 / Game.FIXED_DT) == float(Player.PARRY_FRAMES),
+		"P2 换算校验 M-2：round(0.20/(1/60))==PARRY_FRAMES",
+		round(0.20 / Game.FIXED_DT), float(Player.PARRY_FRAMES))
+	pl._stance_t = 0.0
+	pl._parry_frames_left = 0
+	var p2_dr0 := Player.melee_rng_draws
+	pl._swing()
+	_pd_assert(int(pl._parry_frames_left) == Player.PARRY_FRAMES,
+		"P2 起手那一拍计数器＝12（递减闸排在 aim_and_fire **之前**才成立；排在后面会被自己减成 11）",
+		pl._parry_frames_left, Player.PARRY_FRAMES)
+	_pd_assert(pl._shield_parry(), "P2 起手拍 PARRY 真", pl._shield_parry(), true)
+	await get_tree().physics_frame
+	_pd_assert(int(pl._parry_frames_left) == Player.PARRY_FRAMES - 1,
+		"P2 一等拍后＝11（每拍恰减 1，⛔ 一拍减两下或按 delta 连续衰减）",
+		pl._parry_frames_left, Player.PARRY_FRAMES - 1)
+	for i in 11:
+		await get_tree().physics_frame
+	_pd_assert(int(pl._parry_frames_left) == 0, "P2 共十二拍后窗归零（⛔ 提前、⛔ 拖后）",
+		pl._parry_frames_left, 0)
+	_pd_assert(not pl._shield_parry(), "P2 窗尽 ⇒ PARRY 假", pl._shield_parry(), false)
+	_pd_assert(pl._shield_raise() and pl._shield_block(),
+		"P2 窗尽但 0.90s 架式未到期 ⇒ RAISE/BLOCK 仍真（宽窗比窄窗长是本设计的核心不对称）",
+		"%s/%s" % [str(pl._shield_raise()), str(pl._shield_block())], "true/true")
+
+	# ── P3｜盾反结算面（11 条）：一颗 PARRY 窗口内的弹该发生什么、不该发生什么 ──
+	pl._parry_hit_cd = 0
+	var p3_pr := Player.parry_count
+	var p3_bl := Player.block_count
+	var p3_abs := Player.shield_absorbed_dmg
+	var p3_hp := int(pl.hp)
+	var p3_dr := Player.melee_rng_draws
+	var b1 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 2.0})
+	_pd_open(pl, Player.PARRY_FRAMES)
+	pl._update_shield_scan()
+	_pd_assert(b1.is_queued_for_deletion(), "P3 PARRY 窗口内的弹被吃掉",
+		b1.is_queued_for_deletion(), true)
+	_pd_assert(Player.parry_count - p3_pr == 1, "P3 parry_count 恰 +1",
+		Player.parry_count - p3_pr, 1)
+	_pd_assert(Player.block_count - p3_bl == 0, "P3 同一颗⛔ 既算盾反又算硬格",
+		Player.block_count - p3_bl, 0)
+	_pd_assert(Player.shield_absorbed_dmg - p3_abs == 0, "P3 PARRY 不结算伤害 ⇒ 吸收数不动（⛔ 把免伤记成吸收）",
+		Player.shield_absorbed_dmg - p3_abs, 0)
+	_pd_assert(int(pl.hp) == p3_hp, "P3 盾反那一拍玩家不掉血", pl.hp, p3_hp)
+	_pd_assert(int(pl._parry_hit_cd) == Player.PARRY_HIT_CD,
+		"P3 盾反把冷却武装成正号（正＝归盾反，负＝归硬格；一字段两态，⛔ 第二个 bool 位）",
+		pl._parry_hit_cd, Player.PARRY_HIT_CD)
+	_pd_assert(Player.melee_rng_draws - p3_dr == 0, "P3 结算段零主流抽取（V-P4：返还弹也零抽取的那条同源）",
+		Player.melee_rng_draws - p3_dr, 0)
+	p3_dr = Player.melee_rng_draws
+	pl._swing()
+	_pd_assert(Player.melee_rng_draws - p3_dr == 1, "P3 同段里 `_swing()` 仍恒 1 抽（盾反没把近战口径带跑）",
+		Player.melee_rng_draws - p3_dr, 1)
+	await _sw_clear()
+	var out := _sw_place(reach_b + 2.0, 0.0, {"speed": 0.0})
+	_pd_open(pl, Player.PARRY_FRAMES)
+	pl._update_shield_scan()
+	_pd_assert(not out.is_queued_for_deletion(),
+		"P3 reach+2 之外的弹⛔ 被盾吃掉（范围只认这面盾的 reach=%.0f，⛔ 另立第二个半径常数）" % reach_b,
+		out.is_queued_for_deletion(), false)
+	var lp := _sw_place(18.0, 0.0, {"speed": 0.0, "pierce": 1})
+	var fr := _sw_place(18.0, 90.0, {"speed": 0.0, "friendly": true})
+	pl._update_shield_scan()
+	_pd_assert(not lp.is_queued_for_deletion(),
+		"P3 不可清扫的弹＝不可盾反（T_LASER 与 §2.1 互补，判据同引 is_sweepable）",
+		lp.is_queued_for_deletion(), false)
+	_pd_assert(not fr.is_queued_for_deletion(), "P3 塞进 enemy_bullets 的友方弹⛔ 被盾反处理",
+		fr.is_queued_for_deletion(), false)
+	await _sw_clear()
+
+	# ── P4｜C2 冷却闸（7 条）：一次窗口最多 2 次结算＝PARRY 一颗 ＋ BLOCK 一颗 ──
+	var c1 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 1.0})
+	_pd_open(pl, Player.PARRY_FRAMES)
+	pl._update_shield_scan()
+	_pd_assert(c1.is_queued_for_deletion() and int(pl._parry_hit_cd) == Player.PARRY_HIT_CD,
+		"P4 第 1 颗走 PARRY 并武装 +6",
+		"%s/%d" % [str(c1.is_queued_for_deletion()), pl._parry_hit_cd], "true/%d" % Player.PARRY_HIT_CD)
+	var c2 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 1.0})
+	pl._update_shield_scan()
+	_pd_assert(c2.is_queued_for_deletion(),
+		"P4 冷却内的第 2 颗走 BLOCK（⛔「窗口明明开着、第二颗穿过来打脸」那种读不懂的失败）",
+		c2.is_queued_for_deletion(), true)
+	_pd_assert(int(pl._parry_hit_cd) == -Player.PARRY_HIT_CD, "P4 硬格把冷却改判成负号",
+		pl._parry_hit_cd, -Player.PARRY_HIT_CD)
+	var c3 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 1.0})
+	pl._update_shield_scan()
+	_pd_assert(not c3.is_queued_for_deletion(),
+		"P4 硬格冷却内的第 3 颗⛔ 再进 BLOCK 结算（C2 第 3 条：防 ×BLOCK_MULT 连乘）",
+		c3.is_queued_for_deletion(), false)
+	await _sw_clear()
+	# 🔴 重新取基线：c1/c2/c3 已经各记了一笔（parry＋block 各 1），⛔ 沿用 5925 行那两个旧值——
+	#    那会让环场面读成"增量 2"，把「一次窗口只吃 2 颗」这条自己判红。
+	var p4r_pr := Player.parry_count
+	var p4r_bl := Player.block_count
+	var ring: Array = []
+	for i in 8:
+		ring.append(_sw_place(18.0, float(i) * 45.0, {"speed": 0.0, "dmg": 2.0}))
+	_pd_open(pl, Player.PARRY_FRAMES)
+	pl._update_shield_scan()
+	var alive := 0
+	for x in ring:
+		if not x.is_queued_for_deletion():
+			alive += 1
+	_pd_assert(alive == 6, "P4 八向环撞同一次举盾：存活 6 颗（一次窗口只吃 2 颗）", alive, 6)
+	_pd_assert(Player.parry_count - p4r_pr == 1, "P4 八向环：parry_count 只 +1",
+		Player.parry_count - p4r_pr, 1)
+	_pd_assert(Player.block_count - p4r_bl == 1,
+		"P4 八向环：block_count 只 +1（⛔ 连乘八次＝变相全免，正是 C2 否掉「窗口内全吃」的理由）",
+		Player.block_count - p4r_bl, 1)
+	await _sw_clear()
+
+	# ── P5｜环盾让路（5 条）：实稿 §3.2 步骤 3 的优先级 ＋ 它成立所需的几何前提 ──
+	var p5_pr := Player.parry_count
+	var p5_bl := Player.block_count
+	pl.relic_shield_t = 2.0
+	var o1 := _sw_place(18.0, 0.0, {"speed": 0.0})
+	_pd_open(pl, Player.PARRY_FRAMES)
+	pl._update_shield_scan()
+	_pd_assert(not o1.is_queued_for_deletion(),
+		"P5 环盾开着 ⇒ 盾整面让路（这颗记给环盾，⛔ 既算盾反又算环盾摧毁）",
+		o1.is_queued_for_deletion(), false)
+	_pd_assert(Player.parry_count - p5_pr == 0 and Player.block_count - p5_bl == 0,
+		"P5 让路时两个计数各自零增量",
+		"%d/%d" % [Player.parry_count - p5_pr, Player.block_count - p5_bl], "0/0")
+	pl.relic_shield_t = 0.0
+	_pd_assert(64.0 > reach_b,
+		"P5 几何前提：环盾半径 64 包住盾 reach %.0f ⇒「让路」是全让而不是漏颗（⛔ 当常识默认，写成断言）" % reach_b,
+		64.0 > reach_b, true)
+	var o2 := _sw_place(reach_b + 40.0, 0.0, {"speed": 0.0})
+	pl._update_shield_scan()
+	_pd_assert(not o2.is_queued_for_deletion(),
+		"P5 关环盾后 reach 外的弹仍⛔ 被处理（上一颗没让路是因为关盾，不是因为半径）",
+		o2.is_queued_for_deletion(), false)
+	# 🔴 上一条那一次扫描顺手把让路那颗吃掉了——这是**正确行为**（关环盾 ⇒ 盾照常工作），
+	#    但⛔ 让它只体现在 `done` 行的总数上：那样 6 颗盾反里有 1 颗没人认领，读日志的人只能猜。
+	_pd_assert(_sw_gone(o1) and Player.parry_count - p5_pr == 1,
+		"P5 让路≠免死：环盾一关、下一次扫描就把那颗盾反掉（本面自己认领 done 行多出的那 1）",
+		"%s/%d" % [str(_sw_gone(o1)), Player.parry_count - p5_pr], "true/1")
+	await _sw_clear()
+
+	# ── P6｜rng 守恒（5 条）：V-P4 的强判据＝盾自己那一段零主流抽取 ＋ 一条反空转 ──
+	# 🔴 第 2 颗故意取 dmg=1：`int(1×0.5)==0` ⇒ `_settle_block` 根本不调 `take_damage`（C6 那一档的
+	#    直接推论），这样"state 逐字不动"证的才是**结算段本身**，⛔ 混进既有受伤管线的账。
+	#    硬格真受伤时多出来的抽取属 E1 旧账（本轮不改受伤侧），源级那条反证把口径钉在函数体内。
+	_ml_equip("sh_bulwark", 99)
+	Game.rng.state = _PD_STATE0
+	var seed_a := Game.rng.seed
+	var st_a := Game.rng.state
+	var p6_dr := Player.melee_rng_draws
+	var p6_pr := Player.parry_count
+	var p6_bl := Player.block_count
+	var rb1 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 2.0})
+	var rb2 := _sw_place(18.0, 90.0, {"speed": 0.0, "dmg": 1.0})
+	_pd_open(pl, Player.PARRY_FRAMES)
+	pl._update_shield_scan()
+	_pd_assert(Game.rng.seed == seed_a, "P6 盾反＋硬格各一颗后 seed 逐字不变", Game.rng.seed, seed_a)
+	_pd_assert(Game.rng.state == st_a, "P6 同上 state 逐字不变（⛔ 拿 randf 决定哪颗被吃掉／⛔ 结算里补一次抖动）",
+		Game.rng.state, st_a)
+	_pd_assert(Player.melee_rng_draws - p6_dr == 0, "P6 结算全程 melee_rng_draws 零增量",
+		Player.melee_rng_draws - p6_dr, 0)
+	# 🔴 前三条在「扫描一颗都没结算」时也会全绿（seed/state/draws 全都原地不动）⇒ 本条把账钉住，
+	#    证明 rng 守恒证的是一段**真发生过**的结算：恰 1 盾反（dmg 2）＋1 硬格（dmg 1）。
+	_pd_assert(Player.parry_count - p6_pr == 1 and Player.block_count - p6_bl == 1,
+		"P6 反空转：同一次扫描恰记 1 盾反＋1 硬格（⛔ 让前三条的守恒绿成「什么都没跑」的绿）",
+		"%d/%d" % [Player.parry_count - p6_pr, Player.block_count - p6_bl], "1/1")
+	var seg_pa := _ml_src_segment("res://scripts/player.gd", "func _settle_parry(")
+	var seg_bl := _ml_src_segment("res://scripts/player.gd", "func _settle_block(")
+	_pd_assert(seg_pa.count("rand") == 0 and seg_bl.count("rand") == 0,
+		"P6 源级反证：两个结算函数体内零 rand*（段取空会让上一条退化成恒真 ⇒ 两条各管一头）",
+		"%d/%d" % [seg_pa.count("rand"), seg_bl.count("rand")], "0/0")
+	await _sw_clear()
+
+	# ── P7｜BLOCK 的伤害算术（6 条）：C6 占位 0.5 ＋ 后半句「允许截断到 0」一起钉死 ──
+	_ml_equip("sh_bulwark", 99)
+	var p7_bl := Player.block_count
+	var p7_pr := Player.parry_count
+	var p7_abs := Player.shield_absorbed_dmg
+	var hpb := int(pl.hp)
+	var h2 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 2.0})
+	_pd_open(pl, 0)			# frames=0 ⇒ PARRY 假、BLOCK 真：这两档专门测硬格
+	pl._invuln_t = 0.0		# 上一面的硬格已挂上无敌帧；本面要的是"减伤后的伤害真进了血"，⛔ 被无敌吃掉
+	pl._update_shield_scan()
+	_pd_assert(h2.is_queued_for_deletion() and Player.block_count - p7_bl == 1,
+		"P7 dmg=2 的弹走 BLOCK 且 block_count +1",
+		"%s/%d" % [str(h2.is_queued_for_deletion()), Player.block_count - p7_bl], "true/1")
+	_pd_assert(int(pl.hp) == hpb - 1,
+		"P7 int(2×0.5)==1 ⇒ 重弹硬格仍掉 1 心（硬格减伤不免伤的落点）", pl.hp, hpb - 1)
+	_pd_assert(Player.shield_absorbed_dmg - p7_abs == 1, "P7 吸收数＝原始-实际＝1",
+		Player.shield_absorbed_dmg - p7_abs, 1)
+	_pd_assert(Player.parry_count - p7_pr == 0, "P7 纯硬格面 parry_count 零增量",
+		Player.parry_count - p7_pr, 0)
+	var hpc := int(pl.hp)
+	var h1 := _sw_place(18.0, 0.0, {"speed": 0.0, "dmg": 1.0})
+	pl._parry_hit_cd = 0
+	pl._update_shield_scan()
+	_pd_assert(int(pl.hp) == hpc,
+		"P7 int(1×0.5)==0 ⇒ 轻弹硬格免伤到 0（🔴 C6 占位档＝主理人推荐的「允许 0」，⛔ maxi(1,…)）",
+		pl.hp, hpc)
+	_pd_assert(Player.shield_absorbed_dmg - p7_abs == 2, "P7 两档合计吸收 2（截断掉的部分都算挡住）",
+		Player.shield_absorbed_dmg - p7_abs, 2)
+	await _sw_clear()
+	pl.hp = p_hp0
+
+	# ── P8｜眩晕面（14 条）：四道 `+ _knock` 出口之外还要验「只冻主动位移、slow 同冻、Boss 免疫」＋一条源级 ──
+	_ml_clear()
+	await _sw_clear()
+	# `_dash_t` 只被 leap/boss 两支 AI 读写（slug.gd:212/216），chase 全程不碰 ⇒ 把它钉成正数是
+	# 用来关掉 slug.gd:225 那条「贴到 14px 内就停脚」的正经行为。本面要判的是「晕冻住主动位移」，
+	# ⛔ 让"追到跟前自然停下"冒充成晕的功劳（e1/e2 一摆就在 20px，6 拍便进 14px 圈）。
+	var e1 := _ml_place("goblin", 20.0, 0.0)
+	e1.speed = 60.0
+	e1._dash_t = 1.0e9
+	var e2 := _ml_place("goblin", 20.0, 180.0)
+	e2.speed = 60.0
+	e2._dash_t = 1.0e9
+	_pd_assert(float(e1._stun_t) == 0.0, "P8 新摆的怪初始未晕", e1._stun_t, 0.0)
+	e1.apply_stun(0.1)
+	_pd_assert(float(e1._stun_t) > 0.0, "P8 apply_stun 置上计时位", e1._stun_t, ">0")
+	await get_tree().physics_frame
+	_pd_assert(e1.velocity == Vector2.ZERO,
+		"P8 晕中（knock=0 时）速度恰为零 ⇒ 主动位移归零（chase AI 本来会往玩家挪）",
+		e1.velocity, Vector2.ZERO)
+	_pd_assert(e2.velocity.length() > 30.0,
+		"P8 同坐标同速度、没被晕的对照体会动（上一条不是「谁都不动」）", e2.velocity.length(), ">30")
+	e1.apply_slow(0.5, 1.0)
+	e1.apply_stun(0.1)
+	await get_tree().physics_frame
+	_pd_assert(float(e1._slow_t) == 1.0,
+		"P8 晕期间 slow 计时不走（实稿 §3.3「人都停了谈不上慢」；⛔ 晕结束瞬间 slow 已偷偷走完）",
+		e1._slow_t, 1.0)
+	e1._stun_t = 0.0		# 手动到期：`apply_stun(0.0)` 走 maxf 取大，减不掉上一条剩下的 5 拍
+	for i in 4:
+		await get_tree().physics_frame
+	_pd_assert(float(e1._slow_t) < 1.0,
+		"P8 晕结束后 slow 计时恢复走动（上一条不是永久冻结）", e1._slow_t, "<1.0")
+	e1.global_position = pl.global_position + Vector2(60.0, 0.0)	# 拉开：一拍 knock 撞不上东墙
+	e1.apply_stun(0.5)
+	e1._knock = Vector2.RIGHT * 60.0
+	await get_tree().physics_frame
+	# 逐字对 `Vector2.RIGHT*60`（⛔ 与 `e1._knock` 自比较：闸里先 `velocity = _knock` 后衰减 knock，
+	# 两者永不同值，那样写必假红）。e1 在玩家东侧、chase 的自身位移是 (-60,0)，与 knock(+60,0) 恰好
+	# 抵消 ⇒ 未冻 AI 的实现这里得 0：本条同时钉住「AI 冻了」与「knock 没冻」两侧。
+	_pd_assert(e1.velocity == Vector2.RIGHT * 60.0,
+		"P8 晕中 velocity 恰为当拍 knock（AI 那 60 没进来、knock 也没被冻结）",
+		e1.velocity, Vector2.RIGHT * 60.0)
+	_pd_assert(float(e1._knock.length()) < 60.0,
+		"P8 晕中 knock 自己仍在衰减（归零的是主动位移，不是击退）", e1._knock.length(), "<60.0")
+	var e3 := _ml_place("goblin", 20.0, 90.0)
+	e3.speed = 60.0
+	e3._dash_t = 1.0e9
+	e3.apply_stun(0.1)
+	for i in 8:
+		await get_tree().physics_frame
+	_pd_assert(float(e3._stun_t) == 0.0, "P8 0.1s＝6 拍后计时归零（FIXED_DT 递减的换算面）",
+		e3._stun_t, 0.0)
+	_pd_assert(e3.velocity.length() > 30.0, "P8 晕到期后主动位移恢复", e3.velocity.length(), ">30")
+	var eb := _ml_place("goblin", 20.0, 45.0)
+	eb.variant = "boss"
+	eb.apply_stun(1.0)
+	eb.apply_stun(1.0)
+	_pd_assert(float(eb._stun_t) == 0.0,
+		"P8 boss 变体的 Slug 免疫：连调两次 `_stun_t` 仍为 0（实稿 §3.3 硬约束）", eb._stun_t, 0.0)
+	var boss_src := FileAccess.get_file_as_string("res://scripts/boss.gd")
+	var bs_seg := _ml_src_segment("res://scripts/boss.gd", "func apply_stun(")
+	_pd_assert(boss_src.count("func apply_stun(") == 1,
+		"P8 boss.gd 里 apply_stun 定义恰一处（段取空会让下一条退化成恒真比较 ⇒ 段本体反证）",
+		boss_src.count("func apply_stun("), 1)
+	_pd_assert(bs_seg.strip_edges() == "return",
+		"P8 主题 Boss 的 apply_stun 是**空实现**（⛔ 给它加 `_stun_t`＝把免疫变成可计时控制）",
+		bs_seg.strip_edges(), "return")
+	# 🔴 等效刀披露（21:07 实测）：`Game.FIXED_DT`==1/60，引擎物理 tick 也是 60Hz ⇒ 把眩晕递减那一行
+	#    换成 `delta` 在**运行期完全分不开**（刀 p7 红条数＝0）。这条红线是源码级的，只能用源级断言钉住；
+	#    ⛔ 拿"运行面没红"当成"这条不重要"，也⛔ 假装某条行为面抓得住它。
+	var slug_phys := _ml_src_segment("res://scripts/slug.gd", "func _physics_process(delta: float)")
+	_pd_assert(slug_phys.count("_stun_t = maxf(0.0, _stun_t - Game.FIXED_DT)") == 1,
+		"P8 源级：眩晕递减那一行写死 Game.FIXED_DT（⛔ 换成 delta——本项目两者等值，行为面⛔ 分不开）",
+		slug_phys.count("_stun_t = maxf(0.0, _stun_t - Game.FIXED_DT)"), 1)
+	_ml_clear()
+	await _sw_clear()
+
+	# ── P9｜真管线与源序（5 条）：证「不是我直调才生效」，以及 C3 的插入位置 ──
+	var p9_pr := Player.parry_count
+	var g1 := _sw_place(18.0, 0.0, {"speed": 0.0})
+	_pd_open(pl, Player.PARRY_FRAMES)
+	await get_tree().physics_frame
+	_pd_assert(_sw_gone(g1),
+		"P9 `_physics_process` 里那一跑也会吃弹（⛔ 只有直调才生效的假实现）", _sw_gone(g1), true)
+	_pd_assert(Player.parry_count - p9_pr == 1, "P9 真管线 parry_count +1",
+		Player.parry_count - p9_pr, 1)
+	var pp := _ml_src_segment("res://scripts/player.gd", "func _physics_process(delta: float)")
+	_pd_assert(pp.find("_update_shield_scan()") > 0,
+		"P9 源序段本体反证：`_update_shield_scan()` 确实在 _physics_process 里（⛔ 空串自比较）",
+		pp.find("_update_shield_scan()") > 0, true)
+	_pd_assert(pp.find("_update_aim_and_fire(delta)") < pp.find("_update_shield_scan()"),
+		"P9 源序：盾扫描排在 `_update_aim_and_fire` **之后**（C3：同帧刚挥的盾 vs 刚到的弹有确定答案）",
+		"%d<%d" % [pp.find("_update_aim_and_fire(delta)"), pp.find("_update_shield_scan()")], "升序")
+	_pd_assert(pp.find("_update_shield_scan()") < pp.find("_update_bomb_input()"),
+		"P9 源序：四个输入更新的相对顺序未动（anim→fire→bomb→skill→relic）",
+		"%d<%d" % [pp.find("_update_shield_scan()"), pp.find("_update_bomb_input()")], "升序")
+	await _sw_clear()
+
+	Game.rng.state = s_state
+	pl.autopilot = s_auto
+	pl.relic_shield_t = s_shield_t
+	pl._invuln_t = s_invuln
+	pl.shield_charges = s_charges
+	pl.control_locked = s_locked
+	pl._immortal = s_mortal
+	pl.sigil_ward = s_ward
+	abyss_dmg_mult = s_abyss
+	pl.hp = p_hp0
+	pl._parry_frames_left = s_frames_left
+	pl._parry_hit_cd = s_hit_cd
+	pl._stance_t = s_stance
+	pl.weapon_slots = s_slots
+	pl.slot = s_slot
+	pl.slot_mags = s_mags
+	for wid in ["sh_bulwark", "ml_cleaver"]:
+		if not s_mags.has(wid):
+			pl.slot_mags.erase(wid)	# ⛔ 把探针装备键留在表里＝下一局 mag() 读到探针余弹
+	pl._reload_t = s_reload
+	pl._fire_cd = s_cd
+	pl._swap_t = s_swap
+	pl._aim = s_aim
+	_ml_restore_stats(st0)
+	_spawn_cd = s_spawn
+	Dev.check(_pd_checked == _PD_DECLARED, "parry",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过或死数错" % [_pd_checked, _PD_DECLARED])
+	print("[SMOKE-PARRY] done checked=%d declared=%d parry_total=%d block_total=%d absorbed_total=%d hp_restored=%s" % [
+		_pd_checked, _PD_DECLARED, Player.parry_count - p_parry0,
+		Player.block_count - p_block0, Player.shield_absorbed_dmg - p_abs0, str(int(pl.hp) == p_hp0)])
+
+
+
 
 
 ## 局末结算：把本局累计拾取折算成结晶（一次性，幂等）
@@ -4221,6 +6309,7 @@ const _OG_TAG := "誓约遗赠"          # 必须等于生产常量 _OG_TOAST_TA
 
 
 func _test_oath_grant() -> void:
+	_og_checked = 0   # R7 §15.1.4 入口复位
 	_og_snap = _og_snapshot()
 	_og_load_src()
 	Game.diamonds_changed.connect(_og_on_diamonds)
@@ -4529,8 +6618,10 @@ func _og_group_f() -> void:
 			str(Game.rng.state != st0)], "全不变")
 	var a3a := _og_amount(3)
 	var a3b := _og_amount(3)
-	print("[SMOKE-OATH-GRANT] f02 detail: 静态半边（函数体内不得出现 Game./player.）由 grep + 人工闭合")
-	_og_assert(a3a == a3b, "F02", "同输入两次同输出", "%d vs %d" % [a3a, a3b], "相等")
+	var polluted := _og_amount_body_polluted()   # R7 §15.1.2 静态半边改由探针内自判
+	print("[SMOKE-OATH-GRANT] f02 detail: 静态半边由 F02 源码定位自判闭合（R7 落地后） polluted=%d" % polluted)
+	_og_assert(polluted == 0 and a3a == 8 and a3b == 8, "F02", "同输入钉字面 8 且 amount 体内零全局引用",
+		"a3a=%d a3b=%d polluted=%d" % [a3a, a3b, polluted], "8 且 8 且 0")
 
 
 # ---------------------------------------------------------------- E 组（7，🔴 必须最后）
@@ -4714,6 +6805,36 @@ func _og_grant_call_lines() -> Array:
 	return _og_lines_containing(_OG_SYM_GRANT, true)
 
 
+## F02 静态半边的源码定位自判（R7 §15.1.2）：锚 `static func _oath_grant_amount(` 全文件唯一，
+## 取其后连续缩进行为函数体，返回体内出现 `Game.`／`player.` 的行数（0＝纯查表）。
+## 🔴 ⛔ 全文件正则扫：`_test_oath_grant` 含 `_oath_grant` 子串会撞自己（S27 口径 §0.4，同 C08 词边界那条）。
+## 锚缺失／不唯一 ⇒ 返回负哨兵，让 F02 判红而不是静默跳过（读不到源码同样是红，与 _og_load_src 口径一致）。
+func _og_amount_body_polluted() -> int:
+	var s := -1
+	for i in _og_src.size():
+		if _og_src[i].begins_with("static func _oath_grant_amount("):
+			if s >= 0:
+				return -2001
+			s = i
+	if s < 0:
+		return -2002
+	var hits := 0
+	var i := s + 1
+	while i < _og_src.size():
+		var ln: String = _og_src[i]
+		if ln.strip_edges() == "":
+			i += 1
+			continue
+		if not ln.begins_with("\t"):
+			break
+		if not ln.strip_edges().begins_with("#"):
+			if ln.contains("Game.") or ln.contains("player."):
+				hits += 1
+		i += 1
+	return hits
+
+
+
 # ---------------------------------------------------------------- 现场快照与还原
 
 func _og_snapshot() -> Dictionary:
@@ -4753,7 +6874,7 @@ func _og_restore() -> void:
 
 ## ============================================================================
 ## Sprint 28 批一 探针：净化代价（SMOKE_PURIFY_COST=1）
-## 24 条断言，declared 字面量 24。每条后无条件打印 #NN + 实测值 + ok= 字段
+## 28 条断言，declared 字面量 28（S28 原 24 + S33 的 A01b/A02b/A04b + A07）。每条后无条件打印 #NN + 实测值 + ok= 字段
 ## （判红口径：Dev.check 只在失败时打 [ERR]；ok=false 计数为第二道门）。
 ## 净化驱动走真实 _on_shrine_chosen 全链（affordable → execute → 记账 → 回声桶）。
 ## settle_shards 会 save_sigils()：每次调用前后把 shards 还原到入口快照（直接赋值，不走 add_shards）。
@@ -4761,7 +6882,7 @@ func _og_restore() -> void:
 ##    注释命中也算一处；探针自己的记账式赋值一律走 Game.set("purified_run", …)）。
 ## ============================================================================
 
-const _PC_DECLARED := 24
+const _PC_DECLARED := 28
 var _pc_checked := 0
 
 
@@ -4802,6 +6923,7 @@ func _pc_nonpurify_offer() -> Dictionary:
 
 
 func _test_purify_cost() -> void:
+	_pc_checked = 0   # R7 §15.1.4 入口复位
 	var shards0: int = int(Game.sigils["shards"])
 	var rng_seed0: int = Game.rng.seed
 	var rng_state0: int = Game.rng.state
@@ -4813,14 +6935,18 @@ func _test_purify_cost() -> void:
 	var codex0: Dictionary = Game.codex.duplicate(true)
 	var counters0: Dictionary = _oath_counters.duplicate()
 	var floors0: Array = Game.calamity_floors.duplicate()
+	var redeemed0: Array = Game.redeemed_floors.duplicate()   # S33：赎回账同为探针可改状态，必须入还原清单
 	print("[SMOKE-PURIFY-COST] entry shards=%d floors=%s purified=%s" % [
 		shards0, str(Game.calamity_floors), str(Game.purified_run)])
 
-	# ---- A 状态（6）----
+	# ---- A 状态（7）----
 	_pc_assert(Game.purified_run == false, "A01", "新局开局 purified_run=false", Game.purified_run, false)
+	_pc_assert(Game.redeemed_floors.size() == 0, "A01b", "S33 新局开局赎回账空（V-D1）", Game.redeemed_floors.size(), 0)
 	Game.set("purified_run", true)
+	Game.redeemed_floors.assign([2, 3])   # 自戒：走 assign 造脏账，不留记账位字面
 	Game.reset()
 	_pc_assert(Game.purified_run == false, "A02", "reset 后 purified_run=false（reset 漏清即红）", Game.purified_run, false)
+	_pc_assert(Game.redeemed_floors.size() == 0, "A02b", "S33 reset 后赎回账清零（V-D2，reset 漏清即红）", Game.redeemed_floors.size(), 0)
 	Game.calamity_floors = [2]
 	Game.floor_num = 2
 	Game.sigils["shards"] = shards0
@@ -4829,6 +6955,7 @@ func _test_purify_cost() -> void:
 	_on_shrine_chosen(0)
 	_pc_assert(Game.purified_run == true, "A03", "净化全链执行后 purified_run=true（记账漏写/写错字段即红）", Game.purified_run, true)
 	_pc_assert(Game.calamity_floors.has(2) == false, "A04", "erase 保留：本层已出灾祸表（删 erase 即红）", Game.calamity_floors.has(2), false)
+	_pc_assert(Game.redeemed_floors.count(2) == 1, "A04b", "S33 真链净化后当层入赎回账恰一次（V-D3；漏记账或重复记账即红）", Game.redeemed_floors.count(2), 1)
 	_pc_assert(String(Data.SHRINE_OFFERS["purify"].get("cost_kind", "x")) == "" and int(Data.SHRINE_OFFERS["purify"].get("cost", -1)) == 0,
 		"A05", "purify cost_kind/cost 字段未动", "%s/%s" % [Data.SHRINE_OFFERS["purify"].get("cost_kind"), Data.SHRINE_OFFERS["purify"].get("cost")], "空串/0")
 	# A06 负向：非净化卡走完 execute 全链后，记账位必须仍为 false——刀三的唯一守卫。
@@ -4836,6 +6963,7 @@ func _test_purify_cost() -> void:
 	var a06_shield0: int = player.shield_charges
 	var a06_dia0: int = Game.diamonds
 	Game.set("purified_run", false)
+	Game.redeemed_floors.clear()   # S33：赎回账同点位归零，使 A06 的负向面覆盖两本账
 	Game.calamity_floors = [2]
 	Game.floor_num = 3
 	Game.diamonds = 5
@@ -4843,14 +6971,47 @@ func _test_purify_cost() -> void:
 	_shrine_coord = Vector2i.ZERO
 	_on_shrine_chosen(0)
 	var a06_delta: int = player.shield_charges - a06_shield0
-	_pc_assert(Game.purified_run == false and a06_delta == 1, "A06",
+	_pc_assert(Game.purified_run == false and Game.redeemed_floors.size() == 0 and a06_delta == 1, "A06",
 		"负向：非净化卡全链执行后不记账（记账挪通用入口即红；盾 +1 兼证链路真跑、置灰早退即红）",
-		"purified=%s 盾变化=%d" % [str(Game.purified_run), a06_delta], "false/1")
+		"purified=%s 赎回=%d 盾变化=%d" % [str(Game.purified_run), Game.redeemed_floors.size(), a06_delta], "false/0/1")
 	Game.diamonds = a06_dia0
 	player.shield_charges = a06_shield0
 
-	# ---- B 结算（6，M=10；META_RATE=2.0 → 基线 20 / ×1.5 = 30）----
+	# A07 净化真的把 debuff 撤了（刀 M-9 的唯一守卫）。M-9＝purify 分支把 `_clear_calamity_effects()`
+	# 与 `_calamity = ""` 换序：clear 走进空串分支 ⇒ 削减永久固化，而 A03/A04/A04b 只查账不查身 ⇒ 全绿。
+	# 首轮刀实跑（knife_out.txt M-9 行 reds=-）坐实这是探针盲区，故补本条把「换序」升级为可证伪断言。
+	# frail 选它：apply/clear 是 max_hp 差值增量还原（核验 #3），与层内成长解耦 ⇒ 可写精确等值判据。
+	var a07_mh0: int = player.max_hp
+	var a07_hp0: int = player.hp
+	var a07_cal0 := _calamity
+	var a07_floor0 := Game.floor_num
+	_calamity = "frail"
+	Game.floor_num = 2   # 🔴 先定层再施加：_frail_ratio 经 _calamity_theme_rule 快照读主题，快照在 apply 内现查 floor_num
+	Game.calamity_floors = [2]
+	_apply_calamity()
+	var a07_cut: int = a07_mh0 - player.max_hp
+	Game.set("purified_run", false)
+	Game.redeemed_floors.clear()
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	_on_shrine_chosen(0)
+	var a07_resid: int = player.max_hp - a07_mh0
+	_pc_assert(a07_cut >= 1 and a07_resid == 0, "A07",
+		"净化真还原 frail 削血上限（clear 与置空换序 ⇒ 削减固化即红；施加没生效亦红）",
+		"削减=%d 净化后残差=%d" % [a07_cut, a07_resid], "削减>=1 且 残差=0")
+	player.max_hp = a07_mh0
+	player.hp = a07_hp0
+	player.hp_changed.emit(player.hp, player.max_hp)
+	_calamity = a07_cal0
+	Game.floor_num = a07_floor0
+	# 🔴 赎回账 [2] 故意不清：它是 B 组段首归零的真实上游（A03 的残留被 A06 段首清掉了，清到这里就断源，
+	#    刀 M-12 便无面可捕——首轮实跑 M-12 reds=- 即此因）。跨组残留按 D2b 属探针卫生，处置在下游段首。
+
+	# ---- B 结算（6，M=10；META_RATE=2.0 → 基线 20 / 全额 ×1.5 = 30）----
+	# B01–B03：R≡0 纯欠债态。🔴 段首必须清赎回账——A03/A06 走过真链后账上有 [2]，
+	# 不清则 B02/B03 读到 (N=1,R=1)/(N=2,R=1) 得 25/26 假红（s33_r2_purify.log 实证；期望语义一字未改）
 	Game.calamity_floors = []
+	Game.redeemed_floors.clear()
 	Game.set("purified_run", false)
 	Game.sigils["shards"] = shards0
 	var b01 := Game.settle_shards(10)
@@ -4863,20 +7024,36 @@ func _test_purify_cost() -> void:
 	Game.sigils["shards"] = shards0
 	var b03 := Game.settle_shards(10)
 	_pc_assert(b03 == 30, "B03", "多灾祸未净化 → 仍 ×1.5（按层累加=方案C误入即红）", b03, 30)
-	Game.calamity_floors = [2]
-	Game.set("purified_run", true)
+	# B04–B06：S33 形态二——赎回账一律由真实净化链铺出（⛔ 手工造账即绕过 F01 模式乙守的唯一记账位）
+	Game.reset()
+	Game.calamity_floors = [2, 3]
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	Game.floor_num = 2
+	_on_shrine_chosen(0)   # 赎 2 → 余债 [3]
+	Game.floor_num = 3
+	_on_shrine_chosen(0)   # 赎 3 → 余债空 ⇒ (N=0,R=2) 赎满
 	Game.sigils["shards"] = shards0
 	var b04 := Game.settle_shards(10)
-	_pc_assert(b04 == 20, "B04", "单灾祸净化 → 不乘（回归基线）", b04, 20)
+	_pc_assert(b04 == 20, "B04", "历2层灾祸全部赎回 → ×1.0=20（与从未欠债者同值）", b04, 20)
+	Game.reset()
 	Game.calamity_floors = [2, 3]
-	Game.set("purified_run", true)
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	Game.floor_num = 2
+	_on_shrine_chosen(0)   # 赎 2 → 余债 [3] ⇒ (N=1,R=1)
 	Game.sigils["shards"] = shards0
 	var b05 := Game.settle_shards(10)
-	_pc_assert(b05 == 20, "B05", "多灾祸净化 → 不乘 20 而非 30（本批靶心）", b05, 20)
-	Game.calamity_floors.append(9)
+	_pc_assert(b05 == 25, "B05", "部分赎回靶心：历2赎1 → ×1.25=25（既非一刀切20亦非全额30）", b05, 25)
+	Game.reset()
+	Game.calamity_floors = [2, 3, 9]
+	_shrine_offers = [_pc_purify_offer()]
+	_shrine_coord = Vector2i.ZERO
+	Game.floor_num = 2
+	_on_shrine_chosen(0)   # 赎 2 → 余债 [3,9] ⇒ (N=2,R=1)
 	Game.sigils["shards"] = shards0
 	var b06 := Game.settle_shards(10)
-	_pc_assert(b06 == 20, "B06", "净化后塞别的灾祸层 → 仍不乘（作废由记账位决定非 size）", b06, 20)
+	_pc_assert(b06 == 26, "B06", "历3赎1余债2 → 按未赎份额回升 ×1.3333→26（部分赎回按 size 比例计）", b06, 26)
 
 	# ---- C 跨局（3）----
 	Game.reset()
@@ -4913,7 +7090,7 @@ func _test_purify_cost() -> void:
 	_on_shrine_chosen(0)
 	Game.sigils["shards"] = shards0
 	var c03b := Game.settle_shards(10)
-	_pc_assert(c03a == 20 and c03b == 20, "C03", "连续两次净化不叠加（布尔被写成计数即红）", "%s/%s" % [c03a, c03b], "20/20")
+	_pc_assert(c03a == 25 and c03b == 20, "C03", "S33 两次真净化逐层赎回：第一次后半赎25、第二次赎满20（一刀切语义已废）", "%s/%s" % [c03a, c03b], "25/20")
 
 	# ---- D 零漂移（4）----
 	_pc_assert(_echo_costs.has("") and int(_echo_costs.get("", 0)) >= 1, "D01",
@@ -4939,10 +7116,11 @@ func _test_purify_cost() -> void:
 		"seed %d→%d state_changed=%s" % [d_seed0, Game.rng.seed, str(Game.rng.state != d_state0)], "全不变")
 
 	# ---- E 文案（3）----
-	_pc_assert(String(Data.SHRINE_OFFERS["purify"]["desc"]).contains("本局 ×1.5 结算加成作废"), "E01",
-		"卡面 desc 新文案", Data.SHRINE_OFFERS["purify"]["desc"], "含「本局 ×1.5 结算加成作废」")
+	_pc_assert(String(Data.SHRINE_OFFERS["purify"]["desc"]).contains("未赎回的层数保留"), "E01",
+		"卡面 desc 新文案（S33 部分赎回，仍说「作废」即红）", Data.SHRINE_OFFERS["purify"]["desc"], "含「未赎回的层数保留」")
 	var e02: String = shrine_panel._cost_text({"cost_kind": ""})
-	_pc_assert(e02 == "代价：本局 ×1.5 加成作废", "E02", "面板代价行新文案（仍说「或失效」即红）", e02, "代价：本局 ×1.5 加成作废")
+	_pc_assert(e02 == "代价：本层灾祸销账；结算加成按未赎回的层数保留", "E02",
+		"面板代价行新文案（一刀切「作废」文案复活即红）", e02, "代价：本层灾祸销账；结算加成按未赎回的层数保留")
 	var e03_bad: Array[String] = []
 	for k in Data.SHRINE_OFFERS.keys():
 		if String(k) != "purify" and String(Data.SHRINE_OFFERS[k].get("cost_kind", "")) == "":
@@ -4951,6 +7129,7 @@ func _test_purify_cost() -> void:
 
 	# ---- F 静态（2，文本级门；读失败判红不静默跳过）----
 	var f01_cnt := -1
+	var f01b_cnt := -1
 	var f02_ok := false
 	var fg := FileAccess.open("res://scripts/game_main.gd", FileAccess.READ)
 	var fg2 := FileAccess.open("res://scripts/game_state.gd", FileAccess.READ)
@@ -4961,6 +7140,8 @@ func _test_purify_cost() -> void:
 		fg2.close()
 		f01_cnt = 0
 		var pc_sym := "Game.purified_run " + "= true"
+		var rc_sym := "redeemed_" + "floors.append"   # 拆开写：探针自身不得含模式完整字面（自戒）
+		f01b_cnt = 0
 		for i in lines_g.size():
 			var ln := lines_g[i]
 			var pos := ln.find(pc_sym)
@@ -4968,17 +7149,27 @@ func _test_purify_cost() -> void:
 				if pos == 0 or not _pc_is_word(ln[pos - 1]):
 					f01_cnt += 1
 				pos = ln.find(pc_sym, pos + 1)
+			pos = ln.find(rc_sym)
+			while pos >= 0:
+				if pos == 0 or not _pc_is_word(ln[pos - 1]):
+					f01b_cnt += 1
+				pos = ln.find(rc_sym, pos + 1)
 		for i in lines_s.size():
-			if lines_s[i].contains("calamity_floors.size() > 0 and not purified_run"):
+			var ls := lines_s[i]
+			if ls.contains("calamity_floors") and ls.contains("redeemed_floors") \
+					and not ls.contains("and not purified_run") and not ls.contains("redeemed_" + "floors.has("):
 				f02_ok = true
-	_pc_assert(f01_cnt == 1, "F01", "全仓记账赋值词边界恰 1 处（多处记账即红）", f01_cnt, 1)
-	_pc_assert(f02_ok, "F02", "settle_shards 判定行含 and not purified_run（改回存在性布尔即红）", f02_ok, true)
+			if ls.contains("and not purified_run") or ls.contains("redeemed_" + "floors.has("):
+				f02_ok = false   # 一刀切复活，或退回「本层在不在账里」的存在性布尔（刀 M-8）——两负向面都要红
+	_pc_assert(f01_cnt == 1 and f01b_cnt == 1, "F01", "两本账各恰 1 处写入点、合计 2 处（多处记账或漏记账即红）", "%d/%d" % [f01_cnt, f01b_cnt], "1/1")
+	_pc_assert(f02_ok, "F02", "settle_shards 判定行同现两本账且不含一刀切/存在性布尔（作者 2026-11-17 裁决）", f02_ok, true)
 
 	# ---- 出口还原 ----
 	Game.sigils["shards"] = shards0
 	Game.rng.seed = rng_seed0
 	Game.rng.state = rng_state0
 	Game.calamity_floors = floors0
+	Game.set("redeemed_floors", redeemed0)   # 自戒：走 set，不留记账位字面（F01 模式乙只该数到生产那一处）
 	Game.set("purified_run", false)
 	Game.floor_num = floor0
 	_shrine_offers = offers0
@@ -5053,6 +7244,7 @@ func _sb_shield_at(n_en: int, n_re: int, n_th: int, n_bo: int, tier: int) -> int
 
 
 func _test_start_buffer() -> void:
+	_sb_checked = 0   # R7 §15.1.4 入口复位
 	var tier0 := abyss_tier
 	var codex0: Dictionary = Game.codex.duplicate(true)
 	var shield0: int = player.shield_charges

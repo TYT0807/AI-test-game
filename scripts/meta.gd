@@ -8,7 +8,9 @@ extends RefCounted
 ## 所以 upgrades / relics / weapons 三个池的数据表不用为解锁机制改动。
 ##
 ## 模型（增量）：基础 14 升级 / 10 遗物 / 4 武器**不建节点 → 永远默认可用**；
-## 只有新增内容建节点，未解锁不进池、解锁后进池。默认解锁集 = 空集。
+## 建了节点的条目按 default 分两档：S36 T-A 起 u_mw_swarm/u_mw_arc/u_mw_cluster 三节点 default:true
+## 且 requires 清空（作者口径「武器拿上手就能用」，实稿 §6.1 裁定 P-改语义），其余仍 default:false 走购买。
+## ⛔ cost 一律保持正整数（validate.gd 的 cost 门），「无限制」不靠把价格写成 0 来表达。
 
 const VERSION := 1
 
@@ -21,13 +23,13 @@ const SETTLE_RETURN_KEYS := ["payout", "crystals"]
 ## target 指向对应池里的条目 id（不带前缀）；requires 里放前置**节点 id**。
 const UNLOCKS := {
 	"u_mx_pierce": {
-		"name": "贯穿弹头", "desc": "子弹可穿透 1 个敌人，伤害 +10%",
+		"name": "贯锋", "desc": "光霰可穿透 1 个敌人，伤害 +10%",
 		"kind": "upgrade", "target": "mx_pierce",
 		"cost": 40, "requires": [], "default": false,
 		"icon": "pierce", "max": 1,
 	},
 	"u_mx_critboom": {
-		"name": "致命共振", "desc": "暴击时在命中点引爆，爆炸造成 60% 子弹伤害",
+		"name": "致命共振", "desc": "暴击时在命中点引爆，爆炸造成 60% 光霰伤害",
 		"kind": "upgrade", "target": "mx_critboom",
 		"cost": 60, "requires": ["u_mx_pierce"], "default": false,
 		"icon": "crit", "max": 1,
@@ -51,22 +53,22 @@ const UNLOCKS := {
 		"icon": "relic_drone", "max": 1,
 	},
 	"u_mw_swarm": {
-		"name": "蜂群导弹", "desc": "子弹自动追踪最近的敌人",
+		"name": "逐臭蜂", "desc": "光霰自动追踪最近的敌人",
 		"kind": "weapon", "target": "mw_swarm",
-		"cost": 40, "requires": [], "default": false,
+		"cost": 40, "requires": [], "default": true,
 		"icon": "wpn_swarm", "max": 1,
 	},
 	"u_mw_arc": {
-		"name": "电弧发射器", "desc": "子弹命中时向附近敌人放电，可连锁 3 次",
+		"name": "引雷幡", "desc": "光霰命中时向附近敌人放电，可连锁 3 次",
 		"kind": "weapon", "target": "mw_arc",
-		"cost": 60, "requires": ["u_mw_swarm"], "default": false,
+		"cost": 60, "requires": [], "default": true,
 		"icon": "wpn_arc", "max": 1,
 	},
 	"u_mw_cluster": {
 		"name": "集束榴弹", "desc": "命中爆炸后分裂出 3 枚小弹",
 		"kind": "weapon", "target": "mw_cluster",
-		"cost": 100, "requires": ["u_mw_arc"], "default": false,
-		"icon": "wpn_launcher", "max": 1,
+		"cost": 100, "requires": [], "default": true,
+		"icon": "wpn_fushe", "max": 1,
 	},
 }
 

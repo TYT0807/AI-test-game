@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://dbgwxc2daht3l"
-path="res://.godot/imported/wraithswarm.png-d890df248a90ef1fe6cf8738686581aa.ctex"
+path="res://.godot/imported/wraithswarm.png-5da03a16c9af244d38ec5394da618c37.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://resources/texture/wraithswarm.png"
-dest_files=["res://.godot/imported/wraithswarm.png-d890df248a90ef1fe6cf8738686581aa.ctex"]
+dest_files=["res://.godot/imported/wraithswarm.png-5da03a16c9af244d38ec5394da618c37.ctex"]
 
 [params]
 

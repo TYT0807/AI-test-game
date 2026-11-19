@@ -1,0 +1,100 @@
+{
+ "batch": "Sprint 39",
+ "date": "2026-11-20",
+ "purpose": "四条改写句的定稿候选。主理人自裁依据＝本文件 anchors 全部在盘上命中；作者可只改 text 不动 anchors，跑 python production/sprint-39/SPR39_flavor_contract.py --candidates 即得对照表应写入的最终行。",
+ "rule": "每句以「。」收尾；长度（Python len() 含标点）≤ meta.max_text_len=25；⛔ 他作专名；⛔ 与「先贤」同框提苏瑾；⛔ 说玩家观测不到的东西。",
+ "candidates": [
+  {"key": "bosses/prism_warden",
+   "prev": "守望者。天道之眼，别站在光缝里，砸它的核。",
+   "options": [
+    {"text": "守望者。天道之眼，碎片变色就是要换招，离它远。", "len": 23, "claim_type": "numeric+spatial",
+     "anchors": [
+      {"file": "scripts/boss.gd", "needle": "_phase_tints", "min_hits": 1, "supports": "碎片变色"},
+      {"file": "scripts/boss.gd", "needle": "shards[", "min_hits": 1, "supports": "碎片变色"},
+      {"file": "scripts/boss.gd", "needle": "_enter_phase", "min_hits": 1, "supports": "就是要换招"},
+      {"file": "scripts/boss.gd", "needle": "dist < 22.0", "min_hits": 1, "supports": "离它远（接触伤害半径）"}],
+     "must_contain_all": ["碎片变色"], "forbidden": ["光缝", "砸它的核"],
+     "note": "三个短句各对一个可测事实：modulate 换色 / 阶段阈值 0.66·0.33 / 接触判定 22px。「离它远」是建议不是机制断言，落点仍是可测半径。"},
+    {"text": "守望者。天道之眼，碎片一变色就得换打法。", "len": 20, "claim_type": "numeric",
+     "anchors": [
+      {"file": "scripts/boss.gd", "needle": "_phase_tints", "min_hits": 1},
+      {"file": "scripts/boss.gd", "needle": "_enter_phase", "min_hits": 1}],
+     "must_contain_all": ["碎片"], "forbidden": ["光缝", "砸它的核"],
+     "note": "保守版：不含空间建议，只押阶段换色这一件事。"},
+    {"text": "守望者。天道之眼，三片碎壳跟着楼层换脸色。", "len": 21, "claim_type": "entity+numeric",
+     "anchors": [
+      {"file": "scripts/boss.gd", "needle": "shards[", "min_hits": 1},
+      {"file": "scripts/boss.gd", "needle": "phase_theme_index", "min_hits": 1},
+      {"file": "scripts/boss.gd", "needle": "floor_num", "min_hits": 1}],
+     "must_contain_all": ["碎"], "forbidden": ["光缝", "砸它的核"],
+     "note": "押的是 _ready 里 shards 恰好 3 片 + 阶段主题由 floor_num 派生（4+((floor_num-4+k)%8)）。若将来碎片数改动作弊，此句变谎——比前两版脆。"}]},
+
+  {"key": "bosses/pyrothalassian",
+   "prev": "熔潮。修罗嗔火，弹匣留一半，给它变红的时候用。",
+   "options": [
+    {"text": "熔潮。修罗嗔火，脉冲比守望者密，壳也厚一档。", "len": 22, "claim_type": "numeric",
+     "anchors": [
+      {"file": "scripts/boss2.gd", "needle": "skill_interval", "min_hits": 1, "supports": "脉冲比守望者密"},
+      {"file": "scripts/boss.gd", "needle": "BOSS_SKILL_INTERVAL", "min_hits": 1, "supports": "比较基准 3.0"},
+      {"file": "scripts/boss2.gd", "needle": "max_hp", "min_hits": 1, "supports": "壳也厚一档"}],
+     "must_contain_all": ["脉冲"], "forbidden": ["弹匣留一半"],
+     "numbers": {"interval": 2.2, "vs_warden": 3.0, "hp_base": 360.0, "vs_warden_hp": 320.0},
+     "note": "「密」＝间隔小（2.2 < 3.0）；「厚一档」＝基数 360 > 320 且缩放式两处逐字一致。两句都是表内可比、门可算的。"},
+    {"text": "熔潮。修罗嗔火，两秒二一发脉冲，比守望者急。", "len": 22, "claim_type": "numeric",
+     "anchors": [
+      {"file": "scripts/boss2.gd", "needle": "skill_interval", "min_hits": 1},
+      {"file": "scripts/boss.gd", "needle": "BOSS_SKILL_INTERVAL", "min_hits": 1}],
+     "must_contain_all": ["脉冲"], "forbidden": ["弹匣留一半"],
+     "note": "把 2.2 秒写死进文案：更具体，但 boss2 一旦调参这句就腐烂，且数值会随层数缩放的只有 hp、interval 不缩放（可写）。默认不取。"}]},
+
+  {"key": "themes/pressure",
+   "prev": "高压层。修罗斗诤，子弹会拐弯，贴墙打。",
+   "options": [
+    {"text": "高压层。修罗斗诤，虫快，残响足，气浪会把人推开。", "len": 24, "claim_type": "numeric+spatial",
+     "anchors": [
+      {"file": "scripts/game_main.gd", "needle": "enemy_speed_mult = maxf(enemy_speed_mult, 1.3)", "min_hits": 1, "supports": "虫快"},
+      {"file": "scripts/game_main.gd", "needle": "diamond_mult = maxf(diamond_mult, 1.5)", "min_hits": 1, "supports": "残响足"},
+      {"file": "scripts/boss.gd", "needle": "apply_blast_push", "min_hits": 1, "supports": "气浪会把人推开"}],
+     "must_contain_all": ["残响"], "forbidden": ["子弹会拐弯", "贴墙打"],
+     "note": "三个短语分别对 pressure 支的两行乘子 + Boss 签名脉冲 pressure 分支（pd<200 → *260.0 推离）。第三项只在有守望者的层成立——句子主语是「高压层」，故须知道该支仅在 boss 存在时触发；见 §风险。"},
+    {"text": "高压层。修罗斗诤，虫更快，拾到的残响也多。", "len": 21, "claim_type": "numeric",
+     "anchors": [
+      {"file": "scripts/game_main.gd", "needle": "enemy_speed_mult = maxf(enemy_speed_mult, 1.3)", "min_hits": 1},
+      {"file": "scripts/game_main.gd", "needle": "diamond_mult = maxf(diamond_mult, 1.5)", "min_hits": 1}],
+     "must_contain_all": ["残响"], "forbidden": ["子弹会拐弯", "贴墙打"],
+     "note": "只押 _apply_floor_theme 的两行乘子——纯层属性，不掺 Boss 条件分支，最不容易说谎。**主理人现改推荐这版**（原 24 字版把 Boss 专属危害写成层通性）。"},
+    {"text": "高压层。修罗斗诤，别指望站定，虫比你快三成。", "len": 22, "claim_type": "numeric",
+     "anchors": [
+      {"file": "scripts/game_main.gd", "needle": "enemy_speed_mult = maxf(enemy_speed_mult, 1.3)", "min_hits": 1}],
+     "must_contain_all": ["虫"], "forbidden": ["子弹会拐弯", "贴墙打"],
+     "note": "「快三成」直译 1.3 倍系数，玩家能体感；但丢了 diamond_mult 这个真正值钱的项。"}]},
+
+  {"key": "themes/silent",
+   "prev": "静默层。天道静虑，听不见脚步，多看小地图。",
+   "options": [
+    {"text": "静默层。天道静虑，小地图整块没了，虫也少。", "len": 21, "claim_type": "numeric+entity",
+     "anchors": [
+      {"file": "scripts/game_main.gd", "needle": "hud.set_minimap_hidden(_theme_rule == \"silent\")", "min_hits": 1, "supports": "小地图整块没了"},
+      {"file": "scripts/data.gd", "needle": "\"pool\": 2, \"elite\": \"minotaur\"", "min_hits": 1, "supports": "虫也少（池种类最少档）"}],
+     "must_contain_all": ["小地图"], "must_contain_any": ["没了", "消失"],
+     "forbidden": ["多看小地图"],
+     "note": "方向修正后的版本：从「叫玩家去看一个被关掉的东西」改成「告诉玩家那东西会没」。第二项措辞见 §风险。"},
+    {"text": "静默层。天道静虑，小地图整块消失，只能靠眼睛。", "len": 22, "claim_type": "entity",
+     "anchors": [
+      {"file": "scripts/game_main.gd", "needle": "hud.set_minimap_hidden(_theme_rule == \"silent\")", "min_hits": 1}],
+     "must_contain_all": ["小地图"], "must_contain_any": ["没了", "消失"],
+     "forbidden": ["多看小地图"],
+     "note": "去掉「虫也少」这个弱项，只押一条硬事实＋一句建议。锚点少一条，门信号也少一条。"},
+    {"text": "静默层。天道静虑，小地图黑掉，怪到跟前才看得见。", "len": 23, "claim_type": "entity+spatial",
+     "anchors": [
+      {"file": "scripts/game_main.gd", "needle": "hud.set_minimap_hidden(_theme_rule == \"silent\")", "min_hits": 1}],
+     "must_contain_all": ["小地图"], "must_contain_any": ["黑掉", "看不见"],
+     "forbidden": ["多看小地图"],
+     "note": "「怪到跟前才看得见」是玩家体感描述，但没有独立锚点支撑（视野未被 silent 改），属半空承诺——**不建议**。"}]}
+ ],
+ "risks": [
+  "themes/pressure 第一版的「气浪会把人推开」只对**该层有守望者**的情形成立（apply_blast_push 在 boss.gd 的 _pulse_theme pressure 支里）。层签说的是整层性质，故默认取第二版。若作者要保留推人那句，须同时把它登记为条件性事实（前缀「撞上它时」）。",
+  "themes/silent 的「虫也少」锚的是 FLOOR_THEMES 第 7 项 pool:2 —— 而 pool 是 **FLOOR_POOLS 权重表编号**（池 2 有 8 种敌人），不是数量。玩家能观测到的只是「这一层的怪种跟别层不同」，「少」字无直接锚点。要写数量类断言必须先有一个真的密度开关（本批不授权新增）。",
+  "所有 needle 用函数名/字段名/语句片段，⛔ 行号；实现挪动位置不影响门，实现改名会让门红——这是设计意图，不是缺陷。"
+ ]
+}

@@ -27,9 +27,9 @@ var bomb_cap := 3
 var bomb_level := 0
 
 # 武器双槽
-var weapon_slots: Array = ["rifle", ""]
+var weapon_slots: Array = ["zhushan", ""]
 var slot := 0
-var slot_mags := {"rifle": 8}
+var slot_mags := {"zhushan": 8}
 var extra_count := 0        # 散射弹升级
 var fire_rate_mult := 1.0   # 射速升级
 var bullet_speed_mult := 1.0
@@ -99,8 +99,39 @@ var control_locked := false  # 过门淡入淡出期间锁操作
 var _immortal := false
 
 var _reload_t := 0.0
+## 换弹复位**代数令牌**：每次起手换弹 +1，`give_weapon()` 也 +1（取消在飞回调）。
+## 回调只在 `gen == _reload_gen` 时落账，否则认账失效——`_reload_t = 0.0` 清不掉已注册的 safe_delay。
+var _reload_gen := 0
 var _swap_t := 0.0
 var _fire_cd := 0.0
+# S38 T-N N10（HP-1 要求它先于任何近战逻辑落地）：近战族计数器，口径 V-E1a 的唯一观测面。
+# 🔴 `static`：探针与 `_smoke_rngcount_probe()` 读同一对账本；本批不每局归零，
+#    所以**所有判据都记前后差值**——拿绝对值断言会在第二局假红（那是判据的错，不是实现的错）。
+static var melee_swings := 0
+static var melee_rng_draws := 0
+# S40-a／V-S4：近战清扫漂浮弹幕的两个计数器（命名照上面两行）。🔴 同为 `static`、同样**不每局归零**
+#    ⇒ 判据一律记前后差值；⛔ 进存档、⛔ 进任何 E1 指纹串（实施单 A4／禁止事项 #9：持久状态＝指纹风险源）。
+static var bullets_swept := 0
+static var last_sweep_count := 0
+# S40-c／C5：盾的三层窗口计数器，🔴 **三个分开记**（实稿 §3.2 末：只有总数的断言永远查不出
+# 「所有攻击都返同一种东西」这种偷懒实现）。同为 `static`、同样**不每局归零** ⇒ 判据一律记前后差值；
+# ⛔ 进存档、⛔ 进任何 E1 指纹串（禁止事项 #9）。
+static var parry_count := 0
+static var block_count := 0
+static var shield_absorbed_dmg := 0
+# S40-c／C1（裁定件 §1-C1 施工口径逐字）：完美窗＝**物理帧计数**，⛔ 写成秒的浮点常量。
+# 🔴 `_parry_frames_left` 是 `_stance_t` 的**派生态**、不是第二套窗口计时：只由 `_stance_open()` 那一拍
+# 置位、只在 RAISE 成立期间被读取（RAISE 一假 ⇒ PARRY/BLOCK 同时假，⛔「架式已关、完美窗还开着」双账）。
+# ⛔ 持久化、⛔ 进 E1 指纹串。`_parry_hit_cd` 一字段承载 C2 的归属：**>0＝刚盾反成功**（此窗内后续弹走
+# BLOCK）、**<0＝刚硬格成功**（此窗内不再进入第二次 BLOCK 结算，防八向环把 ×BLOCK_MULT 连乘八次）、
+# **0＝可开新结算**；向零递减，⛔ 第二个 bool 位。
+const PARRY_FRAMES := 12
+const PARRY_HIT_CD := 6
+var _parry_frames_left := 0
+var _parry_hit_cd := 0
+# S40-c／C6 **占位常数**（🔴 作者保留域②未点头）：取主理人推荐的 0.5，且按同一条裁定的后半句
+# 推荐**允许硬格免伤到 0**（⛔ `maxi(1,…)`）。作者点头后单次替换，替换不算越权（裁定件 §1-C6 放行记录）。
+const BLOCK_MULT := 0.5
 var _invuln_t := 0.0
 var _knock := Vector2.ZERO
 var _aim := Vector2.DOWN
@@ -111,6 +142,39 @@ var _buffs := {}
 var _wander := Vector2.ZERO
 var _wander_t := 0.0
 var _dbg_t := 0.0
+# S38 B2a 架式窗口：开火置位，>0 期间 ⛔ 把 animation 从 "attack" 切到 walk/idle（实施单 T-P／P0 两处成因的正解）。
+# 🔴 E6：新增计时一律走 `Game.FIXED_DT`，⛔ raw `delta`（实测喂进 `_update_anim()` 的 delta=0.03333
+#    ＝1/60×`Engine.time_scale`2.0，≠FIXED_DT 0.016667；拿它倒计时＝窗口随 tick 疏密漂移，也踩线）。
+var _stance_t := 0.0
+# SMOKE_STANCE=1 的只读采样器（V-G2 验收＋反证刀靶）：只数帧，⛔ 写任何游戏状态、⛔ 抽随机数
+# 🔴 `_sp_hold_t` 是探针**自己按规格重算**的窗口（同样 FIXED_DT 递减），⛔ 复用被测试的 `_stance_t`：
+#    否则反证刀 P3（把代码侧窗口打成 0）会连判据一起打掉 ⇒ 恒绿。判据与实现必须两套账。
+var _stance_probe := OS.get_environment("SMOKE_STANCE") != ""
+var _sp_shots := 0
+var _sp_pending := false
+var _sp_hold_t := 0.0
+var _sp_window := 0
+var _sp_moving_window := 0
+var _sp_leaks := 0
+var _sp_leak_first := ""
+var _sp_leaks_dead := 0
+var _sp_len := 0.0
+var _sp_delta_sum := 0.0
+var _sp_samples := 0
+var _sp_frame_max := -1
+var _sp_gap_min := 1 << 30
+var _sp_gap_max := 0
+var _sp_gap_last := 0
+var _sp_truncated := 0
+var _sp_pf_last := -1
+var _sp_last_frame := -1
+var _sp_played_out := 0
+var _sp_released := 0
+# 承重计数：两处切口「想切走却被架式窗口按住」的帧数。⛔ 拿它当「守卫在工作」的充分证据它才算数——
+# 只有它 > 0，leaks=0 才不是「根本没人想切走」的空转（实施单禁止事项 16 点名的就是这种）。
+var _sp_blocks_idle := 0
+var _sp_blocks_walk := 0
+const _STANCE_DECLARED := 7
 var _auto_swapped := false
 var _nav_last := Vector2.ZERO      # 自动驾驶：上一采样点（查卡死用）
 var _nav_t := 0.0                  # 自动驾驶：距上次采样的时间
@@ -162,6 +226,8 @@ func _ready() -> void:
 		_codex_boon_probe.call_deferred()
 	if OS.get_environment("SMOKE_THIRD_BOSS") != "":
 		_third_boss_probe.call_deferred()
+	if OS.get_environment("SMOKE_STANCE") != "":
+		_stance_probe_report.call_deferred()
 	if OS.get_environment("SMOKE_OATH") != "" or OS.get_environment("SMOKE_ECHO_CHAIN") != "":
 		_oath_probe.call_deferred()
 	if OS.get_environment("SMOKE_FLOOR_SIGN") != "" or OS.get_environment("SMOKE_FLAVOR") != "":
@@ -187,7 +253,15 @@ func cur_def() -> Dictionary:
 
 
 func mag_cap() -> int:
-	return maxi(1, int((int(cur_def()["mag"]) + mag_bonus) * mag_cap_mult))
+	return mag_cap_of(cur_weapon())
+
+
+## 配额上限按**指定武器 id** 算（灾祸 `mag_cap_mult` 一并折进去，V-C3 要求近战同样被压）。
+## 🔴 与下面 `mag_cap_for()` 的区别是有意保留的：那条是捡起时的初始值（不折灾祸系数，
+##    本批不改它——改了会挪动 reload 触发时机，进而挪动 autopilot 的抽取次数），
+##    这条是复位回调的落点（必须折系数，否则弹药荒层复位完就是满配额）。
+func mag_cap_of(id: String) -> int:
+	return maxi(1, int((int(WeaponsClass.DEFS[id]["mag"]) + mag_bonus) * mag_cap_mult))
 
 
 func mag() -> int:
@@ -202,8 +276,8 @@ func refresh_mag_cap() -> void:
 func give_weapon(id: String) -> void:
 	if not WeaponsClass.DEFS.has(id):
 		# 未知 id 会在 mag_cap_for 直接崩，点名并回退
-		Dev.err("weapon", "未知武器 id：%s（回退标准步枪）" % id)
-		id = "rifle"
+		Dev.err("weapon", "未知武器 id：%s（回退朱砂笔）" % id)
+		id = "zhushan"
 	if weapon_slots[1] == "":
 		weapon_slots[1] = id
 		slot_mags[id] = mag_cap_for(id)
@@ -218,6 +292,7 @@ func give_weapon(id: String) -> void:
 		weapon_slots[slot] = id
 		slot_mags[id] = mag_cap_for(id)
 	_reload_t = 0.0
+	_reload_gen += 1
 	weapon_changed.emit(weapon_slots, slot)
 
 
@@ -266,6 +341,16 @@ func _physics_process(delta: float) -> void:
 	_tick_buffs(delta)
 	_tick_timers(delta)
 	_tick_relic_timers()
+	# S40-c／C1：完美窗与冷却闸的逐拍递减（🔴 ⛔ raw `delta`、⛔ `Engine.time_scale`、⛔ `create_timer()`
+	#    ＝整型帧计数，根本不碰时间；换算校验照 M-2：`round(0.20 / (1/60)) == 12`）。
+	#    位置即口径：必须排在 `_update_aim_and_fire()` **之前**——起手那一拍要读到刚置位的 `PARRY_FRAMES`，
+	#    窗长才是整整 12 拍；排在之后会被自己减成 11，窗长静默腰斩成 0.183s（冒烟 2× 下按真实秒时断言也必错）。
+	if _parry_frames_left > 0:
+		_parry_frames_left -= 1
+	if _parry_hit_cd > 0:
+		_parry_hit_cd -= 1
+	elif _parry_hit_cd < 0:
+		_parry_hit_cd += 1
 	# 回响镜像源：轨迹缓冲采样（0.1s × 30 = 3 秒；echo AI 读取）
 	_trail_t += Game.FIXED_DT
 	if _trail_t >= 0.1:
@@ -307,6 +392,10 @@ func _physics_process(delta: float) -> void:
 		_facing = _dir_to_facing(input_vec)
 	_update_anim(delta)
 	_update_aim_and_fire(delta)
+	# S40-c／C3（实稿 §4.3 G10）：盾的扫描排在 `_update_aim_and_fire()` **之后**——同帧「刚挥的盾 vs 刚到的弹」
+	# 由此有确定答案（本拍开的窗本拍就能吃到弹）。🔴 插在四个输入更新之间不改变它们的**相对**顺序
+	# （anim→fire→bomb→skill→relic 一字未动），⛔ 把它挪到 :368 之后会改变与 relic 的先后，那是另一笔账。
+	_update_shield_scan()
 	_update_bomb_input()
 	_update_skill_input()
 	_update_relic_input()
@@ -344,19 +433,219 @@ func _update_anim(delta: float) -> void:
 	_turn_t = maxf(0.0, _turn_t - delta)
 	sprite.speed_scale = 2.0 if _turn_t > 0.0 else 1.0
 
+	# 架式窗口（B2a「未完不切走」）：窗口没走完，两处「切走 attack」的分支一律按住——这就是实施单 R3
+	# 那两处成因（①移动即切回 walk、②interval 短于动画 ⇒ 一停手就回 idle）共同的收口点。
+	# ⛔ 改帧数、⛔ 改 interval（T-P1／T-P2 另裁）：这里只按时序，不动任何美术资产与射速。
+	# 🔴 「按住」这件事本身必须计数：leaks=0 既可能是守卫挡住了、也可能是根本没人想切走，两者天差地别；
+	#    只有拦截次数不为 0，leaks=0 才是证据而不是空转（实施单禁止事项 16）。
+	# 🔴 采样排在两处切口**之后**：判据要看的正是「这一帧的切换有没有把没挥完的一刀切走」。
+	_stance_t = maxf(0.0, _stance_t - Game.FIXED_DT)
+
+	var swing := _swing_open()
 	if sprite.animation == "attack" and not sprite.is_playing():
-		sprite.play("idle")
+		if swing:
+			if _stance_probe:
+				_sp_blocks_idle += 1     # 想回 idle 而被窗口按住＝守卫真有活干
+		else:
+			sprite.play("idle")
 	if moving:
 		var anim := "walk_down"
 		match _facing:
 			"up": anim = "walk_up"
 			"side": anim = "walk_side"
 		sprite.flip_h = _facing == "side" and velocity.x < 0.0
-		if sprite.animation != anim and not (sprite.animation == "attack" and sprite.is_playing()):
-			sprite.play(anim)
-			sprite.frame = 0
+		var want_walk := sprite.animation != anim and not (sprite.animation == "attack" and sprite.is_playing())
+		if want_walk:
+			if swing:
+				if _stance_probe:
+					_sp_blocks_walk += 1
+			else:
+				sprite.play(anim)
+				sprite.frame = 0
 	elif sprite.animation != "idle" and sprite.animation != "attack":
 		sprite.play("idle")
+
+	if _stance_probe:
+		_sample_stance(delta, moving)
+
+
+## 动画自身时长：跟着图集走（4 格 ÷ 12fps = 0.333s），⛔ 写死秒数——补帧一变它自动跟。
+## 🔴 现在只有探针拿它当「预算帧数」的分母做诊断；判据本身不看秒数（见 `_swing_open()`），
+##    所以⛔ 把它误读成窗口长度来源，更⛔ 拿它反向去改 interval／帧数（T-P1／T-P2 另裁）。
+func _attack_anim_len() -> float:
+	if sprite.sprite_frames == null or not sprite.sprite_frames.has_animation("attack"):
+		return 0.0
+	return float(sprite.sprite_frames.get_frame_count("attack")) \
+		/ maxf(float(sprite.sprite_frames.get_animation_speed("attack")), 1.0)
+
+
+func _attack_last_cell() -> int:
+	if sprite.sprite_frames == null or not sprite.sprite_frames.has_animation("attack"):
+		return -1
+	return sprite.sprite_frames.get_frame_count("attack") - 1
+
+
+## 「这一刀还在架式窗口内」＝ 窗口没到期，或动画还在播（后者是兜底：窗口长度取
+## max(动画时长, interval)，若图集 fps／射速改动使动画比窗口长，⛔ 让挥到一半的动作被切走）。
+func _swing_open() -> bool:
+	if _stance_t > 0.0:
+		return true
+	return sprite.animation == "attack" and sprite.is_playing()
+
+
+## 开火＝近战 `_swing()`（B1 落地后共用此入口）置位架式窗口：长度＝本发该占的时序，
+## 取「动画播完所需」与「这一发的射速间隔」的较大者——R3 的成因②正是 interval 短于动画。
+## ⛔ 在这里改帧数／改 interval：T-P1／T-P2 是另外的待办，本批只动时序。
+func _stance_open() -> void:
+	_stance_t = maxf(_attack_anim_len(), _interval())
+	_parry_frames_left = PARRY_FRAMES	# S40-c／C1：起手那一拍即开窗（裁定件 §1-C1 逐字「紧接一行」）
+
+
+## 置位观测——枪械开火用，近战 B1 的 `_swing()` 落地后共用这一个入口（实施单 P0）。
+## 🔴 `_sp_hold_t` 是探针**独立复算**的规格窗口（⛔ 读 `_stance_t`／⛔ 调 `_stance_open()`）：
+##    判据若跟实现共用一个变量，反证刀 P3 就会把判据一起删掉 ⇒ 假绿（禁止事项 16）。
+func _probe_stance_shot() -> void:
+	if not _stance_probe:
+		return
+	if _sp_last_frame < 0:
+		_sp_last_frame = _attack_last_cell()
+	# 闩锁还开着就来下一发 ⇒ 上一发的架式窗口被这一发从头截断（射速快于动画，T-P2 那条线）
+	if _sp_pending and _sp_hold_t > 0.0:
+		_sp_truncated += 1
+	_sp_pending = true
+	_sp_hold_t = maxf(_attack_anim_len(), _interval())   # 与 `_stance_open()` 同规格、各记各的账
+	_sp_shots += 1
+	_sp_len = _attack_anim_len()
+	if _sp_shots == 1:
+		# 窗口时长是这条判据的分母：图集没登记 attack／格数为 0 ⇒ 守卫等于没上，
+		# ⛔ 让「window=0」被读成「没问题」，必须把来源打出来。
+		var nf := 0
+		var fpsv := 0.0
+		if sprite.sprite_frames != null and sprite.sprite_frames.has_animation("attack"):
+			nf = sprite.sprite_frames.get_frame_count("attack")
+			fpsv = sprite.sprite_frames.get_animation_speed("attack")
+		print("[SMOKE-STANCE] 首发：len=%.4f 格=%d fps=%.1f 最后一格=%d frames=%s anim=%s" % [
+			_sp_len, nf, fpsv, _sp_last_frame, sprite.sprite_frames != null, sprite.animation])
+	# 🔴 发间隔用「物理帧数」量：实测 skill 生效时 _interval() = 0.30×0.35 ÷ 射速倍率 ≈ 0.067s
+	#    ⇒ 两发只差 2～3 帧，而动画要 4 格 ÷12fps = 0.333s ⇒ 前一发必然被后一发从头截断。
+	var pf := Engine.get_physics_frames()
+	if _sp_pf_last >= 0:
+		_sp_gap_last = pf - _sp_pf_last
+		_sp_gap_min = mini(_sp_gap_min, _sp_gap_last)
+		_sp_gap_max = maxi(_sp_gap_max, _sp_gap_last)
+	_sp_pf_last = pf
+
+
+func _sample_stance(delta: float, moving: bool) -> void:
+	# 帧账两件套：mean_delta 是「为什么按秒算的收口上限永远撞不到」的分母，也是 E6 那根线的证据。
+	_sp_delta_sum += delta
+	_sp_samples += 1
+	if not _sp_pending:
+		# 闩锁关着＝窗口已交还。这条计数是**反向刀**：守卫若把角色冻死在 attack，
+		# leaks 恒为 0 看着全绿，只有「交还过」能证伪它。
+		if _sp_shots > 0 and sprite.animation != "attack" and sprite.animation != "die":
+			_sp_released += 1
+		return
+	# 🔴 先递减、再判到期，最后才判漏：本拍代码侧 `_stance_t` 同样在 0，切口正当放开动画，
+	#    顺序反了就会把「窗口到期的那次正当交还」读成漏帧（上一轮那 2 帧假红就是这么来的）。
+	_sp_hold_t = maxf(0.0, _sp_hold_t - Game.FIXED_DT)
+	if _sp_hold_t <= 0.0:
+		_sp_pending = false
+		return
+	_sp_window += 1
+	if sprite.animation != "attack":
+		if sprite.animation == "die":
+			_sp_leaks_dead += 1   # 死亡打断＝合法切断：⛔ 记成守卫失效，也⛔ 静默吞掉
+			_sp_pending = false
+		else:
+			# 规格窗口内动画已不是 attack ⇒ 这一刀被真的切走了。判据只看探针自己的账（_sp_hold_t），
+			# 与被测实现（_stance_t／_swing_open()）无耦合——否则反证刀一砍判据就跟着失效。
+			_sp_leaks += 1
+			if _sp_leak_first == "":
+				_sp_leak_first = String(sprite.animation)
+			_sp_pending = false
+		return
+	if sprite.frame > _sp_frame_max:
+		_sp_frame_max = sprite.frame
+	if moving:
+		_sp_moving_window += 1
+		if _sp_last_frame >= 0 and sprite.frame >= _sp_last_frame:
+			_sp_played_out += 1   # 边走边挥且动画已到底格＝V-G2 的正身证据
+
+
+## SMOKE_STANCE=1：V-G2「架式窗口内不把 attack 切走，窗口到期后照常交还」的机器验收。
+## 🔴 前四条是覆盖前提：没跑到「够多帧的窗口＋移动中挥砍＋真播到底」，后面的零漏说明不了任何事——
+##    那叫空转，⛔ 报成通过。判据用探针自己的 `_sp_hold_t`（⛔ 读被测试的 `_stance_t`）。
+func _stance_probe_report() -> void:
+	# 🔴 收口条件＝「跑到够多帧」，⛔「等够几秒」：实测战斗到第 337 物理帧（≈11.2s 游戏时间）
+	#    才开第一枪，早先钉死 12.0s 定时器刚好卡在枪声刚起的位置 ⇒ 报告只截到「开场尾巴」。
+	#    上限也用同一把尺（采样帧数）：按秒算的上限在坏构建里可能永远撞不到 ⇒ 报告行整段消失，
+	#    [ERR]=0 被读成「绿」——沉默冒充通过，比假绿更坏。
+	# 🔴 采样帧上限 1000：3200 进程帧 × 实测 0.45 物理帧/进程帧 ≈ 1440 物理帧——再钉高，反证刀
+	#    P4（探针瞎掉、shots 永远 0）就撞不到收口，报告行整段消失，沉默冒充证据。
+	#    `released == 0` 也纳入等待条件：窗口到期后「动画确实交还过」是防冻死的反向刀，
+	#    但连射期间闩锁一直被下一发续期（实测发间隔 2～9 帧 < 窗口 20 帧），不等它就没样本。
+	#    人已死就⛔ 再等（死后再无交还可言），让第 7 条自己报覆盖不足。
+	var waited := 0.0
+	while _sp_samples < 1000 and (
+			_sp_shots < 12 or _sp_window < 40 or (_sp_released == 0 and not dead)):
+		await get_tree().create_timer(1.0, true).timeout
+		waited += 1.0
+	var mean_delta := 0.0 if _sp_samples == 0 else _sp_delta_sum / _sp_samples
+	var budget := 0.0 if mean_delta <= 0.0 else _sp_len / mean_delta
+	var checked := 0
+	checked += 1
+	Dev.check(_sp_shots >= 12, "stance",
+		"覆盖不足：窗口只置位 %d 次（须 ≥12 次；采样帧=%d／定时器轮=%d 已撞到上限）⇒ 判据没被跑到" % [
+			_sp_shots, _sp_samples, int(waited)])
+	checked += 1
+	Dev.check(_sp_window >= 40, "stance",
+		"覆盖不足：窗口内采样帧 = %d（须 ≥40）⇒ 守卫生效期间太短，漏 0 说明不了任何事" % _sp_window)
+	checked += 1
+	Dev.check(_sp_moving_window >= 4, "stance",
+		"覆盖不足：边走边挥的窗口帧 = %d（须 ≥4）⇒ 移动分支这条成因链没被触发" % _sp_moving_window)
+	checked += 1
+	# 🔴 这条才是 V-G2 的正身：不数帧、只看动画自己有没有走到最后一格。
+	#    tick 再稀也照样成立——「播完了」是可以直接观测的，「撑了几帧」不可以。
+	Dev.check(_sp_last_frame >= 0 and _sp_played_out > 0, "stance",
+		"移动窗口内 attack 从没够到最后一格（观测到的最大格 = %d／最后一格 = %d，够到底的帧 = %d）⇒「挥砍被移动打断」并未被证伪" % [
+			_sp_frame_max, _sp_last_frame, _sp_played_out])
+	checked += 1
+	# 🔴 承重断言：守卫到底有没有活干。leaks=0 单独看是**恒真风险最高的那条**——没人试图切走时它
+	#    自动成立（实施单禁止事项 16 点名的就是这种）。所以先证明「想切走而被挡住」发生过。
+	Dev.check(_sp_blocks_idle + _sp_blocks_walk > 0, "stance",
+		"两处切走点一次都没被守卫挡住（idle 拦截=%d／walk 拦截=%d）⇒ leaks=0 是空转不是证据，本跑【未测出】" % [
+			_sp_blocks_idle, _sp_blocks_walk])
+	checked += 1
+	Dev.check(_sp_leaks == 0, "stance",
+		"挥砍未完动画被切走 %d 帧（第一次切到「%s」）⇒ 架式窗口守卫失效" % [_sp_leaks, _sp_leak_first])
+	checked += 1
+	# 🔴 反向刀：守卫也不能把角色**冻死**在 attack——窗口到期后必须交还动画。
+	#    只看 leaks==0 的话，「永远不切走」同样恒绿，这条是它唯一的对偶证据。
+	Dev.check(_sp_released > 0, "stance",
+		"架式窗口到期后动画从未交还（交还帧=0／采样帧=%d／定时器轮=%d／死亡打断=%d）⇒ 要么守卫把角色冻在 attack，要么这一跑全程连射／中途阵亡没留出样本，两种都⛔ 报成通过" % [
+			_sp_samples, int(waited), _sp_leaks_dead])
+	Dev.check(checked == _STANCE_DECLARED, "stance",
+		"自校验失败: checked(%d) != declared(%d)——有断言被跳过" % [checked, _STANCE_DECLARED])
+	print("[SMOKE-STANCE] shots=%d len=%.4f window=%d moving_window=%d leaks=%d blocks(idle/walk)=%d/%d released=%d 死亡打断=%d 闩锁未结算=%d done checked=%d declared=%d" % [
+		_sp_shots, _sp_len, _sp_window, _sp_moving_window, _sp_leaks,
+		_sp_blocks_idle, _sp_blocks_walk, _sp_released, _sp_leaks_dead,
+		1 if _sp_pending else 0, checked, _STANCE_DECLARED])
+	# 帧账：把「窗口为什么只摊上几帧」写在同一条日志里，⛔ 留给下一轮猜。
+	# 实测 mean_delta=0.0333（1/60 × time_scale 2.0）、len=0.3333 ⇒ 单发预算 10 帧；
+	# 但 skill 生效时 _interval()≈0.067s ⇒ 发间隔只有 2～3 帧，窗口首尾相接成一整段，
+	# 所以 window 是「并集」而不是「每发 10 帧的和」——逐发帧数在这里没有意义。
+	print("[SMOKE-STANCE] 帧账：samples=%d mean_delta=%.4f（1/60=%.4f, time_scale=%.1f, FIXED_DT=%.4f）⇒ 单发预算 %.2f 帧  物理帧=%d  格：%d/%d  播到底=%d  拦截 idle/walk=%d/%d" % [
+		_sp_samples, mean_delta, 1.0 / 60.0, Engine.time_scale, Game.FIXED_DT, budget,
+		Engine.get_physics_frames(), _sp_frame_max, _sp_last_frame, _sp_played_out,
+		_sp_blocks_idle, _sp_blocks_walk])
+	# 🔴 发间隔／截断数＝本批「不动帧数」裁定的直接代价：动画长 0.3333s 而射速 0.067s 一发，
+	#    下一发必然在上一发放完之前重新 play("attack") ⇒ 从第 0 格重来。
+	#    这条⛔ 当断言用（作者已裁「帧数本批不动，T-P1/T-P2 另议」），只把量摊开供复验。
+	print("[SMOKE-STANCE] 发间隔（物理帧）min=%d max=%d 末段=%d／被下一发截断的开火=%d／%d（动画 %.4fs vs 实测射速 ≈%.3f～%.3fs）" % [
+		0 if _sp_gap_min > 1 << 20 else _sp_gap_min, _sp_gap_max, _sp_gap_last,
+		_sp_truncated, _sp_shots, _sp_len,
+		(0 if _sp_gap_min > 1 << 20 else _sp_gap_min) * mean_delta, _sp_gap_max * mean_delta])
 
 
 func _update_aim_and_fire(delta: float) -> void:
@@ -379,7 +668,14 @@ func _update_aim_and_fire(delta: float) -> void:
 
 	_fire_cd -= delta
 	if want_shoot and _fire_cd <= 0.0 and _reload_t <= 0.0 and _swap_t <= 0.0:
-		_fire()
+		# S38 T-N N2：按形态分派。🔴 形态名单只认 `Weapons.KIND_MELEE` 这一份（M2 的「校验与分派共用」
+		#    落点）；在此另抄一遍 kind 字符串＝validate 查 A 表、player 认 B 表，两套账必漂移。
+		# throw/wand 走 `_fire()` 不是兜底，是实稿 §3.3/§3.6 的裁定：它们本来就是弹道参数变体。
+		# ⛔ 不动四个输入更新的调用顺序（_update_anim→本函数→bomb→skill→relic），同帧竞争裁定依赖它。
+		if WeaponsClass.is_melee_kind(String(cur_def().get("kind", ""))):
+			_swing()
+		else:
+			_fire()
 		_fire_cd = _interval()
 
 
@@ -398,6 +694,8 @@ func _fire() -> void:
 		slot_mags[cur_weapon()] = mag() - 1
 		mag_changed.emit(mag(), mag_cap())
 	sprite.play("attack")
+	_stance_open()       # B2a：这一发起架式窗口，窗口内 ⛔ 把动画切回 walk/idle（近战 B1 的 `_swing()` 复用同一入口）
+	_probe_stance_shot() # 探针记账（⛔ 参与任何游戏逻辑；SMOKE_STANCE 未开时首行即 return）
 	var d := cur_def()
 	var muzzle := global_position + _aim * 10.0 + Vector2(0, -6)
 	Game.main.spawn_muzzle_spark(muzzle, _aim.x < 0.0)
@@ -424,15 +722,194 @@ func _fire() -> void:
 		_start_reload()
 
 
+## S38 T-N：近战／长兵／盾共用的即时结算入口（口径 V-A2 说的「真·非弹幕」三种形态）。
+## 与 `_fire()` 对称，但**一条子弹都不生成**：命中面是扇形几何扫描，伤害当场结在敌人身上。
+## 🔴 HP-2 的物理事实（⛔ 用「近战不该抽随机数」的直觉去改这一段）：每一次**有效**执行恒消费
+##    `Game.rng.randf()` **恰 1 次**，且不随命中数、敌人在否、autopilot、灾祸、主题、暴击结果变化。
+##    0 次＝清场后整条随机流往前挪一格（指纹与冻结串全漂）；2 次＝往后挪两格。V-E1d 两把刀各咬一头。
+func _swing() -> void:
+	if not skill_active() and mag() <= 0:
+		# N7／V-C1／V-E5：配额见底＝架式过载。这次输入**不算一次动作**，所以零抽取、零伤害、零计数。
+		_start_reload()
+		return
+	var d := cur_def()
+	var kind := String(d["kind"])
+	# 🔴 这一发排在任何命中分支之前：抽进循环＝「命中几个抽几个」，抽进 `if hits > 0` 之后
+	#    ＝「空挥不抽」（HP-3 禁第③条的字面形态），补进 start_run ＝「整局凑一次」（禁第①条）。
+	var crit := Game.rng.randf() < crit_chance
+	melee_rng_draws += 1
+	melee_swings += 1
+	if not skill_active():
+		slot_mags[cur_weapon()] = mag() - 1
+		mag_changed.emit(mag(), mag_cap())
+	sprite.play("attack")
+	_stance_open()          # B2a：与弹幕侧**同一个**架式窗口入口（实施单：⛔ 近战另起一套窗口）
+	_probe_stance_shot()
+	var reach := float(d["reach"])
+	var half := deg_to_rad(float(d["arc_deg"])) * 0.5
+	# N5／V-D1：乘区与弹幕侧同式；`bullet_dmg_mult` 名字带 bullet 但它是玩家侧全局伤害倍率，
+	# 近战吃它是有意的（否则一半升级卡对近战失效）；⛔ `bullet_scale`——那是贴图尺寸。
+	var dmg := float(d["dmg"]) * damage_mult * bullet_dmg_mult * (2.0 if crit else 1.0)
+	var booms := []
+	# N9／V-B7：spear 无视正面甲（实稿 §3.4）。🔴 只在本结算内有效，置位与清零夹住整个扫描，
+	#    ⛔ 改 slug.take_damage 签名、⛔ 写进任何持久字段（跨帧残留＝下一发子弹也不减甲，红）。
+	Game.main._melee_pierce_armor = kind == "spear"
+	# N3：⛔ Area2D、⛔ 新碰撞层/掩码（HP-5）——方向级变更会与 bullet.gd 的 layer 8/mask 1|4|64 打架。
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(e) or e.dead or not e.has_method("take_damage"):
+			continue
+		var to_e: Vector2 = e.global_position - global_position
+		if to_e.length() > reach:
+			continue
+		# `angle_difference` 而非减法：±180° 环绕处直接相减会把正后方读成「在扇内」。
+		if absf(angle_difference(to_e.angle(), _aim.angle())) > half:
+			continue
+		# HP-4／V-B6：from_dir 必须是玩家指向敌人的单位向量——正面减伤只认它，⛔ Vector2.ZERO。
+		e.take_damage(dmg, to_e.normalized(), crit)
+		if kind == "shieldbash" and is_instance_valid(e) and not e.dead:
+			e.apply_slow(0.6, 1.2)		# N8／V-B5；⛔ 击退（apply_blast_push 与 dash 位移区间纠缠）
+		if crit and crit_boom:
+			booms.append(e.global_position)
+	Game.main._melee_pierce_armor = false
+	# S40-a／V-S1／V-S2：近战清扫漂浮弹幕——第二条**独立**扫描，🔴 复用上面同一个 `reach`／`half`／`_aim`
+	#    （实稿 §7 A1 未裁 ⇒ ⛔ 另算一套清扫半径引入第二个常数；⛔ Area2D／⛔ 新碰撞层与掩码，HP-5）。
+	#    判据一律走 `Bullet.is_sweepable()` 单一真源，⛔ 在此内联重写那七个条件（M-5 唯一豁免＝该函数本身）。
+	# 🔴 HP-3：整段零 `Game.rng` 消费——每次有效挥击恒 1 次抽取已由上面 `melee_rng_draws += 1` 那行钉死，
+	#    本段再抽一次就变成「扫到抽 2 次、没扫到抽 1 次」＝命中相关的抽取（实稿 §2.3 禁止形态第①条）。
+	# 排在清 `_melee_pierce_armor` **之后**：⛔ 让「扫弹」蹭到 spear 那条无视护甲的结算窗口。
+	var swept := 0
+	for b in get_tree().get_nodes_in_group("enemy_bullets"):
+		# 🔴 `is_queued_for_deletion()` 不是多余的：同帧里环盾 `_tick_relic_shield()`（player.gd 的 64px 摧毁圈）
+		#    已经 `queue_free()` 的弹**仍在组内且 `is_instance_valid` 仍为真**，只判 valid 挡不住
+		#    ⇒ 一颗弹被环盾与刃风各记一次，V-S5「两套计数各自独立、无双计」当场破。
+		if not is_instance_valid(b) or b.is_queued_for_deletion() or not b.is_sweepable():
+			continue
+		var to_b: Vector2 = b.global_position - global_position
+		if to_b.length() > reach:
+			continue
+		if absf(angle_difference(to_b.angle(), _aim.angle())) > half:
+			continue
+		# A5 视觉：确定性迸星。`flip` 取「回指玩家的方向」`-b.vel.normalized()` 的 x 符号，
+		#    符号约定照 `bullet.gd` 的 `ex.setup("spark", 0.35, vel.x < 0.0)`；⛔ 抽 `Game.rng`，
+		#    要随机观感只准走 `Game.fx_rng`（`game_state.gd` 的 `reset_fx_rng()` 随局播种）。
+		var back: Vector2 = -b.vel.normalized()
+		Game.main.spawn_muzzle_spark(b.global_position, back.x < 0.0)
+		b.queue_free()
+		swept += 1
+	bullets_swept += swept
+	last_sweep_count = swept
+	# 🔴 引爆排在清标志**之后**：`explode()` 内部同样遍历 enemies 调 take_damage，
+	#    标志还置位时炸＝AoE 顺路无视护甲（V-B7 之外的同帧泄漏，一样红）。
+	for p in booms:
+		Game.main.explode(p, 42.0, dmg * 0.6, false)		# N6／V-D3：半径与系数逐字＝bullet.gd:119
+	if not skill_active() and mag() <= 0:
+		_start_reload()
+
+
+## ── S40-c 盾与盾反：三层窗口（实稿 §3.1 结构 ＋ 裁定件 §1-C1/C2/C5）────────────────
+## RAISE ⟺ kind=="shieldbash" ∧ `_stance_t > 0.0`。🔴 与 B2a 的架式守卫**共用** `_stance_t`，
+## ⛔ 另起第二套窗口计时（§3.1：再起一个并行秒表必然出现「一个还开着、一个已关」的双账）。
+## ⛔ 新增 action：`ACTION_DEFS` 真值 18 条一字不动——举盾＝「正拿着盾且刚挥过」，没有第四个键。
+func _shield_raise() -> bool:
+	return String(cur_def().get("kind", "")) == "shieldbash" and _stance_t > 0.0
+
+
+## PARRY ⟺ RAISE ∧ 完美窗未耗尽。🔴 RAISE 一假这里必假：`_parry_frames_left` 是 `_stance_t` 的派生态，
+## 单独读它会读出「架式已关、完美窗还开着」的双账（裁定件 §1-C1 那条 ⛔ 的实现位）。
+func _shield_parry() -> bool:
+	return _shield_raise() and _parry_frames_left > 0
+
+
+## BLOCK ⟺ RAISE ∧ not PARRY（宽窗、减伤不免伤、无返还）。冷却闸在结算里查，不在这里。
+func _shield_block() -> bool:
+	return _shield_raise() and not _shield_parry()
+
+
+## 盾的有效范围**直接取这面盾的近战 `reach`**（`sh_bulwark`=34px），⛔ 另立第二个半径常数：
+## 与实施单 A2「⛔ 另算一套清扫半径」同源——多一个自由参数就多一处没人管的数值，而实稿 §3.2
+## 写的 `R_shield` 在 C1~C6 里没有数值裁定，能复用已裁的 `reach` 就不该发明。
+func _shield_reach() -> float:
+	return float(cur_def().get("reach", 0.0))
+
+
+## 每颗敌弹各自结算（裁定件 §1-C2 第 1~4 条），优先级照实稿 §3.2 步骤 3，⛔ 窗口内全吃。
+func _update_shield_scan() -> void:
+	if not _shield_raise():
+		return
+	# 步骤 3：环盾豁免在最前。`_tick_relic_shield()` 在本拍 `_tick_relic_timers()` 里已经先扫过一遍，
+	# 且环盾半径 64 包住盾 reach 34 ⇒ 环盾开着时这里整面让路，这颗弹记给环盾，⛔ 既算盾反又算环盾摧毁。
+	if relic_shield_t > 0.0:
+		return
+	var reach := _shield_reach()
+	for b in get_tree().get_nodes_in_group("enemy_bullets"):
+		if not is_instance_valid(b) or b.is_queued_for_deletion():
+			continue
+		# 🔴 判据复用 `is_sweepable()` 单一真源：实稿 §4.1 明写「T_LASER 的定义故意与 §2.1 互补，
+		#    不可清扫的＝不可盾反的，⛔ 两套『什么算激光』的说法」⇒ ⛔ 在此内联重写那七个条件。
+		if not b.is_sweepable():
+			continue
+		var to_b: Vector2 = b.global_position - global_position
+		if to_b.length() > reach:
+			continue
+		if _parry_hit_cd > 0:
+			_settle_block(b)		# 盾反后的 6 帧内后续弹走硬格（C2 第 2 条）
+		elif _parry_hit_cd < 0:
+			continue				# 硬格后的 6 帧内不再进入第二次 BLOCK 结算 ⇒ 正常受伤（C2 第 3 条）
+		elif _parry_frames_left > 0:
+			_settle_parry(b)
+		else:
+			_settle_block(b)
+
+
+## PARRY：弹被消耗、不结算伤害、`parry_count` 单独记一条。
+## 🔴 返还表（`T_DIRECT`/`T_FAN`/`T_HEAVY` 三行的返还物、`RETURN_MULT`、`apply_stun` 的消费点）
+##    **不在本批**：裁定件 §6 放行的是「RAISE/BLOCK/PARRY 窗口／stun／计数」结构层，返还表随下一批开。
+## ⛔ 用 `take_damage(0,…)` 表达免伤——0 点会走受伤函数的早退，等于白拿一次无敌帧语义，那是两套账。
+func _settle_parry(b: Node) -> void:
+	parry_count += 1
+	_parry_hit_cd = PARRY_HIT_CD
+	_shield_spark(b)
+	b.queue_free()
+
+
+## BLOCK：伤害 ×`BLOCK_MULT`（占位 0.5，C6 后半句推荐档＝**允许截断到 0**，⛔ `maxi(1,…)`）。
+func _settle_block(b: Node) -> void:
+	var raw := int(b.dmg)
+	var after := int(float(raw) * BLOCK_MULT)
+	var hit_from: Vector2 = b.global_position - b.vel.normalized() * 4.0	# 受伤方向口径逐字照 bullet.gd:153
+	shield_absorbed_dmg += raw - after
+	block_count += 1
+	_parry_hit_cd = -PARRY_HIT_CD	# 负号＝这根冷却由硬格武装（见上面 `_parry_hit_cd` 的三态注释）
+	_shield_spark(b)
+	b.queue_free()
+	if after > 0:
+		take_damage(after, hit_from)
+
+
+## 视觉照 A5 的确定性口径：⛔ `Game.rng`（盾反路径新增主流抽取＝禁止事项 #7），回指方向取 x 符号。
+func _shield_spark(b: Node) -> void:
+	var back: Vector2 = -b.vel.normalized()
+	Game.main.spawn_muzzle_spark(b.global_position, back.x < 0.0)
+
+
 func _start_reload() -> void:
 	if _reload_t > 0.0 or mag() >= mag_cap():
 		return
+	# 🔴 复位归属在**开始时**钉死这把武器：旧写法在延时回调里取 `cur_weapon()`，
+	#    过载期间切枪（V-C2 边界态）就会把配额灌进切过去的那把、原武器永远停在 0
+	#    ——近战尤其致命：mag 归零＝永远卡在过载，第一次挥击都交不出去。
+	#    更旧的写法还会往 `slot_mags` 塞新 key 留下跨层幽灵弹匣（主理人核验 §八.2）。
+	var wid := cur_weapon()
+	_reload_gen += 1
+	var gen := _reload_gen
 	_reload_t = float(cur_def()["reload"])
 	Game.sfx("reload", 1.0, -3.0)
 	Game.safe_delay(_reload_t, self, false, func() -> void:
-		if dead:
+		if dead or gen != _reload_gen:
+			# 代数令牌：`give_weapon()` 清 `_reload_t` 取消不了已在飞的 safe_delay 回调，
+			# 只有让回调自己认账失效，才不会"过载中捡武器 ⇒ 旧槽白得一次复位"。
 			return
-		slot_mags[cur_weapon()] = mag_cap()
+		slot_mags[wid] = mag_cap_of(wid)
 		mag_changed.emit(mag(), mag_cap()))
 
 
@@ -710,7 +1187,7 @@ func _sigil_coverage_probe() -> void:
 				ok = max_hp == Player.BASE_MAX_HP + 1
 				detail = "max_hp=%d" % max_hp
 			"arsenal":
-				ok = weapon_slots[1] == "shotgun"
+				ok = weapon_slots[1] == "liechi"
 				detail = "slot1=%s" % weapon_slots[1]
 			"purse":
 				ok = Game.diamonds == 15
@@ -861,7 +1338,10 @@ func _shrine_probe() -> void:
 	var coord := Vector2i(3, 4)
 	var ids_a := _shrine_ids(gm._shrine_offers_for(coord))
 	var ids_b := _shrine_ids(gm._shrine_offers_for(coord))
-	Dev.check(ids_a == ids_b and ids_a.size() == 3, "shrine", "三卡同 key 派生一致：%s" % str(ids_a))
+	# R7 §15.2：两句分开登记（Dev.check 静默通过、只在假时打 [ERR]，合句无法归因）。
+	# 定位＝玩家视角入口的廉价回归哨；红线 2 的主守卫在 S32 探针 D1（game_main.gd 八坐标双调用）名下。
+	Dev.check(ids_a == ids_b, "shrine", "三卡同 key 两次派生逐字一致：%s" % str(ids_a))
+	Dev.check(ids_a.size() == 3, "shrine", "floor5 语境三卡满额：%s" % str(ids_a))
 	var ids_c := _shrine_ids(gm._shrine_offers_for(coord + Vector2i(1, 0)))
 	print("[SMOKE-SHRINE] det offers=%s other-coord=%s" % [str(ids_a), str(ids_c)])
 	# ② 效果 + 代价逐条（先记基准再执行，断言可观察差值）
@@ -1526,7 +2006,7 @@ func _floor_sign_probe() -> void:
 			note_shown = true
 	Dev.check(note_shown, "flavor", "图鉴渲染手记行")
 	# ---------------- Sprint 20 A：手记扩容到全六类 ----------------
-	Dev.check(Data.FLAVOR.size() == 74, "flavor", "手记 74 条（全六类覆盖：29 敌+12 遗+8 词+8 题+7 Boss+10 圣所）")
+	Dev.check(Data.FLAVOR.size() == 74, "flavor", "手记 74 条（全六类覆盖：29 敌+12 遗+8 词+8 题+7 Boss+10 圣所+10 tips 逐字件 S40-R12）")
 	Dev.check(not (Data.FLAVOR_BROADCAST_KINDS as Array).has("enemies"), "flavor",
 		"enemies 不在播报白名单（防开局刷屏——S20 裁定）")
 	# 播报白名单负向：enemies 首发现入图鉴但 toast 不变（撤销既有发现保证首发现路径可测）

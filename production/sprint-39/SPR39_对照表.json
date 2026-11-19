@@ -1,0 +1,1358 @@
+{
+ "meta": {
+  "batch": "Sprint 39",
+  "date": "2026-11-20",
+  "spec": "SPR39_设计实稿_手记只说玩家观测得到的事.md §5",
+  "criteria": "SPR39_验证口径.md V-C",
+  "expected_flavor_count": 74,
+  "note": "anchors 的 needle 一律用函数名/字段名，⛔ 行号（行号会腐烂）。G-2 只在非注释行计数，防注释里的旧词喂饱探针。",
+  "max_text_len": 25,
+  "max_text_len_basis": "现存 74 条里单句号句最长＝enemies/brute 25 字（len() 含标点）；shrine/purify 31 字但它是两个句号的分句长句，不计入单句上限",
+  "max_text_len_scope": "仅对本批改写的 4 行强制 ≤25；其余行沿用现值（override 见该行 max_len_override）"
+ },
+ "forbidden_global": [
+  "索拉尔",
+  "太阳骑士",
+  "苏瑾",
+  "光缝",
+  "子弹会拐弯"
+ ],
+ "reserved_phrases": {
+  "弹匣留一半": "bw_slack_half"
+ },
+ "must_contain": [
+  {
+   "key": "bosses/prism_warden",
+   "all": [
+    "碎片变色"
+   ],
+   "any": []
+  },
+  {
+   "key": "themes/silent",
+   "all": [
+    "小地图"
+   ],
+   "any": [
+    "没了",
+    "消失"
+   ]
+  },
+  {
+   "key": "themes/pressure",
+   "all": [
+    "残响"
+   ],
+   "any": []
+  },
+  {
+   "key": "bosses/pyrothalassian",
+   "all": [
+    "脉冲"
+   ],
+   "any": []
+  },
+  {
+   "key": "bosses/third_boss",
+   "all": [
+    "比熔潮慢半拍，比守望者狠"
+   ],
+   "any": []
+  }
+ ],
+ "mechanism_votes": [
+  {
+   "id": "M-A",
+   "title": "部位伤害（砸它的核的真身）",
+   "todo": "#8",
+   "keys": [
+    "bosses/prism_warden"
+   ],
+   "cost": [
+    "新 hitbox（boss.gd _ready 现仅一个全身 CircleShape2D radius=16）",
+    "take_damage 受伤分支（现单一 hp -= amount）",
+    "重录 SPR21-FROZEN.md5 + E1 指纹基线",
+    "_smoke_abyss_check dmg 动态验伤基准重算",
+    "HUD 血条只有 boss_hp_changed 总量一条"
+   ],
+   "verdict": "不塞进 S35/S36/S37；独立批次（S40+），排在 S36 专武之后"
+  },
+  {
+   "id": "M-B",
+   "title": "光缝危害（别站在光缝里的真身）",
+   "keys": [
+    "bosses/prism_warden"
+   ],
+   "cost": [
+    "新危害实体（可复用 toxic_cloud.gd _tick_enemy 路径，须 fixed_step=true）",
+    "E6：计时走 Game.FIXED_DT",
+    "E1：位置须沿用 _pulse_theme 既有固定环范式，零新增 rng"
+   ],
+   "verdict": "可搭 M-A 同批；比 M-A 便宜一个数量级——若只批一张票，批这张"
+  }
+ ],
+ "rows": [
+  {
+   "key": "bosses/prism_warden",
+   "text": "守望者。天道之眼，碎片变色就是要换招，离它远。",
+   "prev_text": "守望者。天道之眼，别站在光缝里，砸它的核。",
+   "claim_type": "spatial",
+   "anchors": [
+    {
+     "file": "scripts/boss.gd",
+     "needle": "shards[",
+     "min_hits": 1,
+     "supports": "碎片"
+    },
+    {
+     "file": "scripts/boss.gd",
+     "needle": "modulate = _phase_tints[k]",
+     "min_hits": 1,
+     "supports": "变色"
+    },
+    {
+     "file": "scripts/boss.gd",
+     "needle": "_enter_phase",
+     "min_hits": 1,
+     "supports": "要换招"
+    },
+    {
+     "file": "scripts/boss.gd",
+     "needle": "dist < 22.0",
+     "min_hits": 1,
+     "supports": "离它远（接触判定半径）"
+    }
+   ],
+   "forbidden_substrings": [
+    "光缝",
+    "砸它的核"
+   ],
+   "status": "verified",
+   "note": "四短语四锚点：碎片节点存在 / 阶段时真改 modulate / 有换阶段函数 / 接触伤害有确定半径。⛔ 光缝、⛔ 可打部位——两句都已从货里删掉，M-A/M-B 落地前不许回流。"
+  },
+  {
+   "key": "bosses/pyrothalassian",
+   "text": "熔潮。修罗嗔火，脉冲比守望者密，器膛留一半。",
+   "prev_text": "熔潮。修罗嗔火，弹匣留一半，给它变红的时候用。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/boss2.gd",
+     "needle": "skill_interval",
+     "min_hits": 1,
+     "supports": "脉冲比守望者密（2.2 < 3.0）"
+    },
+    {
+     "file": "scripts/boss.gd",
+     "needle": "BOSS_SKILL_INTERVAL",
+     "min_hits": 1,
+     "supports": "比较基准 3.0 存在"
+    },
+    {
+     "file": "scripts/boss2.gd",
+     "needle": "max_hp",
+     "min_hits": 1,
+     "supports": "壳也厚一档（360 > 320）"
+    },
+    {
+     "file": "scripts/boss.gd",
+     "needle": "max_hp = 320.0 * (1.0 + (floor_num - 4) * 0.12)",
+     "min_hits": 1,
+     "supports": "基数逐字核对"
+    }
+   ],
+   "forbidden_substrings": [
+    "弹匣留一半"
+   ],
+   "status": "verified",
+   "note": "两个比较级都可机检：间隔 2.2 vs 3.0、血量基数 360 vs 320，缩放式三处逐字一致故「一档」可比。「弹匣留一半」已删，该措辞归 bw_slack_half 独有（reserved_phrases）。"
+  },
+  {
+   "key": "bosses/third_boss",
+   "text": "玄渊之主。地狱旧客，比熔潮慢半拍，比守望者狠。",
+   "prev_text": "玄渊之主。地狱旧客，比熔潮慢半拍，比守望者狠。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/boss3.gd",
+     "needle": "skill_interval",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/boss3.gd",
+     "needle": "max_hp",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/boss.gd",
+     "needle": "skill_interval",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "themes/vein",
+   "text": "往生脉。人间拾痕，多捡点，反射值钱。",
+   "prev_text": "往生脉。人间拾痕，多捡点，反射值钱。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"vein\"",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "\"vein\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "themes/toxic",
+   "text": "毒巢。饿鬼食毒，云别硬踩，绕着走。",
+   "prev_text": "毒巢。饿鬼食毒，云别硬踩，绕着走。",
+   "claim_type": "spatial",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"toxic\"",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/toxic_cloud.gd",
+     "needle": "_tick_enemy",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "themes/pressure",
+   "text": "高压层。修罗斗诤，虫更快，拾到的残响也多。",
+   "prev_text": "高压层。修罗斗诤，子弹会拐弯，贴墙打。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "enemy_speed_mult = maxf(enemy_speed_mult, 1.3)",
+     "min_hits": 1,
+     "supports": "虫更快"
+    },
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "diamond_mult = maxf(diamond_mult, 1.5)",
+     "min_hits": 1,
+     "supports": "拾到的残响也多"
+    }
+   ],
+   "forbidden_substrings": [
+    "子弹会拐弯",
+    "贴墙打"
+   ],
+   "status": "verified",
+   "note": "只押 _apply_floor_theme 的 pressure 支两行乘子＝纯层属性，玩家每局都能观测到。原候选第三句「气浪会把人推开」被否：apply_blast_push 在 boss.gd 的 _pulse_theme 里，只有该层撞上守望者才成立，写成整层性质是半空承诺。homing 只在 mw_swarm，与本层无关 ⇒ 「子弹会拐弯」「贴墙打」全删。"
+  },
+  {
+   "key": "themes/silent",
+   "text": "静默层。天道静虑，小地图整块没了，只能靠自己看。",
+   "prev_text": "静默层。天道静虑，听不见脚步，多看小地图。",
+   "claim_type": "spatial",
+   "anchors": [
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "set_minimap_hidden",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/hud.gd",
+     "needle": "set_minimap_hidden",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "hud.set_minimap_hidden(_theme_rule == ",
+     "min_hits": 1,
+     "supports": "小地图整块没了"
+    }
+   ],
+   "forbidden_substrings": [
+    "多看小地图"
+   ],
+   "status": "verified",
+   "note": "方向修正版：从「叫玩家去看一个被关掉的界面元素」改成「告诉玩家它会没」。⛔ 保留「虫也少」——pool:2 是 FLOOR_POOLS 权重表编号（池 2 有 8 种怪），不是数量，无锚点。末句「只能靠自己看」是建议不是机制断言。"
+  },
+  {
+   "key": "themes/magma",
+   "text": "岩浆层。地狱热狱，地板本身就是敌人。",
+   "prev_text": "岩浆层。地狱热狱，地板本身就是敌人。",
+   "claim_type": "spatial",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"magma\"",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/toxic_cloud.gd",
+     "needle": "_tick_enemy",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "themes/ice",
+   "text": "冰面。地狱寒狱，刹车提前半秒。",
+   "prev_text": "冰面。地狱寒狱，刹车提前半秒。",
+   "claim_type": "spatial",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"ice\"",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "terrain_accel_mult",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "themes/swamp",
+   "text": "毒沼。饿鬼腐沼，慢是慢了点，稳当。",
+   "prev_text": "毒沼。饿鬼腐沼，慢是慢了点，稳当。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"swamp\"",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/game_main.gd",
+     "needle": "terrain_speed_mult",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "themes/vines",
+   "text": "藤蔓。畜生缠缚，烧掉，或者绕路。",
+   "prev_text": "藤蔓。畜生缠缚，烧掉，或者绕路。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"vines\"",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/prop.gd",
+     "needle": "\"vine\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/blood_relic",
+   "text": "血祭。以血换遗物，地窖里最不缺的就是血。",
+   "prev_text": "血祭。以血换遗物，地窖里最不缺的就是血。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"blood_relic\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/ore_upgrade",
+   "text": "残响淬炼。以残响换一次选择，旧例里管这叫喂石头。",
+   "prev_text": "残响淬炼。以残响换一次选择，旧例里管这叫喂石头。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"ore_upgrade\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/purify",
+   "text": "净化。以代价换清净，这层的脏，散得掉。欠下的债，赎一层少一层。",
+   "prev_text": "净化。以代价换清净，这层的脏，散得掉。欠下的债，赎一层少一层。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"purify\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified",
+   "max_len_override": 31,
+   "len_note": "既有长句（两个句号的分句体），本批不缩它——只在改写的行上执行新上限，避免顺手改文案引出 churn"
+  },
+  {
+   "key": "shrine/ward_boon",
+   "text": "护盾祝福。以残响买一挡，挡一下，就散了。",
+   "prev_text": "护盾祝福。以残响买一挡，挡一下，就散了。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"ward_boon\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/heal",
+   "text": "修复。以积分换血，缝两针，血就回来了。",
+   "prev_text": "修复。以积分换血，缝两针，血就回来了。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"heal\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/relic_suffix",
+   "text": "铭刻。以血换一刻，刻上去的，抠不下来。",
+   "prev_text": "铭刻。以血换一刻，刻上去的，抠不下来。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"relic_suffix\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/greed_pact",
+   "text": "贪欲契约。以血换残响，老规矩了。",
+   "prev_text": "贪欲契约。以血换残响，老规矩了。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"greed_pact\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/wind_dance",
+   "text": "风之舞。以积分换疾行，腿快了，坑还是那些坑。",
+   "prev_text": "风之舞。以积分换疾行，腿快了，坑还是那些坑。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"wind_dance\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/shard_pact",
+   "text": "共鸣契约。以残响换碎片，地窖的账，只记碎片。",
+   "prev_text": "共鸣契约。以残响换碎片，地窖的账，只记碎片。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"shard_pact\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "shrine/power_surge",
+   "text": "力量激涌。以血换力，手重了，人也就薄了。",
+   "prev_text": "力量激涌。以血换力，手重了，人也就薄了。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"power_surge\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/rusher",
+   "text": "红虫。异常·虫，成群来，先打跑得最快的。",
+   "prev_text": "红虫。异常·虫，成群来，先打跑得最快的。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"rusher\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/brute",
+   "text": "黑甲虫。异常·虫，大一号的虫，没什么花样，比输出。",
+   "prev_text": "黑甲虫。异常·虫，大一号的虫，没什么花样，比输出。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"brute\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/spitter",
+   "text": "紫酸虫。异常·虫，酸液喷不到你身后，贴柱换血。",
+   "prev_text": "紫酸虫。异常·虫，酸弹被墙挡，贴柱换血。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"spitter\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/bomber",
+   "text": "自爆虫。异常·虫，贴身就炸，保持距离。",
+   "prev_text": "自爆虫。异常·虫，贴身就炸，保持距离。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"bomber\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/elite",
+   "text": "巨岩虫。异常·虫，精英壳，硬啃不划算。",
+   "prev_text": "巨岩虫。异常·虫，精英壳，硬啃不划算。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"elite\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/boss",
+   "text": "巨岩虫之王。异常·虫，满场小弟，本体掉宝最肥。",
+   "prev_text": "巨岩虫之王。异常·虫，满场小弟，本体掉宝最肥。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"boss\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/splitter",
+   "text": "分裂虫。异常·虫，打死会裂，留个大的最后杀。",
+   "prev_text": "分裂虫。异常·虫，打死会裂，留个大的最后杀。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"splitter\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/mini",
+   "text": "幼体。异常·虫，一踩就碎，别费一发光霰。",
+   "prev_text": "幼体。异常·虫，一踩就碎，别浪费子弹。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"mini\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/goblin",
+   "text": "地精。异常·妖，直冲，站桩点掉。",
+   "prev_text": "地精。异常·妖，直冲，站桩点掉。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"goblin\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/skeleton",
+   "text": "骷髅兵。异常·灵，散骨一只，聚群难缠。",
+   "prev_text": "骷髅兵。异常·灵，散骨一只，聚群难缠。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"skeleton\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/zombie",
+   "text": "腐尸。异常·灵，慢，但会把你围住。",
+   "prev_text": "腐尸。异常·灵，慢，但会把你围住。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"zombie\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/orc",
+   "text": "兽人。异常·妖，皮糙，撤着打。",
+   "prev_text": "兽人。异常·妖，皮糙，撤着打。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"orc\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/imp",
+   "text": "小鬼。异常·妖，走位发疯，预瞄半个身位。",
+   "prev_text": "小鬼。异常·妖，走位发疯，预瞄半个身位。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"imp\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/wraith",
+   "text": "怨灵。异常·灵，会走位的远程，别蹲坑，风筝优先。",
+   "prev_text": "怨灵。异常·灵，会走位的远程，别蹲坑，风筝优先。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"wraith\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/flameskull",
+   "text": "火骷髅。异常·灵，站桩吐火球，先手拆掉。",
+   "prev_text": "火骷髅。异常·灵，站桩吐火球，先手拆掉。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"flameskull\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/faerie",
+   "text": "妖精。异常·妖，飘忽，别追，等它过来。",
+   "prev_text": "妖精。异常·妖，飘忽，别追，等它过来。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"faerie\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/vampire",
+   "text": "吸血鬼。异常·妖，扑脸还吸血，跳之前有预备动作。",
+   "prev_text": "吸血鬼。异常·妖，扑脸还吸血，跳之前有预备动作。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"vampire\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/plant",
+   "text": "食人花。异常·妖，守株待兔，卡住射程点掉。",
+   "prev_text": "食人花。异常·妖，守株待兔，卡住射程点掉。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"plant\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/mush",
+   "text": "蘑菇人。异常·妖，会叫帮手，先杀召唤师。",
+   "prev_text": "蘑菇人。异常·妖，会叫帮手，先杀召唤师。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"mush\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/slime",
+   "text": "史莱姆。异常·妖，打死会裂，跟分裂虫一个路数。",
+   "prev_text": "史莱姆。异常·妖，打死会裂，跟分裂虫一个路数。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"slime\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/wolf",
+   "text": "狼。异常·妖，会扑，横向躲。",
+   "prev_text": "狼。异常·妖，会扑，横向躲。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"wolf\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/knight",
+   "text": "盾骑士。异常·妖，减伤七成，用毒和炸的。",
+   "prev_text": "盾骑士。异常·妖，减伤七成，用毒和炸的。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"knight\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/ogre",
+   "text": "食人魔。异常·妖，减伤更多，别跟它对射。",
+   "prev_text": "食人魔。异常·妖，减伤更多，别跟它对射。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"ogre\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/minotaur",
+   "text": "牛头人。异常·妖，冲撞很痛，贴边让它撞墙。",
+   "prev_text": "牛头人。异常·妖，冲撞很痛，贴边让它撞墙。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"minotaur\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/beholder",
+   "text": "眼魔。异常·妖，盯得死，掩体换位打。",
+   "prev_text": "眼魔。异常·妖，盯得死，掩体换位打。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"beholder\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/skeleton_king",
+   "text": "骷髅王。异常·灵，召骷髅兵，先杀王再清场。",
+   "prev_text": "骷髅王。异常·灵，召骷髅兵，先杀王再清场。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"skeleton_king\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/demon",
+   "text": "炎魔。异常·妖，召小鬼，别让场上堆太多。",
+   "prev_text": "炎魔。异常·妖，召小鬼，别让场上堆太多。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"demon\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/dragon",
+   "text": "黑龙。异常·妖，召地精，本体才是大头。",
+   "prev_text": "黑龙。异常·妖，召地精，本体才是大头。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"dragon\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "enemies/echo",
+   "text": "回响。异常·灵，走你走过的路，换个走法它就瞎。",
+   "prev_text": "回响。异常·灵，走你走过的路，换个走法它就瞎。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"echo\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/fang",
+   "text": "吸血獠牙。杀敌偶尔回血，稳赚。",
+   "prev_text": "吸血獠牙。杀敌偶尔回血，稳赚。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"fang\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/thorn",
+   "text": "荆棘装甲。让撞你的虫子付出代价。",
+   "prev_text": "荆棘装甲。让撞你的虫子付出代价。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"thorn\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/bounce",
+   "text": "折影。墙角也是武器。",
+   "prev_text": "弹射弹壳。墙角也是武器。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"bounce\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/frost",
+   "text": "冰霜涂层。命中带减速，命中率高就常驻。",
+   "prev_text": "冰霜涂层。命中带减速，命中率高就常驻。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"frost\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/bigbullet",
+   "text": "巨魄。又大又疼。",
+   "prev_text": "巨型弹头。又粗又痛。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"bigbullet\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/mag",
+   "text": "深膛。少整备一回，多活一秒。",
+   "prev_text": "加长弹匣。少换一次弹，多活一秒。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"mag\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/eye",
+   "text": "猎手印记。暴击看天，装了看常。",
+   "prev_text": "猎手印记。暴击看天，装了看常。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"eye\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/radar",
+   "text": "六感警报。无敌更长，走位更滑。",
+   "prev_text": "六感警报。无敌更长，走位更滑。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"radar\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/drone",
+   "text": "双游灯。多一盏照着。",
+   "prev_text": "双浮游炮。多一个帮手。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"drone\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/heart",
+   "text": "黄金心脏。上限加一还回满，见到就拿。",
+   "prev_text": "黄金心脏。上限加一还回满，见到就拿。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"heart\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/mr_resoshield",
+   "text": "谐振护盾。共鸣爆发送盾，盾在毒不侵。",
+   "prev_text": "谐振护盾。共鸣爆发送盾，盾在毒不侵。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"mr_resoshield\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "relics/mr_kinetic",
+   "text": "动能转换器。挨打跑得快，疼也值。",
+   "prev_text": "动能转换器。挨打跑得快，疼也值。",
+   "claim_type": "numeric",
+   "anchors": [
+    {
+     "file": "scripts/relics.gd",
+     "needle": "\"id\": \"mr_kinetic\"",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_frostburst",
+   "text": "霜爆。环盾磕碎来袭时放危害云，别白挡。",
+   "prev_text": "霜爆。环盾碎敌弹时放危害云，别白挡。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_frostburst\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_echoheal",
+   "text": "回响（词缀）。环盾磕碎来袭回一血，挡得值。",
+   "prev_text": "回响（词缀）。环盾碎弹回一血，挡得值。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_echoheal\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_blinkstep",
+   "text": "踏影。冲刺起点放云，冲刺也是攻击。",
+   "prev_text": "踏影。冲刺起点放云，冲刺也是攻击。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_blinkstep\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_bulwark",
+   "text": "小壁垒。冲刺送一层盾，冲进人堆前先想。",
+   "prev_text": "小壁垒。冲刺送一层盾，冲进人堆前先想。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_bulwark\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_cinderveil",
+   "text": "燃帷。齐射放云，射得多烧得多。",
+   "prev_text": "燃帷。齐射放云，射得多烧得多。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_cinderveil\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_frostveil",
+   "text": "凝滞矢。齐射全场减速，先齐射再补枪。",
+   "prev_text": "凝滞矢。齐射全场减速，先齐射再补枪。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_frostveil\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_miasma",
+   "text": "瘴波。毒云每跳扩散，铺场用。",
+   "prev_text": "瘴波。毒云每跳扩散，铺场用。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_miasma\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "suffixes/s_leech",
+   "text": "蚀养。毒云每跳回血，站云里养伤。",
+   "prev_text": "蚀养。毒云每跳回血，站云里养伤。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"s_leech\": {",
+     "min_hits": 1
+    },
+    {
+     "file": "scripts/player.gd",
+     "needle": "_fire_relic_suffixes",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "bosses/boss",
+   "text": "巨岩虫之王，拿下。异常之主，掉宝最肥的一次。",
+   "prev_text": "巨岩虫之王，拿下。异常之主，掉宝最肥的一次。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"boss\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "bosses/skeleton_king",
+   "text": "骷髅王，拿下。白骨留痕，骨头堆了半屋子。",
+   "prev_text": "骷髅王，拿下。白骨留痕，骨头堆了半屋子。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"skeleton_king\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "bosses/dragon",
+   "text": "黑龙，拿下。鳞甲留痕，地精散了，这一层安静一半。",
+   "prev_text": "黑龙，拿下。鳞甲留痕，地精散了，这一层安静一半。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"dragon\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  },
+  {
+   "key": "bosses/demon",
+   "text": "炎魔，拿下。业火留痕，火苗灭了，加钱。",
+   "prev_text": "炎魔，拿下。业火留痕，火苗灭了，加钱。",
+   "claim_type": "entity",
+   "anchors": [
+    {
+     "file": "scripts/data.gd",
+     "needle": "\"demon\": {",
+     "min_hits": 1
+    }
+   ],
+   "forbidden_substrings": [],
+   "status": "verified"
+  }
+ ]
+}

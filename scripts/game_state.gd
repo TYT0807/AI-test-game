@@ -142,6 +142,7 @@ func reset() -> void:
 	calamity_speed_mult = 1.0
 	calamity_floors.clear()
 	purified_run = false   # S28 批一：净化记账按局归零（跨局污染防线，C 组专抓）
+	redeemed_floors.clear()   # S33：赎回账与净化账同组按局归零
 	# 注意：这里绝不能碰 meta —— 局外进度跨局保留
 	diamonds_changed.emit(diamonds)
 	reset_fx_rng()
@@ -414,11 +415,12 @@ func codex_boons() -> Dictionary:
 
 
 ## 局末结算：shards += floor(cleared × META_RATE)，纯确定性（无 rng）；
-## 本局触发过灾祸 → ×1.5 风险回报（Sprint 12 §6.3）
+## 本局灾祸 → ×1.5 风险回报（Sprint 12 §6.3），S33 起按未赎回份额计（作者 2026-11-17 裁决：部分赎回，U1=线性）
 func settle_shards(cleared_floors: int) -> int:
 	var n := int(maxi(cleared_floors, 0) * META_RATE)
-	if calamity_floors.size() > 0 and not purified_run:
-		n = int(n * 1.5)
+	if calamity_floors.size() > 0 or redeemed_floors.size() > 0:
+		var _d_total: int = calamity_floors.size() + redeemed_floors.size()
+		n = int(n * (1.0 + 0.5 * float(calamity_floors.size()) / float(_d_total)))
 	sigils["shards"] = int(sigils["shards"]) + n
 	save_sigils()
 	return n
@@ -587,7 +589,8 @@ func daily_best_today() -> Dictionary:
 ## 效果以全局系数/标志落地（calamity_speed_mult 等），本层生效、换层清除。
 var calamity_speed_mult := 1.0   # frenzy：敌人移速 ×1.25
 var calamity_floors: Array = []  # 触发过灾祸的层号（结算 ×1.5 判定）
-var purified_run := false   # S28 批一：本局是否净化过——净化代价的单一来源（按局归零，见 reset()）
+var purified_run := false   # S28 批一：本局是否净化过——S33 起语义降级为「本局至少赎回过一层」，仅供文案读取，不再参与结算判定
+var redeemed_floors: Array = []   # S33：本局已净化赎回的灾祸层号（升序追加；赎回进度的单一来源）
 
 
 ## 解锁印记：余额足够则扣 shards 并永久解锁

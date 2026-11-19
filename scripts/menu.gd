@@ -168,7 +168,7 @@ func _build_main_page() -> void:
 	_add_main_button(right, "解锁", "icon_pierce", func() -> void: show_page("unlocks", "main"), false)
 	_add_main_button(right, "图鉴", "icon_codex", func() -> void: show_page("codex", "main"), false)
 	_add_main_button(right, "设置", "icon_guard", func() -> void: show_page("settings", "main"), false)
-	_add_main_button(right, "退出游戏", "wpn_launcher", func() -> void: get_tree().quit(), false)
+	_add_main_button(right, "退出游戏", "wpn_fushe", func() -> void: get_tree().quit(), false)
 	var foot := Label.new()
 	foot.text = "v1.1  ·  Sprint 11  ·  按 Esc 暂停"
 	foot.add_theme_font_size_override("font_size", 13)

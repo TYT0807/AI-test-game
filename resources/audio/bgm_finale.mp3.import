@@ -3,12 +3,12 @@
 importer="mp3"
 type="AudioStreamMP3"
 uid="uid://xxl56rg502xb"
-path="res://.godot/imported/bgm_finale.mp3-9b252ffd3db87fd4c73a59594135d793.mp3str"
+path="res://.godot/imported/bgm_finale.mp3-71fa47a737a12cc24aaa740407505fbe.mp3str"
 
 [deps]
 
 source_file="res://resources/audio/bgm_finale.mp3"
-dest_files=["res://.godot/imported/bgm_finale.mp3-9b252ffd3db87fd4c73a59594135d793.mp3str"]
+dest_files=["res://.godot/imported/bgm_finale.mp3-71fa47a737a12cc24aaa740407505fbe.mp3str"]
 
 [params]
 
