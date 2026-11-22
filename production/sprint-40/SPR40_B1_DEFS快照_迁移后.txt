@@ -1,0 +1,22 @@
+[B1-SNAP] weapons.gd md5=c07867231a42097196e3e5693528a3f2
+[B1-SNAP] 字段序=kind,name,desc,dmg,interval,count,spread,speed,mag,reload,pierce,life,explosive,tint,icon
+[B1-SNAP] zhushan(=rifle) | kind=projectile | name=朱砂笔 | desc=一笔一划，点到为止 | dmg=1.0 | interval=0.3 | count=1 | spread=4.0 | speed=250.0 | mag=8 | reload=0.9 | pierce=0 | life=0.0 | explosive=0.0 | tint=(1.0, 0.62, 0.25, 1.0) | icon=wpn_zhushan
+[B1-SNAP] liechi(=shotgun) | kind=projectile | name=裂髓杵 | desc=一杵砸开，碎屑横飞 | dmg=0.7 | interval=0.72 | count=5 | spread=22.0 | speed=225.0 | mag=4 | reload=1.1 | pierce=0 | life=0.4 | explosive=0.0 | tint=(1.0, 0.82, 0.5, 1.0) | icon=wpn_liechi
+[B1-SNAP] guanglei(=railgun) | kind=projectile | name=光雷尺 | desc=一道直线，量穿三关 | dmg=3.5 | interval=0.9 | count=1 | spread=0.0 | speed=430.0 | mag=3 | reload=1.3 | pierce=3 | life=0.0 | explosive=0.0 | tint=(0.5, 0.9, 1.0, 1.0) | icon=wpn_guanglei
+[B1-SNAP] fushe(=launcher) | kind=projectile | name=焚舍符匣 | desc=焚符掷火，烧出一片 | dmg=1.6 | interval=0.85 | count=1 | spread=2.0 | speed=180.0 | mag=3 | reload=1.4 | pierce=0 | life=0.0 | explosive=1.0 | tint=(0.6, 1.0, 0.55, 1.0) | icon=wpn_fushe
+[B1-SNAP] DROP_POOL=["liechi", "guanglei", "fushe"]
+[B1-SNAP] 可用池 random_unlocked() 取自 DROP_POOL=true 实测=fushe
+[B1-SNAP] 全解锁态可用池规模=3/3 gate普查=liechi:无gate guanglei:无gate fushe:无gate
+[B1-SNAP] 空池回退可达性=不可达（DROP_POOL 三把均无 gate ⇒ content_available 恒真，池恒满；M5b 属写法级条款）
+[B1-SNAP] icon(存在的id)=(res://resources/texture/generated/wpn_guanglei.png):<CompressedTexture2D#-9223371922920700378>
+[B1-SNAP] icon(不存在的id)=(res://resources/texture/generated/wpn_zhushan.png):<CompressedTexture2D#-9223371923356907999>
+[B1-SNAP] GEN_NAMES.size()=76
+[B1-SNAP] GEN_NAMES 含 wpn_zhushan=true
+[B1-SNAP] GEN_NAMES 含 wpn_liechi=true
+[B1-SNAP] GEN_NAMES 含 wpn_guanglei=true
+[B1-SNAP] GEN_NAMES 含 wpn_fushe=true
+[B1-SNAP] Assets.g(wpn_zhushan)=true
+[B1-SNAP] Assets.g(wpn_liechi)=true
+[B1-SNAP] Assets.g(wpn_guanglei)=true
+[B1-SNAP] Assets.g(wpn_fushe)=true
+[B1-SNAP] done

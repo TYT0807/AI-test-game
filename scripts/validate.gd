@@ -53,6 +53,8 @@ func run() -> Array:
 	_check_shrine()
 	_check_codex()
 	_check_abyss()
+	_check_weapon_kinds()
+	_check_boss_weapons()
 	_check_daily()
 	_check_scripts_compile()
 	if OS.get_environment("SMOKE_V8") != "":
@@ -327,6 +329,193 @@ func _check_abyss() -> void:
 		prev_dmg = dmg
 
 
+## S38 T-M M3 ＋ T-N 的源码侧闸：形态判别（V-A1/A2/A3）与近战抽取守恒（HP-2/HP-3）的静态门。
+## 🔴 三段各有各自的反证刀，⛔ 拿「DEFS 里还没近战」当这一段无缺口：
+##    · kind 覆盖段查的是**存量 21 条**，今天就有牙（少一条 kind 立刻红）；
+##    · 字段齐全段在 T-O 落数据前是**空转**（0 条非 projectile 可查），性质＝待触发，⛔ 记作 PASS；
+##    · 源码段查 `_swing()` 本体，_swing 还没落地时直接报问题（不是跳过）——这就是 T-N 的开工闸。
+## ⛔ 字段名与形态名一律从 Weapons.MELEE_FIELDS / KIND_* 取，本函数内不手写第二个名单（两套账必漂移）。
+func _check_weapon_kinds() -> void:
+	var defs: Dictionary = WeaponsScript.DEFS
+	var allowed: Array = WeaponsScript.KIND_PROJECTILE + WeaponsScript.KIND_MELEE
+	var extra_outside := []
+	var n_melee := 0
+	for wid in defs:
+		var d: Dictionary = defs[wid]
+		var k := String(d.get("kind", ""))
+		if k == "":
+			problems.append("武器 %s 的 DEFS 缺 kind：%s" % [String(wid),
+				"分派侧读 [\"kind\"] 当场崩、读 get(\"kind\",\"\") 静默当 projectile——V-A1 边界态点名「不得静默」"])
+			continue
+		if not allowed.has(k):
+			problems.append("武器 %s 的 kind「%s」不在允许集合 %s（自创形态名＝分派两不靠，挥出去没人结算）" % [
+				String(wid), k, str(allowed)])
+			continue
+		if WeaponsScript.is_melee_kind(k):
+			n_melee += 1
+			for f in WeaponsScript.MELEE_FIELDS:
+				if not d.has(f):
+					problems.append("非弹幕 %s（kind=%s）缺 MELEE_FIELDS 里的 %s：口径 V-A3「缺任一⇒该把不可装备，⛔ 回退 rifle 参数」" % [
+						String(wid), k, String(f)])
+			if int(d.get("reach", 0)) <= 0:
+				problems.append("非弹幕 %s 的 reach=%s 须 >0：0 距离的扇形扫不到任何敌人，命中面恒空" % [
+					String(wid), str(d.get("reach", 0))])
+			var arc := float(d.get("arc_deg", 0.0))
+			if arc <= 0.0 or arc > 180.0:
+				problems.append("非弹幕 %s 的 arc_deg=%f 须 ∈ (0,180]：>180 的扇形角度判据会翻面，360 就成了环盾 AoE（实稿 §3.2）" % [
+					String(wid), arc])
+			if float(d.get("interval", 0.0)) <= 0.0:
+				problems.append("非弹幕 %s 的 interval=%f 须 >0：0 射速＝每物理帧一抽（E1 守恒数被帧数绑架）" % [
+					String(wid), float(d.get("interval", 0.0))])
+			if int(d.get("mag", 0)) < 1:
+				problems.append("非弹幕 %s 的 mag=%d 须 >=1：配额 0＝永远在过载，第一次挥击就交不出去" % [
+					String(wid), int(d.get("mag", 0))])
+			if float(d.get("reload", 0.0)) <= 0.0:
+				problems.append("非弹幕 %s 的 reload=%f 须 >0：0 复位＝架式配额没有代价，「不能无限连挥」的设计落空" % [
+					String(wid), float(d.get("reload", 0.0))])
+			# V-A3 后半：规格外字段——「出现了不报错，但报告点名」，所以进打印不进 problems。
+			for xf in ["count", "spread", "speed", "life", "pierce", "explosive"]:
+				if d.has(xf):
+					extra_outside.append("%s.%s" % [String(wid), xf])
+	# ── 源码侧：_swing() 本体与分派单源（T-N N1/N2；HP-2 恒 1 抽、HP-3 三种规避写法）──
+	var pl_src := _strip_comments(FileAccess.get_file_as_string("res://scripts/player.gd"))
+	var swing := _slice(pl_src, "func _swing(", "\n\nfunc ")
+	if swing == "":
+		problems.append("player.gd 找不到 _swing()：真·非弹幕三种形态没有结算入口（V-A2 与 HP-2 都无从判起）")
+	else:
+		if swing.contains("spawn_player_bullet"):
+			problems.append("_swing() 里出现 spawn_player_bullet：近战＝伪近战（V-A2「melee 任意一次挥击产生子弹即红」的源码侧同账）")
+		if swing.contains("Game.fx_rng.randf"):
+			problems.append("_swing() 用 fx_rng 取判定数：HP-3 禁第②条（fx_rng 是表现层种子，那样 Game.rng 那格仍然空着）")
+		var draws := swing.count("Game.rng.randf(")
+		if draws != 1:
+			problems.append("_swing() 里 Game.rng.randf( 出现 %d 次：HP-2 要「每次动作恒消费恰 1 次」，0＝整条随机流前移一格、2＝后移（V-E1d 两把刀）" % draws)
+		var top_level := false
+		for ln in swing.split("\n"):
+			if String(ln).contains("Game.rng.randf("):
+				top_level = String(ln).begins_with("\t") and not String(ln).begins_with("\t\t")
+				break
+		if draws > 0 and not top_level:
+			problems.append("_swing() 的 randf 不在函数体顶层（被缩进＝它进了某个分支）：HP-3 禁第③条「没打中就不抽」的字面形态")
+		if not swing.contains("melee_rng_draws += 1"):
+			problems.append("_swing() 未累加 melee_rng_draws：计数器与真实抽取两套账，守恒断言只能自证（V-E1a 假绿面）")
+		if not swing.contains("_stance_open()"):
+			problems.append("_swing() 没走 _stance_open() 这个架式窗口共用入口（实施单 B1 约束：近战⛔ 另起一套窗口）")
+	var aim := _slice(pl_src, "func _update_aim_and_fire(", "\n\nfunc ")
+	if not aim.contains("_swing()") or not aim.contains("_fire()"):
+		problems.append("_update_aim_and_fire 未按形态分派到 _swing()/_fire()：近战没有触发路径（N2）")
+	if not aim.contains("is_melee_kind"):
+		problems.append("分派没走 Weapons.KIND_MELEE 单源（形态名散写在 if 里＝validate 查一份、player 认另一份）")
+	print("[S38-A1] DEFS %d 条 kind 全覆盖 · 真·非弹幕 %d 条（字段/范围查 %d 条规格外字段）· _swing 源码段=%s" % [
+		defs.size(), n_melee, extra_outside.size(), "已落地" if swing != "" else "缺失"])
+	if not extra_outside.is_empty():
+		print("[S38-A3] 规格外字段（V-A3 只点名不判红）：[%s]" % ", ".join(extra_outside))
+
+
+## Sprint 36 T-C3：Boss 专武「一部分性能比 Boss 还强」的死值断言（实稿 §7.2／实施单 C3）。
+## 🔴 dps 一律从 Weapons.DEFS 与 Data.BOSS_PULSE_BASE **现算**，⛔ 把 §7.2 那几个 0.667/0.909/0.769
+##    抄进代码——抄进来就成了「断言自证自己」，改 Boss 脉冲不会红（AGENTS §5「前提守卫型恒过」）。
+## ⛔ 也不写死「14 把」这种名单数：那是实稿 §6.3 的事，增删一把专武不该把这道门判红（GUARD-1 同型缺陷）。
+func _check_boss_weapons() -> void:
+	var defs: Dictionary = WeaponsScript.DEFS
+	var own: Dictionary = WeaponsScript.BOSS_WEAPON
+	var per_total := {}
+	var per_surpass := {}
+	for wid in own:
+		var id := String(wid)
+		if not defs.has(id):
+			problems.append("BOSS_WEAPON 指向 DEFS 里没有的专武：%s（掉落会给到未知 id → give_weapon 静默回退 rifle）" % id)
+			continue
+		var bid := String(own[id])
+		if not Data.CODEX_BOSS_NAMES.has(bid):
+			problems.append("专武 %s 的归属 Boss「%s」不在 CODEX_BOSS_NAMES 三键里" % [id, bid])
+			continue
+		if not Data.BOSS_PULSE_BASE.has(bid):
+			problems.append("Data.BOSS_PULSE_BASE 缺 Boss「%s」的脉冲基准，反超无从比较" % bid)
+			continue
+		var w: Dictionary = defs[id]
+		if not w.has("dmg") or not w.has("interval") or float(w["interval"]) <= 0.0:
+			problems.append("专武 %s 缺 dmg/interval 或 interval<=0：§7.2 的反超口径要求每条 bw_* 都有这两个字段" % id)
+			continue
+		if w.has("meta"):
+			problems.append("专武 %s 带了 meta 键「%s」：W3=A 裁定不给专武建 UNLOCKS 节点，建了就把「无限制」重新变成收费" % [id, w["meta"]])
+		per_total[bid] = int(per_total.get(bid, 0)) + 1
+		var p: Dictionary = Data.BOSS_PULSE_BASE[bid]
+		var dps_boss: float = float(p["dmg"]) / float(p["interval"])
+		var dps_w: float = float(w["dmg"]) / float(w["interval"])
+		if dps_w >= dps_boss * Data.WEAPON_SURPASS_RATIO:
+			per_surpass[bid] = int(per_surpass.get(bid, 0)) + 1
+		elif dps_w > dps_boss:
+			problems.append("专武 %s 落进灰区：dps %.3f 没到反超线 %.3f 却高于 Boss 自身 %.3f（C3 要求非反超把须 <= dps_boss）" % [
+				id, dps_w, dps_boss * Data.WEAPON_SURPASS_RATIO, dps_boss])
+	# bw_ 前缀但没归属＝定向掉落永远抽不到它（名单与表脱钩的静默半截活）
+	for id in defs:
+		var sid := String(id)
+		if sid.begins_with("bw_") and not own.has(sid):
+			problems.append("bw_ 专武 %s 未登记进 BOSS_WEAPON（有定义、无归属 → 永远不掉落）" % sid)
+	# 专武不得挤进随机池：DROP_POOL 是商店/大宝箱/旧 Boss 房的共用入口（W3=A 的补偿条款）
+	for pid in WeaponsScript.DROP_POOL:
+		if String(pid).begins_with("bw_"):
+			problems.append("专武 %s 进了 DROP_POOL：那会把「定向掉落」重新变成随机掉落，且牵动 random_unlocked() 的取模分母" % pid)
+	# 每组恰好 2 把反超（实施单 C3），且组不能空到「一部分」不成立
+	for bid in Data.CODEX_BOSS_NAMES:
+		var total := int(per_total.get(bid, 0))
+		var surpass := int(per_surpass.get(bid, 0))
+		if total == 0:
+			problems.append("Boss「%s」名下没有任何专武，但 BOSS_WEAPON 本应覆盖三只主题 Boss" % bid)
+			continue
+		if total < 3:
+			problems.append("Boss「%s」的专武只有 %d 把，「一部分性能更强」在 1–2 把组里没有意义" % [bid, total])
+		if surpass != 2:
+			problems.append("Boss「%s」的专武反超把数 = %d，口径要求恰好 2（R=%.2f，abyss_tier=0 取表值）" % [
+				bid, surpass, Data.WEAPON_SURPASS_RATIO])
+	# 🔴 C3 补漏（运行时闭环）：上面全绿只证明「表」自洽，不证明掉落侧查这张表时拿对了 key。
+	#    BOSS_WEAPON 的 key 是 CODEX_BOSS_NAMES 三键，而 Data.boss_for_floor 返回的是主题 Boss id
+	#    （skeleton_king / demon / dragon / boss），两个集合无交集 ⇒ 子集恒空 ⇒ 静默退回随机池，
+	#    T-B3「一枪没响」而表门一条不红。这里把「掉落侧的 Boss id 从哪儿来」钉成机检。
+	var main_src := FileAccess.get_file_as_string("res://scripts/game_main.gd")
+	var drop_fn := _strip_comments(_slice(main_src, "func _boss_weapon_drop(", "func _codex_boss_at_floor("))
+	if drop_fn == "":
+		problems.append("game_main.gd 找不到 _boss_weapon_drop()：Boss 房定向掉落没有实现入口")
+	elif drop_fn.contains("Data.boss_for_floor"):
+		problems.append("_boss_weapon_drop() 拿 Data.boss_for_floor 当 Boss id：那是主题 Boss id，与 CODEX_BOSS_NAMES 三键无交集 ⇒ 专武子集恒空、定向掉落静默退回随机池")
+	elif not drop_fn.contains("_codex_boss_at_floor("):
+		problems.append("_boss_weapon_drop() 没走 _codex_boss_at_floor()：Boss id 来源失去单点，掉落侧无法与生成侧对账")
+	elif not drop_fn.contains('stable_hash("%s#%d"'):
+		problems.append("_boss_weapon_drop() 的 key 拼法偏离 HP-3：须 Game.stable_hash(\"%s#%d\" % [key, i])（与 :1795／:4063 同源），自创拼法＝同局同层重打不再可复现")
+	var map_fn := _strip_comments(_slice(main_src, "func _codex_boss_at_floor(", "func _arena_center("))
+	if map_fn == "":
+		problems.append("game_main.gd 找不到 _codex_boss_at_floor()：定向掉落缺「本层是哪只主题 Boss」的单源")
+	else:
+		for bid2 in Data.CODEX_BOSS_NAMES:
+			var id2 := String(bid2)
+			if not map_fn.contains('"' + id2 + '"'):
+				problems.append("_codex_boss_at_floor() 不返回 Boss「%s」：这只的主题 Boss 层永远不掉专武（表有货、路不通）" % id2)
+			var subset: Array = WeaponsScript.boss_weapon_ids(id2)
+			if subset.is_empty():
+				problems.append("Boss「%s」经 _codex_boss_at_floor 能取到、但子集为空：归属表与三键脱钩" % id2)
+			for one in subset:
+				if not String(one).begins_with("bw_"):
+					problems.append("Boss「%s」的子集里混进了非专武 %s：商店／大宝箱的货会从这里漏进 Boss 房" % [id2, one])
+		# 优先链必须与 _enter_room 生成侧同序（third > sovereign > warden）：27/59 层三只 Boss 的判定同时命中，
+		# 顺序颠倒 = 掉的是另一只的专武，静态表照样全绿。
+		var p_third := map_fn.find("_is_third_floor(")
+		var p_sov := map_fn.find("_is_sovereign_floor(")
+		var p_war := map_fn.find("_is_warden_floor(")
+		if p_third < 0 or p_sov < 0 or p_war < 0:
+			problems.append("_codex_boss_at_floor() 缺生成侧判定（third/sovereign/warden 三选一没出现）：会与 _enter_room 的 Boss 生成脱钩")
+		elif not (p_third < p_sov and p_sov < p_war):
+			problems.append("_codex_boss_at_floor() 优先链与生成侧不一致（应为 third→sovereign→warden）：共判层会掉到另一只 Boss 的专武上")
+	# 🔴 补集陷阱：查不到本场 Boss 时子集必须是空表（调用方据此退回旧路径）。
+	#    boss_weapon_ids 内部拿 `BOSS_WEAPON.get(id, "")` 比对，默认值正是空串——不挡这一刀，
+	#    「未登记归属」的全部武器（四把基础枪＋三把 mw_*）就被当成这只 Boss 的专武，
+	#    常规 Boss 房当场换掉掉落来源，而静态表门一条不红。key 用 ""＋主题 Boss id 两种真实取值。
+	for bad_bid in ["", String(Data.boss_for_floor(1)), String(Data.boss_for_floor(5))]:
+		if not WeaponsScript.boss_weapon_ids(bad_bid).is_empty():
+			problems.append("boss_weapon_ids(\"%s\") 返回非空子集：补集泄漏——没归属的武器被当成某只 Boss 的专武，常规 Boss 房掉落来源被换掉" % bad_bid)
+	print("[S36-C3] 定向掉落闭环：boss_id 单源=_codex_boss_at_floor，三键可达，优先链 third<sovereign<warden")
+
+
 func _check_daily() -> void:
 	var code := Game.daily_share_code()
 	if not code.begins_with(Game.daily_key() + "-"):
@@ -439,6 +628,17 @@ func _check_icons() -> void:
 	for key in icon_keys:
 		if Assets.g("icon_" + key) == null and not Assets.ICON_RECTS.has(key):
 			problems.append("扩展图标缺失：icon_%s" % key)
+	# 武器图标静态门（GUARD-2）：`Weapons.icon()` 写错 key 只静默回退 rifle 贴图（weapons.gd:68-72），
+	# 那条回退本身「不报错」，所以只能在启动自检里咬；UNLOCKS 侧的 _meta_icon 门管不到 DEFS 侧。
+	# 判的是「登记过 ＋ 解析得出」，不是一图标一武器——mw_cluster 复用 wpn_fushe 是合法先例。
+	for wid in WeaponsScript.DEFS:
+		var wicon := String(WeaponsScript.DEFS[wid].get("icon", ""))
+		if wicon == "":
+			problems.append("武器 %s 缺 icon 字段" % wid)
+		elif not Assets.GEN_NAMES.has(wicon):
+			problems.append("武器 %s 的图标 %s 未登记进 Assets.GEN_NAMES（漏登记＝屏上白框、只 push_warning）" % [wid, wicon])
+		elif Assets.g(wicon) == null:
+			problems.append("武器 %s 的图标 %s 解析不出贴图：generated/%s.png 不在盘上" % [wid, wicon, wicon])
 
 
 ## HUD 状态图标必须存在且只经 xicon 取用；SMOKE_RG7 下额外验证不存在 key 的白图回退（坑 7）
@@ -807,3 +1007,14 @@ func _slice(src: String, from: String, to: String) -> String:
 	if b < 0:
 		return src.substr(a)
 	return src.substr(a, b - a)
+
+
+## 去掉整行注释后的源码。🔴 源码扫描型门禁一律先过这一道：
+## 「⛔ 别用 X」这类写在文档注释里的警告本身含 X，不剥就会让正确的代码红、
+## 而真正的误用（写在能跑的那一行里）反而和警告混为一谈。
+func _strip_comments(text: String) -> String:
+	var keep := []
+	for ln in text.split("\n"):
+		if not String(ln).strip_edges().begins_with("#"):
+			keep.append(String(ln))
+	return "\n".join(keep)

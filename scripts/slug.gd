@@ -30,6 +30,7 @@ var _dash_t := 0.0
 var _dash_dir := Vector2.ZERO
 var _slow_mult := 1.0
 var _slow_t := 0.0
+var _stun_t := 0.0     # S40-c／C1：眩晕剩余（秒，FIXED_DT 递减）。⛔ 进存档、⛔ 进 E1 指纹串
 var _phase := 0.0
 var _bob := 0.0
 var _face := Vector2.RIGHT
@@ -132,6 +133,16 @@ func apply_slow(mult: float, dur: float) -> void:
 	_slow_t = dur
 
 
+## S40-c／§3.3 眩晕：取「更长者」而非累加（同 `apply_poison` 的时长口径，防同族连击叠出无上限控制）。
+## 🔴 Boss（Slug 的 boss 变体）免疫：三只主题 Boss 的伤害出口是脉冲弹幕，若能被无限眩晕打断
+##    ＝ S36/S38 的 Boss 设计整体作废（实稿 §3.3 硬约束，探针侧写成断言）。
+## ⛔ 影响受伤公式、⛔ 增伤、⛔ 改 take_damage 签名（本函数只置一个计时位）。
+func apply_stun(dur: float) -> void:
+	if variant == "boss":
+		return
+	_stun_t = maxf(_stun_t, dur)
+
+
 func _physics_process(delta: float) -> void:
 	if dead:
 		return
@@ -155,6 +166,17 @@ func _physics_process(delta: float) -> void:
 	_hit_cd = maxf(0.0, _hit_cd - delta)
 	_phase = fmod(_phase + delta, TAU)
 	_bob += delta
+	# 🔴 S40-c／C1 眩晕闸，位置即口径：必须排在 `_slow_t` 递减**之前**——实稿 §3.3「stun 期间 slow
+	#    计时不走」（否则会出现「晕结束瞬间 slow 已偷偷走完」的静默差异）。副作用如实报：同一条 return
+	#    也冻结了 `_poison_t`/`_poison_acc`（中毒是同类计时推进，「人都停了」对两者只能同一个答案）。
+	#    位移侧沿用 :140-142 的场外兜底写法：`velocity = _knock` ＝ **只归零主动位移**，
+	#    ⛔ 冻结 `_knock` 本身（与 dash 位移区间纠缠那条禁令同源）。
+	if _stun_t > 0.0:
+		_stun_t = maxf(0.0, _stun_t - Game.FIXED_DT)
+		velocity = _knock
+		_knock = _knock.move_toward(Vector2.ZERO, 400.0 * delta)
+		move_and_slide()
+		return
 	_slow_t = maxf(0.0, _slow_t - delta)
 	# 中毒：每 0.5 秒结算一次
 	if _poison_t > 0.0:
@@ -446,7 +468,11 @@ func take_damage(amount: float, from_dir: Vector2, crit: bool) -> void:
 	var final := amount
 	# 正面甲：子弹逆着朝向打来
 	var armor := float(_cfg.get("armor", 0.0))
-	if armor > 0.0 and from_dir.dot(_face) < -0.35:
+	# S38 T-N N9：spear 的「刺击无视护甲」走 `Game.main._melee_pierce_armor` 这个**本帧旁路标志**
+	# （实稿 §3.4 唯一指定形态）。🔴 签名一字未改——这条是全仓敌人受伤唯一入口；这里只读一个
+	# 由近战结算在同一同步调用栈内置位、返回前清零的布尔。子弹路径永远读到 false。
+	var pierce_armor: bool = Game.main != null and Game.main._melee_pierce_armor
+	if armor > 0.0 and from_dir.dot(_face) < -0.35 and not pierce_armor:
 		final *= (1.0 - armor)
 	if affix == "armored":
 		final *= float(Data.AFFIXES["armored"]["taken"])

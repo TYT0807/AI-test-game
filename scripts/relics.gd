@@ -8,13 +8,13 @@ static var rng_draws := 0
 const POOL := [
 	{"id": "fang", "name": "吸血獠牙", "desc": "击杀 8% 概率回复 1 生命", "icon": "relic_fang"},
 	{"id": "thorn", "name": "荆棘装甲", "desc": "撞你的虫子受到 1 点反伤", "icon": "relic_thorn"},
-	{"id": "bounce", "name": "弹射弹壳", "desc": "子弹可弹墙 +1 次", "icon": "relic_bounce"},
+	{"id": "bounce", "name": "折影", "desc": "光霰可折返 +1 次", "icon": "relic_bounce"},
 	{"id": "frost", "name": "冰霜涂层", "desc": "命中 15% 减速敌人 2 秒", "icon": "relic_frost"},
-	{"id": "bigbullet", "name": "巨型弹头", "desc": "子弹更大，伤害 +15%", "icon": "relic_bigbullet"},
-	{"id": "mag", "name": "加长弹匣", "desc": "所有武器弹匣 +4", "icon": "relic_mag"},
+	{"id": "bigbullet", "name": "巨魄", "desc": "光霰更大，伤害 +15%", "icon": "relic_bigbullet"},
+	{"id": "mag", "name": "深膛", "desc": "所有武器器膛 +4", "icon": "relic_mag"},
 	{"id": "eye", "name": "猎手印记", "desc": "暴击率 +10%", "icon": "relic_eye"},
 	{"id": "radar", "name": "六感警报", "desc": "无敌时间延长，移速 +8%", "icon": "relic_radar"},
-	{"id": "drone", "name": "双浮游炮", "desc": "再召唤一座浮游炮", "icon": "relic_drone"},
+	{"id": "drone", "name": "双游灯", "desc": "再召唤一座游灯", "icon": "relic_drone"},
 	{"id": "heart", "name": "黄金心脏", "desc": "生命上限 +1 并回满", "icon": "relic_heart"},
 	# ---- SPR7：局外解锁内容（增量：未解锁不进池，解锁后进池）----
 	{"id": "mr_resoshield", "name": "谐振护盾", "desc": "残响共鸣爆发时获得 1 层护盾，护盾存在时免疫中毒",

@@ -73,7 +73,7 @@ const ENEMIES := {
 		"desc": "冲锋撞飞"},
 	"beholder": {"name": "眼魔", "tex": "beholder", "ai": "spitter",
 		"hp": 36.0, "speed": 18.0, "dmg": 2, "xp": 9, "score": 140, "scale": 1.28,
-		"desc": "弹幕压制"},
+		"desc": "火力压制"},
 
 	# ---------- Boss ----------
 	"skeleton_king": {"name": "骷髅王", "tex": "skeleton_king", "ai": "boss", "summon": "skeleton",
@@ -154,7 +154,7 @@ const SQUADS := {
 		{"id": "zombie", "count": 1, "affix": "mender", "front": false},
 		{"id": "wolf", "count": 2, "front": true},
 	]},
-	"sniper_defuser": {"name": "狙击+拆弹", "min_floor": 6, "weight": 8, "members": [
+	"sniper_defuser": {"name": "点射+破械", "min_floor": 6, "weight": 8, "members": [
 		{"id": "flameskull", "count": 2, "front": false},
 		{"id": "imp", "count": 1, "defuser": true, "front": true},
 	]},
@@ -185,10 +185,10 @@ const SQUADS := {
 const RELIC_SUFFIXES := {
 	"s_frostburst": {"name": "霜爆", "trigger": "ON_SHIELD_BREAK", "relic": "orb_shield",
 		"effect": "theme_hazard", "cd": 2.0,
-		"desc": "环盾摧毁敌弹时，原地释放当前楼层主题危害云"},
+		"desc": "环盾摧毁来袭时，原地释放当前楼层主题危害云"},
 	"s_echoheal": {"name": "回响", "trigger": "ON_SHIELD_BREAK", "relic": "orb_shield",
 		"effect": "heal", "cd": 6.0, "amount": 1,
-		"desc": "环盾摧毁敌弹时回复 1 生命"},
+		"desc": "环盾摧毁来袭时回复 1 生命"},
 	"s_blinkstep": {"name": "踏影", "trigger": "ON_DASH_START", "relic": "dash_dodge",
 		"effect": "theme_hazard", "cd": 3.0,
 		"desc": "冲刺起点释放当前楼层主题危害云"},
@@ -214,7 +214,7 @@ const RELIC_SUFFIXES := {
 ## （E1 零漂移契约，见 game_main._apply_sigil_contract）。
 const SIGILS := {
 	"vigor": {"name": "刚韧印记", "desc": "开局生命上限 +1", "cost": 30},
-	"arsenal": {"name": "武备印记", "desc": "开局副手预装霰弹枪", "cost": 40},
+	"arsenal": {"name": "武备印记", "desc": "开局副手预装裂髓杵", "cost": 40},
 	"purse": {"name": "钱囊印记", "desc": "开局携带 15 残响", "cost": 25},
 	"kindred": {"name": "协战印记", "desc": "开局召唤 1 个协战水晶（30 秒）", "cost": 50},
 	"bulwark": {"name": "壁垒印记", "desc": "开局获得 1 层环盾护盾（2.5 秒）", "cost": 35},
@@ -235,7 +235,7 @@ const ACTIVE_RELICS := {
 		"effect_kind": "dash", "key_action": "relic_dash"},
 	"volley_burst": {"name": "齐射爆发", "cd": 12.0, "duration": 0.0,
 		"effect_kind": "volley", "key_action": "relic_volley"},
-	"toxic_freeze": {"name": "毒云冻结弹", "cd": 10.0, "duration": 4.0,
+	"toxic_freeze": {"name": "毒云凝霜符", "cd": 10.0, "duration": 4.0,
 		"effect_kind": "toxic", "key_action": "relic_toxic"},
 }
 
@@ -313,7 +313,7 @@ const ROOM_META := {
 const SHRINE_OFFERS := {
 	"blood_relic": {"name": "血祭", "desc": "生命上限 -1，掉落 1 件遗物", "cost_kind": "max_hp", "cost": 1, "min_floor": 3},
 	"ore_upgrade": {"name": "残响淬炼", "desc": "残响 -8，触发一次升级三选一", "cost_kind": "diamonds", "cost": 8, "min_floor": 3},
-	"purify": {"name": "净化", "desc": "解除本层灾祸；本局 ×1.5 结算加成作废", "cost_kind": "", "cost": 0, "min_floor": 3},
+	"purify": {"name": "净化", "desc": "解除本层灾祸；结算加成按未赎回的层数保留", "cost_kind": "", "cost": 0, "min_floor": 3},
 	"ward_boon": {"name": "护盾祝福", "desc": "残响 -5，获得 1 层护盾", "cost_kind": "diamonds", "cost": 5, "min_floor": 3},
 	"heal": {"name": "修复", "desc": "积分 -60，回复 2 点生命", "cost_kind": "score", "cost": 60, "min_floor": 3},
 	"relic_suffix": {"name": "铭刻", "desc": "生命上限 -1，为主动遗物附 1 条词缀", "cost_kind": "max_hp", "cost": 1, "min_floor": 5},
@@ -335,6 +335,20 @@ const ECHO_TUNING := {"mirror_time": 2.5, "cycle": 3.0, "chase_mult": 1.5,
 ## 白名单（game_state._codex_id_valid）/ UI 分母（codex_bosses_total）/ 显示名都从这里派生
 const CODEX_BOSS_NAMES := {"prism_warden": "棱镜守望者", "pyrothalassian": "熔潮主宰",
 	"third_boss": "玄渊之主"}
+
+## Sprint 36 T-C：Boss 专武「一部分性能比 Boss 还强」的死值口径（实稿 §7.2）。
+## 🔴 具名常数，⛔ 把 1.25 散写在 if 里；文案侧的倍数一律由 Weapons.surpass_note() 从此派生（C2）。
+const WEAPON_SURPASS_RATIO := 1.25
+
+## Boss 侧基准＝各自那一发招牌脉冲（三只均继承 PrismWarden 的 `var dmg := 2`，
+## boss2/boss3 只覆写 interval）。⚠️ **抄表值**，正典在盘上那三行：
+## boss.gd:24 dmg=2 / boss.gd:16 skill_interval=3.0 / boss2.gd:31=2.2 / boss3.gd:35=2.6
+## —— 改 Boss 脉冲而没同步这张表，反超计数会静默失真；validate._check_boss_weapons 只守得住专武侧。
+const BOSS_PULSE_BASE := {
+	"prism_warden": {"dmg": 2.0, "interval": 3.0},
+	"pyrothalassian": {"dmg": 2.0, "interval": 2.2},
+	"third_boss": {"dmg": 2.0, "interval": 2.6},
+}
 
 ## Sprint 14 C：图鉴发现度 → 开局被动（data 驱动阈值与数值，调优只改这里）。
 ## 载体硬约束（草案 §5.4）：只允许一次性起始状态——shield/diamonds/max_hp/suffix；
@@ -366,11 +380,11 @@ const OATH_CONDITIONS := {
 ## 不臆造设定，只覆盖已存在条目）。首发现播报用，重复登记天然不播；不入任何分母/白名单
 const FLAVOR := {
 	"bosses/prism_warden": "守望者。天道之眼，别站在光缝里，砸它的核。",
-	"bosses/pyrothalassian": "熔潮。修罗嗔火，弹匣留一半，给它变红的时候用。",
+	"bosses/pyrothalassian": "熔潮。修罗嗔火，脉冲比守望者密，器膛留一半。",
 	"bosses/third_boss": "玄渊之主。地狱旧客，比熔潮慢半拍，比守望者狠。",
 	"themes/vein": "往生脉。人间拾痕，多捡点，反射值钱。",
 	"themes/toxic": "毒巢。饿鬼食毒，云别硬踩，绕着走。",
-	"themes/pressure": "高压层。修罗斗诤，子弹会拐弯，贴墙打。",
+	"themes/pressure": "高压层。修罗斗诤，虫更快，拾到的残响也多。",
 	"themes/silent": "静默层。天道静虑，听不见脚步，多看小地图。",
 	"themes/magma": "岩浆层。地狱热狱，地板本身就是敌人。",
 	"themes/ice": "冰面。地狱寒狱，刹车提前半秒。",
@@ -382,7 +396,7 @@ const FLAVOR := {
 	# 显示条件仍为**恒显**（不读发现状态），内容随三卡派生而变；灰字层与发现集彼此独立、互不耦合。
 	"shrine/blood_relic": "血祭。以血换遗物，地窖里最不缺的就是血。",
 	"shrine/ore_upgrade": "残响淬炼。以残响换一次选择，旧例里管这叫喂石头。",
-	"shrine/purify": "净化。以代价换清净，这层的脏，散得掉。",
+	"shrine/purify": "净化。以代价换清净，这层的脏，散得掉。欠下的债，赎一层少一层。",
 	"shrine/ward_boon": "护盾祝福。以残响买一挡，挡一下，就散了。",
 	"shrine/heal": "修复。以积分换血，缝两针，血就回来了。",
 	"shrine/relic_suffix": "铭刻。以血换一刻，刻上去的，抠不下来。",
@@ -394,12 +408,12 @@ const FLAVOR := {
 	# 基调不变；enemies/relics/suffixes 首发现不播 toast（见 FLAVOR_BROADCAST_KINDS 白名单）
 	"enemies/rusher": "红虫。异常·虫，成群来，先打跑得最快的。",
 	"enemies/brute": "黑甲虫。异常·虫，大一号的虫，没什么花样，比输出。",
-	"enemies/spitter": "紫酸虫。异常·虫，酸弹被墙挡，贴柱换血。",
+	"enemies/spitter": "紫酸虫。异常·虫，酸液喷不到你身后，贴柱换血。",
 	"enemies/bomber": "自爆虫。异常·虫，贴身就炸，保持距离。",
 	"enemies/elite": "巨岩虫。异常·虫，精英壳，硬啃不划算。",
 	"enemies/boss": "巨岩虫之王。异常·虫，满场小弟，本体掉宝最肥。",
 	"enemies/splitter": "分裂虫。异常·虫，打死会裂，留个大的最后杀。",
-	"enemies/mini": "幼体。异常·虫，一踩就碎，别浪费子弹。",
+	"enemies/mini": "幼体。异常·虫，一踩就碎，别费一发光霰。",
 	"enemies/goblin": "地精。异常·妖，直冲，站桩点掉。",
 	"enemies/skeleton": "骷髅兵。异常·灵，散骨一只，聚群难缠。",
 	"enemies/zombie": "腐尸。异常·灵，慢，但会把你围住。",
@@ -423,22 +437,22 @@ const FLAVOR := {
 	"enemies/echo": "回响。异常·灵，走你走过的路，换个走法它就瞎。",
 	"relics/fang": "吸血獠牙。杀敌偶尔回血，稳赚。",
 	"relics/thorn": "荆棘装甲。让撞你的虫子付出代价。",
-	"relics/bounce": "弹射弹壳。墙角也是武器。",
+	"relics/bounce": "折影。墙角也是武器。",
 	"relics/frost": "冰霜涂层。命中带减速，命中率高就常驻。",
-	"relics/bigbullet": "巨型弹头。又粗又痛。",
-	"relics/mag": "加长弹匣。少换一次弹，多活一秒。",
+	"relics/bigbullet": "巨魄。又大又疼。",
+	"relics/mag": "深膛。少整备一回，多活一秒。",
 	"relics/eye": "猎手印记。暴击看天，装了看常。",
 	"relics/radar": "六感警报。无敌更长，走位更滑。",
-	"relics/drone": "双浮游炮。多一个帮手。",
+	"relics/drone": "双游灯。多一盏照着。",
 	"relics/heart": "黄金心脏。上限加一还回满，见到就拿。",
 	"relics/mr_resoshield": "谐振护盾。共鸣爆发送盾，盾在毒不侵。",
 	"relics/mr_kinetic": "动能转换器。挨打跑得快，疼也值。",
-	"suffixes/s_frostburst": "霜爆。环盾碎敌弹时放危害云，别白挡。",
-	"suffixes/s_echoheal": "回响（词缀）。环盾碎弹回一血，挡得值。",
+	"suffixes/s_frostburst": "霜爆。环盾磕碎来袭时放危害云，别白挡。",
+	"suffixes/s_echoheal": "回响（词缀）。环盾磕碎来袭回一血，挡得值。",
 	"suffixes/s_blinkstep": "踏影。冲刺起点放云，冲刺也是攻击。",
 	"suffixes/s_bulwark": "小壁垒。冲刺送一层盾，冲进人堆前先想。",
 	"suffixes/s_cinderveil": "燃帷。齐射放云，射得多烧得多。",
-	"suffixes/s_frostveil": "凝滞矢。齐射全场减速，先齐射再补枪。",
+	"suffixes/s_frostveil": "凝滞矢。齐射全场减速，先齐射再补一发。",
 	"suffixes/s_miasma": "瘴波。毒云每跳扩散，铺场用。",
 	"suffixes/s_leech": "蚀养。毒云每跳回血，站云里养伤。",
 	"bosses/boss": "巨岩虫之王，拿下。异常之主，掉宝最肥的一次。",

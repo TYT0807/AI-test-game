@@ -3,12 +3,12 @@
 importer="mp3"
 type="AudioStreamMP3"
 uid="uid://dt18bvn2sbqiv"
-path="res://.godot/imported/bgm_outlaw.mp3-4184ccdac64a7e6bef774d6671d5dcd0.mp3str"
+path="res://.godot/imported/bgm_outlaw.mp3-23623d9a2c5af70a222dacdd0120ed3f.mp3str"
 
 [deps]
 
 source_file="res://resources/audio/bgm_outlaw.mp3"
-dest_files=["res://.godot/imported/bgm_outlaw.mp3-4184ccdac64a7e6bef774d6671d5dcd0.mp3str"]
+dest_files=["res://.godot/imported/bgm_outlaw.mp3-23623d9a2c5af70a222dacdd0120ed3f.mp3str"]
 
 [params]
 

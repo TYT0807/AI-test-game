@@ -44,6 +44,16 @@ func setup(pos: Vector2, dir: Vector2, speed: float, dmg_v: float, friendly_v: b
 	_life = life_v if life_v > 0.0 else 1.4
 
 
+## S40-a／V-S1｜「这发敌弹是不是刃风扫得掉的漂浮死物」的**单一真源**（实稿 §2.1）。
+## 🔴 纯 getter：零副作用、⛔ 读私有 `_life`（上面那句 `life_v if life_v > 0.0 else 1.4` 的兜底
+##    没回填进 `life_v`，读它等于读一个未定义的口径）、⛔ 在生产侧与探针 oracle 之外另写内联条件
+##    （M-5 唯一豁免的就是本函数；散写＝S33「净化门槛那行复制 3 份」那类假绿）。
+## 七个行为位任一非零＝这发弹携带机制（穿甲/爆炸/弹墙/冰冻/追踪/连锁/裂变），不属于"死物"。
+func is_sweepable() -> bool:
+	return (not friendly and pierce == 0 and explosive == 0.0 and bounce == 0
+		and frost == 0.0 and not homing and arc == 0 and cluster == 0)
+
+
 func _ready() -> void:
 	if friendly:
 		collision_layer = 8

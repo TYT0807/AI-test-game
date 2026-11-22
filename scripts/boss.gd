@@ -325,6 +325,13 @@ func apply_slow(mult: float, dur: float) -> void:
 	_slow_t = dur
 
 
+## S40-c／实稿 §3.3 硬约束的镜像位：主题 Boss **免疫**眩晕。三只 Boss 的伤害出口是签名脉冲弹幕，
+## 若能被盾反无限打断＝S36/S38 的 Boss 设计整体作废。⇒ 本函数必须是空实现，⛔ 将来加 `_stun_t`
+## 之类状态（那会把免疫变成可计时控制）。boss2/boss3 `extends PrismWarden` 自动继承本空实现。
+func apply_stun(_dur: float) -> void:
+	return
+
+
 func _die() -> void:
 	if st == St.DYING:
 		return

@@ -107,7 +107,7 @@ const MONSTER_NAMES := [
 ]
 
 const GEN_NAMES := [
-	"wpn_rifle", "wpn_shotgun", "wpn_railgun", "wpn_launcher",
+	"wpn_zhushan", "wpn_liechi", "wpn_guanglei", "wpn_fushe",
 	"door_closed", "door_open", "stairs", "chest_closed", "chest_open", "pedestal",
 	"relic_fang", "relic_thorn", "relic_bounce", "relic_frost", "relic_bigbullet",
 	"relic_mag", "relic_eye", "relic_radar", "relic_drone", "relic_heart",
@@ -123,6 +123,14 @@ const GEN_NAMES := [
 	"icon_affix_death", "icon_affix_ranged", "icon_affix_shield", "icon_affix_mender",
 	# Sprint 7：局外解锁内容专用图标（PNG 已生成，未登记 = Assets.g() 返回 null → 静默白框）
 	"icon_pierce", "icon_crit", "wpn_swarm", "wpn_arc",
+	# Sprint 36 T-B6：Boss 专武 14 枚，16×16 RGBA8，由 _tools/spr36_icons.py 程序化绘制。
+	# 🔴 这一行照脚本打印的「登记行」粘贴，⛔ 手抄——手抄错一个字母就是 GUARD-2 的白框。
+	"wpn_bw_latch", "wpn_bw_seam", "wpn_bw_hammer", "wpn_bw_ring", "wpn_bw_quiet", "wpn_bw_tide",
+	"wpn_bw_fang", "wpn_bw_slack", "wpn_bw_rake", "wpn_bw_dial", "wpn_bw_ledger", "wpn_bw_beat",
+	"wpn_bw_silt", "wpn_bw_key",
+	# Sprint 38 T-M M4：非弹幕形态族 6 枚，16×16 RGBA8，由 _tools/spr38_icons.py 程序化绘制。
+	# 🔴 同样照脚本打印的「登记行」粘贴，⛔ 手抄（DEFS 的 icon 字段与这行必须逐字一致，validate GUARD-2 比对的就是这两处）。
+	"wpn_ml_cleaver", "wpn_ml_needle", "wpn_sp_thorn", "wpn_sh_bulwark", "wpn_th_kunai", "wpn_wd_whisper",
 	# Sprint 11：反应词缀拾取标记（F2/A）
 	"icon_suffix",
 	# Sprint 13 C：地窖图鉴按钮图标（生成与登记必须成对——见上「静默白框」注释）
@@ -336,10 +344,10 @@ const ACTION_DEFS := {
 	"move_left": {"name": "左移", "keys": [KEY_A, KEY_LEFT], "mouse": [], "kb": true, "mb": false},
 	"move_right": {"name": "右移", "keys": [KEY_D, KEY_RIGHT], "mouse": [], "kb": true, "mb": false},
 	"shoot": {"name": "射击", "keys": [], "mouse": [MOUSE_BUTTON_LEFT], "kb": true, "mb": true},
-	"bomb": {"name": "炸弹", "keys": [], "mouse": [MOUSE_BUTTON_RIGHT], "kb": true, "mb": true},
+	"bomb": {"name": "雷火", "keys": [], "mouse": [MOUSE_BUTTON_RIGHT], "kb": true, "mb": true},
 	"skill": {"name": "技能·过载", "keys": [KEY_SPACE], "mouse": [], "kb": true, "mb": true},
 	"swap": {"name": "切换武器", "keys": [KEY_Q], "mouse": [], "kb": true, "mb": true},
-	"reload": {"name": "换弹", "keys": [KEY_R], "mouse": [], "kb": true, "mb": true},
+	"reload": {"name": "整备", "keys": [KEY_R], "mouse": [], "kb": true, "mb": true},
 	"buy": {"name": "商店购买", "keys": [KEY_E], "mouse": [], "kb": true, "mb": true},
 	"card_1": {"name": "升级卡 1", "keys": [KEY_1], "mouse": [], "kb": true, "mb": true},
 	"card_2": {"name": "升级卡 2", "keys": [KEY_2], "mouse": [], "kb": true, "mb": true},
