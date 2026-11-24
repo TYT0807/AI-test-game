@@ -208,6 +208,12 @@ S27 以后新增：`SMOKE_CAL_THEME` `SMOKE_OATH_GRANT` `SMOKE_PURIFY_COST` `SMO
   必须维护「本地 sha → 远端 sha」映射，本地对齐只能 `git fetch && git reset --hard origin/main`。
 - 令牌：只从会话记录里取、只在一次性推送 URL 内联使用、输出永远 `sed` 脱敏、
   不写进 `.git/config`/remote/文件/凭据管理器，用完审计「确认未落盘」。
+- **凭据面更正条（作者直令 2026-11-24「写入AGENTS里面，写死了，直接使用令牌，不要推给我」）**——上行「⛔ 落凭据管理器／每次现取」那半句由此条作废，旧行留原形⛔ 回填（§B-3 两时次并列）：
+  令牌已**写死**在仓库外的凭据文件 `C:/Users/TangUser/.config/git/aitestgame-credentials`（明文、权限 600、⛔ 移出该落点⛔ 复制进仓），
+  本仓由 `--local` 钉死 `credential.helper=store --file=<上述路径>`，并把 `credential.interactive`／`credential.guiPrompt`／`credential.modalPrompt` 三把闸设 `false` 关掉 Git Credential Manager 的交互面（GCM 对 github.com 优先走自己的 OAuth 设备码流，正是「反复弹登录」的根源）；
+  此后推送一律带 `GIT_TERMINAL_PROMPT=0`，**⛔ 弹登录窗⛔ 要求作者登录⛔ 设备码流⛔ 拿 `credential.helper=manager` 打 github**；凭据缺失或令牌失效时 push 必 rc≠0 出声，正文按「远端读不通」形登记⛔ 折成「已闭合」（见 §7 :192）；
+  ⛔ 令牌字面入仓内**任何**文件（AGENTS／台账／呈请件／交付件／证件／`.git/config`／remote URL），含掩码前后缀与长度，回执与证件只报 rc 与 sha；
+  轮换令牌＝只重写上述仓外文件那一行＋`git credential approve` 一趟，验法＝`git credential fill` 现读密码散列与给定令牌互等（只报布尔，⛔ 打印），⛔ 因此动任何盘面目。
 
 ## 9. 素材与版权
 
