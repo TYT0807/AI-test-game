@@ -48,6 +48,8 @@ const META_WEAPON_POOL_BASELINE := [
 	"ml_cleaver", "ml_needler", "sp_thorn", "sh_bulwark", "th_kunai", "wd_whisper",
 	# 基础法器四件套（S40-B 去火药枪化：rifle→zhushan / shotgun→liechi / railgun→guanglei / launcher→fushe）＋弹道三连＋mw_*（T-A 之后 default:true）
 	"zhushan", "liechi", "guanglei", "fushe", "mw_swarm", "mw_arc", "mw_cluster",
+	# S41 R99a §M-2 主理人重登 +2（ml_frostbite⇄wd_cinnifuse・DEFS 成员资格≠获取途径，下行红字口径不变）
+	"ml_frostbite", "wd_cinnifuse",
 ]
 
 const ARENA_W := 44
@@ -3157,6 +3159,7 @@ func _random_weapon() -> String:
 ## ⚠️ 已知代价（实稿 §6.2）：shotgun/railgun/launcher 从此不出主题 Boss 房——按裁定接受，勿加补偿。
 ## 第四组常规守关怪（§6.3 裁定不加专武）名下无子集 ⇒ 原样退回旧路径，不动它们的掉落语义。
 func _boss_weapon_drop() -> String:
+	if Game.floor_num == 8: return "wd_cinnifuse"
 	var ids := Weapons.boss_weapon_ids(_codex_boss_at_floor(Game.floor_num))
 	if ids.is_empty():
 		return _random_weapon()

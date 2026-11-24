@@ -6,7 +6,7 @@ extends RefCounted
 static var rng_draws := 0
 
 ## 可掉落 / 可上架的武器池（不含起始武器 zhushan）
-const DROP_POOL := ["liechi", "guanglei", "fushe"]
+const DROP_POOL := ["liechi","guanglei","fushe","ml_frostbite"]  # 「[S41-R99-D] DROP_POOL 3→4：+ml_frostbite；wd_cinnifuse 不入池、不走 BOSS_WEAPON（R99a §E 改道：_boss_weapon_drop 的 floor==8 确定性早退，零 rng）。size 变⇒全层 stable_hash%size 重排＝设计接受（S33 事实 A 同源），基线以本车改后 DEFS 快照重建⛔ 拿旧池出卡快照当回归。」
 
 ## S38 T-M M2：非弹幕形态的必填字段清单——校验（validate M3）与分派（player N2）**共用这一份**，
 ## ⛔ 把字段名散写在 if 里（散写＝校验查 a 三个、分派读 b 两个，缺哪个都没人红）。
@@ -265,6 +265,26 @@ const DEFS := {
 		"life": 1.40, "explosive": 0.0,
 		"homing": true,
 		"tint": Color(0.66, 0.78, 1.00), "icon": "wpn_wd_whisper",
+	},
+	# 「[S41-R99-W] 近战增量两支：寒髓杵·霜枝（ml_frostbite・melee・knock=55・slow_on_hit={0.5,1.0}）⇄燃符匣（wd_cinnifuse・wand・phase_boom={3,42.0,0.6}・dmg=2.60/interval=0.78 按 §C-8 校准式闭合）。icon 别名复用（wpn_ml_cleaver⇄wpn_fushe，先例 mw_cluster）。⛔ 六弹道字段入 melee 项（[S38-A3]）⛔ knock/slow_on_hit/phase_boom 进 MELEE_FIELDS required。」
+	"ml_frostbite": {
+		"kind": "melee",
+		"name": "寒髓杵·霜枝", "desc": "一杵带霜，打慢一个",
+		"dmg": 1.95, "interval": 0.585, "reach": 44, "arc_deg": 96,
+		"mag": 4, "reload": 0.95,
+		"knock": 55.0, "slow_on_hit": {"mult": 0.5, "dur": 1.0},
+		"tint": Color(0.66, 0.84, 0.94), "icon": "wpn_ml_cleaver",
+	},
+	"wd_cinnifuse": {
+		"kind": "wand",
+		"name": "燃符匣", "desc": "第三发炸开",
+		"dmg": 2.60, "interval": 0.78, "count": 1, "spread": 2.0,
+		"speed": 190.0, "mag": 5, "reload": 1.15, "pierce": 0,
+		"life": 1.10, "explosive": 0.0,
+		"homing": false,
+		"phase_boom": {"n": 3, "radius": 42.0, "mult": 0.6},
+		# [S41-R99-E] 定向掉落走 floor==8 守关 Boss 房早退（R99a §E-4），不入 BOSS_WEAPON⇒validate 反超闸与图鉴 surpass_note 均只遍历归属表，本把天然不在其作用域内；dmg/interval 维持 §C-8 校准式闭合（0.78×3.33≈2.60）。
+		"tint": Color(0.95, 0.55, 0.30), "icon": "wpn_fushe",
 	},
 }
 
