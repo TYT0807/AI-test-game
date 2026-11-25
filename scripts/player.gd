@@ -147,6 +147,7 @@ var _dbg_t := 0.0
 # 🔴 E6：新增计时一律走 `Game.FIXED_DT`，⛔ raw `delta`（实测喂进 `_update_anim()` 的 delta=0.03333
 #    ＝1/60×`Engine.time_scale`2.0，≠FIXED_DT 0.016667；拿它倒计时＝窗口随 tick 疏密漂移，也踩线）。
 var _stance_t := 0.0
+var _sweep_flow_t := 0.0
 # SMOKE_STANCE=1 的只读采样器（V-G2 验收＋反证刀靶）：只数帧，⛔ 写任何游戏状态、⛔ 抽随机数
 # 🔴 `_sp_hold_t` 是探针**自己按规格重算**的窗口（同样 FIXED_DT 递减），⛔ 复用被测试的 `_stance_t`：
 #    否则反证刀 P3（把代码侧窗口打成 0）会连判据一起打掉 ⇒ 恒绿。判据与实现必须两套账。
@@ -352,6 +353,7 @@ func _physics_process(delta: float) -> void:
 		_parry_hit_cd -= 1
 	elif _parry_hit_cd < 0:
 		_parry_hit_cd += 1
+	_sweep_flow_t = maxf(0.0, _sweep_flow_t - Game.FIXED_DT)
 	# 回响镜像源：轨迹缓冲采样（0.1s × 30 = 3 秒；echo AI 读取）
 	_trail_t += Game.FIXED_DT
 	if _trail_t >= 0.1:
@@ -759,7 +761,7 @@ func _swing(heavy := false) -> void:
 	_stance_open()          # B2a：与弹幕侧**同一个**架式窗口入口（实施单：⛔ 近战另起一套窗口）
 	_probe_stance_shot()
 	var reach := float(d["reach"])
-	var half := deg_to_rad(float(d["arc_deg"])) * 0.5
+	var half := deg_to_rad(float(d["arc_deg"])) * 0.5 * (1.5 if _sweep_flow_t > 0.0 else 1.0)
 	# N5／V-D1：乘区与弹幕侧同式；`bullet_dmg_mult` 名字带 bullet 但它是玩家侧全局伤害倍率，
 	# 近战吃它是有意的（否则一半升级卡对近战失效）；⛔ `bullet_scale`——那是贴图尺寸。
 	var dmg := float(d["dmg"]) * damage_mult * bullet_dmg_mult * (2.0 if crit else 1.0)
@@ -817,6 +819,9 @@ func _swing(heavy := false) -> void:
 		swept += 1
 	bullets_swept += swept
 	last_sweep_count = swept
+	# 扫击余韵＝swept>=SWEEP_FLOW_MIN(2) 置 _sweep_flow_t=0.6（FIXED_DT 递减），窗口内 arc_deg 实耗 ×1.5；⛔ 扫击击退⛔ 扫击吃 Game.rng。
+	if swept >= 2:
+		_sweep_flow_t = 0.6
 	# 🔴 引爆排在清标志**之后**：`explode()` 内部同样遍历 enemies 调 take_damage，
 	#    标志还置位时炸＝AoE 顺路无视护甲（V-B7 之外的同帧泄漏，一样红）。
 	for p in booms:
@@ -824,6 +829,8 @@ func _swing(heavy := false) -> void:
 	if not skill_active() and mag() <= 0:
 		_start_reload()
 
+	# 架式窗口＝只读观测 [S41-W1] 行（kind/stance_t/anim_len/interval/parry，%.3f），⛔ 改 _stance_open 判定。
+	print("[S41-W1] kind=%s stance_t=%.3f anim_len=%.3f interval=%.3f parry=%d" % [kind, _stance_t, _attack_anim_len(), _interval(), _parry_frames_left])
 
 ## ── S40-c 盾与盾反：三层窗口（实稿 §3.1 结构 ＋ 裁定件 §1-C1/C2/C5）────────────────
 ## RAISE ⟺ kind=="shieldbash" ∧ `_stance_t > 0.0`。🔴 与 B2a 的架式守卫**共用** `_stance_t`，
