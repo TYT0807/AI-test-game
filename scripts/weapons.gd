@@ -269,7 +269,7 @@ const DEFS := {
 	# 「[S41-R99-W] 近战增量两支：寒髓杵·霜枝（ml_frostbite・melee・knock=55・slow_on_hit={0.5,1.0}）⇄燃符匣（wd_cinnifuse・wand・phase_boom={3,42.0,0.6}・dmg=2.60/interval=0.78 按 §C-8 校准式闭合）。icon 别名复用（wpn_ml_cleaver⇄wpn_fushe，先例 mw_cluster）。⛔ 六弹道字段入 melee 项（[S38-A3]）⛔ knock/slow_on_hit/phase_boom 进 MELEE_FIELDS required。」
 	"ml_frostbite": {
 		"kind": "melee",
-		"name": "寒髓杵·霜枝", "desc": "一杵带霜，打慢一个",
+		"name": "寒髓杵·霜枝", "desc": "一杵沉重，撞得骨飞",
 		"dmg": 1.95, "interval": 0.585, "reach": 44, "arc_deg": 96,
 		"mag": 4, "reload": 0.95,
 		"knock": 55.0, "slow_on_hit": {"mult": 0.5, "dur": 1.0},
@@ -277,7 +277,7 @@ const DEFS := {
 	},
 	"wd_cinnifuse": {
 		"kind": "wand",
-		"name": "燃符匣", "desc": "第三发炸开",
+		"name": "燃符匣", "desc": "八层朱砂，一发顶三发",
 		"dmg": 2.60, "interval": 0.78, "count": 1, "spread": 2.0,
 		"speed": 190.0, "mag": 5, "reload": 1.15, "pierce": 0,
 		"life": 1.10, "explosive": 0.0,
