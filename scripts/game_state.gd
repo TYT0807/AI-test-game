@@ -50,6 +50,12 @@ var xp := 0
 var xp_need := 5
 var combo := 0
 var combo_t := 0.0
+## [S41-R99-H] hitstop_t：近战命中全局微冻，FIXED_DT 计数（普 4 步／重 6 步／Boss 减半 3⇄5），递减在 _process(:107) 既有簇内。⛔ Engine.time_scale（E6＋smoke 2.0 叠乘污染）⛔ create_timer 承载玩法窗⛔ 任何 rng。零新抽守恒：SMOKE_SEED 钉后 rng.seed/state 逐字不动。
+const HITSTOP_STEPS := 4
+const HITSTOP_STEPS_HEAVY := 6
+const HITSTOP_STEPS_BOSS := 3
+const HITSTOP_STEPS_BOSS_HEAVY := 5
+var hitstop_t := 0.0
 ## 本局已播报的里程碑 id（每条只播一次）
 var milestones := {}
 ## 玩家设置：master/bgm/sfx 音量、shake 震动强度、compact_hud 精简 HUD、
@@ -113,6 +119,9 @@ func _process(_delta: float) -> void:
 		if combo_t <= 0.0:
 			combo = 0
 			combo_changed.emit(combo)
+	# 递减与 combo_t 同簇（FIXED_DT 计数・⛔ raw delta・⛔ 挪出 _process）：排在 not playing 早退之后＝结算帧不 drain，残留 ≤6 拍
+	if hitstop_t > 0.0:
+		hitstop_t = maxf(0.0, hitstop_t - FIXED_DT)
 
 
 ## 由 (run_seed + 独立前缀) 派生表现层种子；与 _floor_rng() 同型但前缀不同，避免撞种子

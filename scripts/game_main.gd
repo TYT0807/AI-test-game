@@ -301,6 +301,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_tick_hitstop()  # [S41-R99-H] 消费点（⛔ 包住 _process 本体：本行之后全部照跑＝渲染/HUD/探针计时）
 	_trauma = maxf(0.0, _trauma - 2.4 * delta)
 	if camera:
 		var s := _trauma * _trauma * 12.0
@@ -358,6 +359,21 @@ func _process(delta: float) -> void:
 						dungeon.current, player.global_position.round()])
 				_smoke_stall_pos = player.global_position
 				_smoke_stall_t = 0.0
+
+
+## [S41-R99-H] 消费点：hitstop_t > 0 时冻结 entities 子树的行为步，相机/HUD/房间 tick 照走＝「渲染 UI 不停」。
+## 载体＝entities.process_mode 自身（子树开关即状态位：零新增字段・零 rng・⛔ Engine.time_scale・⛔ create_timer・⛔ 计时器承载玩法窗）。
+## 只翻一个子树的 mode，⛔ 包住 _process 本体；本文件不持实体步进器（_tick_room 不推 entities），故这是不碰 bullet.gd 的唯一单文件形态。
+## 🔴 _smoke 全程旁路：盾反/清扫探针的③帧计数面要真等物理帧（:5766 纪律），子树冻结会饿死 done 计数＝实施单 s329 明令不得影响的路径。
+func _tick_hitstop() -> void:
+	if _smoke or entities == null:
+		return
+	if Game.hitstop_t > 0.0:
+		if entities.process_mode != Node.PROCESS_MODE_DISABLED:
+			entities.process_mode = Node.PROCESS_MODE_DISABLED
+	else:
+		if entities.process_mode != Node.PROCESS_MODE_INHERIT:
+			entities.process_mode = Node.PROCESS_MODE_INHERIT
 
 
 # ---------------- 地牢流转 ----------------
@@ -5136,7 +5152,7 @@ func _smoke_melee_probe() -> void:
 	#    条款要的是"扫到了也不破坏"这层语义，所以另加一条源码级证据：`_swing` 函数体内
 	#    不许出现破坏通路的目标组名／入口（crates / secret_walls / bomb_hit）。注释行剔除，
 	#    ⛔ 让"禁止事项写在注释里"被当成命中。
-	var swing_body := _ml_src_segment("res://scripts/player.gd", "func _swing()")
+	var swing_body := _ml_src_segment("res://scripts/player.gd", "func _swing(")
 	_ml_assert(swing_body.length() > 200 and not swing_body.contains("crates") \
 			and not swing_body.contains("secret_walls") and not swing_body.contains("bomb_hit"),
 		"B9 自证·_swing 源码段存在（%d 行）且无破坏通路入口" % swing_body.count("\n"),
@@ -5366,7 +5382,7 @@ func _smoke_melee_probe() -> void:
 	_ml_assert(str(dS) == str(dN) and bool(dS["orbit"]) and float(dS["shield_t"]) > 0.0,
 		"D5 四次近战挥击与同帧数空转的主动遗物计时衰减逐字相同（附环盾轨道在场＋计时确在推进两道防空转）",
 		str(dS), str(dN))
-	var d5seg := _ml_src_segment("res://scripts/player.gd", "func _swing()")
+	var d5seg := _ml_src_segment("res://scripts/player.gd", "func _swing(")
 	_ml_assert(not d5seg.contains("relic") and not d5seg.contains("give_player_relic"),
 		"D5 _swing() 源码段内不引用任何遗物入口（盾击不会顺手消耗环盾）", d5seg.count("relic"), 0)
 	_ml_assert(d5seg.contains("take_damage") and d5seg.length() > 200,
@@ -5592,7 +5608,7 @@ func _smoke_sweep_probe() -> void:
 	_sw_assert(Player.melee_rng_draws - s4_dr0 == Player.melee_swings - s4_sw0,
 		"S4 四档全程 draws 增量==swings 增量（V-S3 判据②：抽取只跟挥击走）",
 		"%d/%d" % [Player.melee_rng_draws - s4_dr0, Player.melee_swings - s4_sw0], "相等")
-	var sw_src := _ml_src_segment("res://scripts/player.gd", "func _swing()")
+	var sw_src := _ml_src_segment("res://scripts/player.gd", "func _swing(")
 	var sw_cut := sw_src.substr(maxi(sw_src.find("is_sweepable"), 0))
 	_sw_assert(sw_src.find("is_sweepable") >= 0 and not sw_cut.contains("Game.rng"),
 		"S4 清扫段源码零 Game.rng（V-S3 反证面第③条：⛔ 命中相关的抽取）", sw_cut.count("Game.rng"), 0)

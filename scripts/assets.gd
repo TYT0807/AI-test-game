@@ -28,6 +28,10 @@ const SFX := {
 	# Sprint 13 E：圣所 / 灾祸事件别名（同口径复用既有 wav）
 	"shrine": preload("res://resources/audio/sfx_secret.wav"),
 	"calamity": preload("res://resources/audio/sfx_boom.wav"),
+	# [S41-R99-S] melee_sw/melee_hit/melee_heavy＝别名复用既有 wav（音频导演先例），播放只经 Game.sfx(name, fx_rng 抖程, vol)；空挥路径零音效（mag()<=0 分支不播）；引用先于注册＝静默失败隐患族，V-C3 闸＝三键在 Assets.SFX.keys() 现读集合内。
+	"melee_sw": preload("res://resources/audio/sfx_shoot.wav"),
+	"melee_hit": preload("res://resources/audio/sfx_hit.wav"),
+	"melee_heavy": preload("res://resources/audio/sfx_hit.wav"),
 }
 
 const MUSIC := [
@@ -358,6 +362,8 @@ const ACTION_DEFS := {
 	"relic_dash": {"name": "遗物·冲刺", "keys": [KEY_Z], "mouse": [], "kb": true, "mb": false},
 	"relic_volley": {"name": "遗物·齐射", "keys": [KEY_X], "mouse": [], "kb": true, "mb": true},
 	"relic_toxic": {"name": "遗物·毒云", "keys": [KEY_C], "mouse": [], "kb": true, "mb": false},
+	# R99a §H：ACTION_DEFS 第 19 枚＝重击（默认 Shift・mb=false 防与 bomb 右键抢输入・设置页与持久化按单源自适应）。
+	"melee_heavy": {"name": "重击", "keys": [KEY_SHIFT], "mouse": [], "kb": true, "mb": false},
 }
 
 

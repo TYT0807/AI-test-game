@@ -454,7 +454,7 @@ func _boss_volley(dir: Vector2) -> void:
 	Game.sfx("shoot", 0.5, -8.0)
 
 
-func take_damage(amount: float, from_dir: Vector2, crit: bool) -> void:
+func take_damage(amount: float, from_dir: Vector2, crit: bool, knock_in := 60.0) -> void:
 	if dead:
 		return
 	if shield_hits > 0:
@@ -469,8 +469,8 @@ func take_damage(amount: float, from_dir: Vector2, crit: bool) -> void:
 	# 正面甲：子弹逆着朝向打来
 	var armor := float(_cfg.get("armor", 0.0))
 	# S38 T-N N9：spear 的「刺击无视护甲」走 `Game.main._melee_pierce_armor` 这个**本帧旁路标志**
-	# （实稿 §3.4 唯一指定形态）。🔴 签名一字未改——这条是全仓敌人受伤唯一入口；这里只读一个
-	# 由近战结算在同一同步调用栈内置位、返回前清零的布尔。子弹路径永远读到 false。
+	# （实稿 §3.4 唯一指定形态）。🔴 R99 §C-3 起本入口多了一枚缺省 60.0 的 knock_in 默认参——这条仍是全仓
+	# 敌人受伤唯一入口（老调用方三参形逐字不变）；这里只读一个由近战结算在同一同步调用栈内置位、返回前清零的布尔。子弹路径永远读到 false。
 	var pierce_armor: bool = Game.main != null and Game.main._melee_pierce_armor
 	if armor > 0.0 and from_dir.dot(_face) < -0.35 and not pierce_armor:
 		final *= (1.0 - armor)
@@ -479,13 +479,27 @@ func take_damage(amount: float, from_dir: Vector2, crit: bool) -> void:
 	hp -= final
 	Game.damage_number(global_position, final, crit)
 	Game.sfx("hit", Game.fx_rng.randf_range(1.1, 1.3), -10.0)
-	_knock += from_dir * 60.0
+	_knock += from_dir * knock_in
 	if variant == "boss":
+		# R99 §C-1／补裁 §J4·I-2：Boss 命中同样触发但减半（普 4 步→3 步・重 6 步→5 步）——正形判据＝variant == "boss"
+		# （裁件原句所指旧判据盘面零枚・已由补裁 §I-2 作废）。slug 收不到 heavy 形参，故从刚置位的 Game.hitstop_t 反推步数再换档：
+		var steps := int(round(Game.hitstop_t / Game.FIXED_DT))
+		if steps == Game.HITSTOP_STEPS:
+			Game.hitstop_t = Game.HITSTOP_STEPS_BOSS * Game.FIXED_DT
+		elif steps == Game.HITSTOP_STEPS_HEAVY:
+			Game.hitstop_t = Game.HITSTOP_STEPS_BOSS_HEAVY * Game.FIXED_DT
 		Game.boss_hp_changed.emit(maxf(hp, 0.0), max_hp)
+	# [S41-R99-V] 受击方向＝from_dir 入参既有面复用：sprite.scale 沿打击轴压扁 0.8、0.08s 与闪白同回调还原；⛔ 动 collision_shape；boss 只闪不扁。击退＝_knock += from_dir * knock_in（缺省 60.0＝老装备轨迹逐字不变）；⛔ apply_blast_push（player.gd:770 dash 196—210px 纠缠禁令）。
+	if variant != "boss":
+		if absf(from_dir.x) >= absf(from_dir.y):
+			sprite.scale = Vector2(0.8, 1.0)
+		else:
+			sprite.scale = Vector2(1.0, 0.8)
 	sprite.modulate = Color(1.9, 1.25, 1.25)
 	get_tree().create_timer(0.08).timeout.connect(func() -> void:
 		if is_instance_valid(sprite) and not dead:
-			sprite.modulate = Color.WHITE)
+			sprite.modulate = Color.WHITE
+			sprite.scale = Vector2.ONE)
 	if hp <= 0.0:
 		_die()
 

@@ -104,6 +104,7 @@ var _reload_t := 0.0
 var _reload_gen := 0
 var _swap_t := 0.0
 var _fire_cd := 0.0
+var _heavy_hold_t := 0.0	# R99a §H-2：长按 melee_heavy 的累计秒数——按下期间累加、松手当帧结算后立即归零（⛔ 另起第二把秒表）。
 # S38 T-N N10（HP-1 要求它先于任何近战逻辑落地）：近战族计数器，口径 V-E1a 的唯一观测面。
 # 🔴 `static`：探针与 `_smoke_rngcount_probe()` 读同一对账本；本批不每局归零，
 #    所以**所有判据都记前后差值**——拿绝对值断言会在第二局假红（那是判据的错，不是实现的错）。
@@ -679,6 +680,12 @@ func _update_aim_and_fire(delta: float) -> void:
 		_fire_cd = _interval()
 
 
+func _swing_sfx(heavy: bool) -> void:
+	# R99 §C-4／补裁 §J7：抖程只走 fx_rng（呈现层旁路・E1 合法面）・⛔ 动主序列取数（那会漂 E1 指纹）・⛔ 把抖程塞进 Game.sfx 默认参
+	var pitch := Game.fx_rng.randf_range(0.92, 1.1) * (0.8 if not heavy else 0.7)
+	Game.sfx("melee_sw" if not heavy else "melee_heavy", pitch, -8.0 if not heavy else 0.0)
+
+
 func _interval() -> float:
 	var base: float = cur_def()["interval"]
 	if skill_active():
@@ -727,11 +734,17 @@ func _fire() -> void:
 ## 🔴 HP-2 的物理事实（⛔ 用「近战不该抽随机数」的直觉去改这一段）：每一次**有效**执行恒消费
 ##    `Game.rng.randf()` **恰 1 次**，且不随命中数、敌人在否、autopilot、灾祸、主题、暴击结果变化。
 ##    0 次＝清场后整条随机流往前挪一格（指纹与冻结串全漂）；2 次＝往后挪两格。V-E1d 两把刀各咬一头。
-func _swing() -> void:
+## R99a §H-3：`heavy` 形参只换顿帧档・⛔ 不改抽取＝每次有效挥击仍恒恰 1 次 `Game.rng` 消费（HP-2 原账一字不动）。
+func _swing(heavy := false) -> void:
 	if not skill_active() and mag() <= 0:
 		# N7／V-C1／V-E5：配额见底＝架式过载。这次输入**不算一次动作**，所以零抽取、零伤害、零计数。
 		_start_reload()
 		return
+	# R99 §C-4／补裁 §J7：音效只在此落裸调用・抖程与键名全在 helper（⛔ 让闸取到的段里出现呈现层种子）
+	if heavy:
+		_swing_sfx(true)
+	else:
+		_swing_sfx(false)
 	var d := cur_def()
 	var kind := String(d["kind"])
 	# 🔴 这一发排在任何命中分支之前：抽进循环＝「命中几个抽几个」，抽进 `if hits > 0` 之后
@@ -754,6 +767,9 @@ func _swing() -> void:
 	# N9／V-B7：spear 无视正面甲（实稿 §3.4）。🔴 只在本结算内有效，置位与清零夹住整个扫描，
 	#    ⛔ 改 slug.take_damage 签名、⛔ 写进任何持久字段（跨帧残留＝下一发子弹也不减甲，红）。
 	Game.main._melee_pierce_armor = kind == "spear"
+	# R99 §C-1／补裁 §H-3：顿帧由**调用侧**置——只在本挥第一次命中那一瞬写・后续命中不再改写，
+	# 好让 slug 的 variant == "boss" 分支在同一同步栈里减半（4⇄6 → 3⇄5）之后没人再把它按回去。
+	var hits := 0
 	# N3：⛔ Area2D、⛔ 新碰撞层/掩码（HP-5）——方向级变更会与 bullet.gd 的 layer 8/mask 1|4|64 打架。
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if not is_instance_valid(e) or e.dead or not e.has_method("take_damage"):
@@ -765,7 +781,10 @@ func _swing() -> void:
 		if absf(angle_difference(to_e.angle(), _aim.angle())) > half:
 			continue
 		# HP-4／V-B6：from_dir 必须是玩家指向敌人的单位向量——正面减伤只认它，⛔ Vector2.ZERO。
-		e.take_damage(dmg, to_e.normalized(), crit)
+		if hits == 0:
+			Game.hitstop_t = (Game.HITSTOP_STEPS_HEAVY if heavy else Game.HITSTOP_STEPS) * Game.FIXED_DT
+		hits += 1
+		e.take_damage(dmg, to_e.normalized(), crit, float(d.get("knock", 60.0)))
 		if kind == "shieldbash" and is_instance_valid(e) and not e.dead:
 			e.apply_slow(0.6, 1.2)		# N8／V-B5；⛔ 击退（apply_blast_push 与 dash 位移区间纠缠）
 		if crit and crit_boom:
@@ -809,7 +828,7 @@ func _swing() -> void:
 ## ── S40-c 盾与盾反：三层窗口（实稿 §3.1 结构 ＋ 裁定件 §1-C1/C2/C5）────────────────
 ## RAISE ⟺ kind=="shieldbash" ∧ `_stance_t > 0.0`。🔴 与 B2a 的架式守卫**共用** `_stance_t`，
 ## ⛔ 另起第二套窗口计时（§3.1：再起一个并行秒表必然出现「一个还开着、一个已关」的双账）。
-## ⛔ 新增 action：`ACTION_DEFS` 真值 18 条一字不动——举盾＝「正拿着盾且刚挥过」，没有第四个键。
+## 举盾语义不变；ACTION_DEFS 现值 19 条＝R99a §H 授权新增 melee_heavy（重击＝长按阈值出手，与举盾无关），⛔ 再借它加第五键未经另裁。
 func _shield_raise() -> bool:
 	return String(cur_def().get("kind", "")) == "shieldbash" and _stance_t > 0.0
 
@@ -2423,6 +2442,17 @@ func _tick_timers(delta: float) -> void:
 	_swap_t = maxf(0.0, _swap_t - delta)
 	skill_cd = maxf(0.0, skill_cd - delta)
 	skill_t = maxf(0.0, skill_t - delta)
+	# R99a §H-2：重击＝按下期间累计、松手当帧结算（本簇＝玩家侧唯一新增计时簇・⛔ 另起第二把秒表）。
+	# 非近战持握时新键不产生任何效果；无输入态（冒烟⇄自动）下 is_action_pressed 恒假⇒既有节奏逐字不变。
+	var on_melee := WeaponsClass.is_melee_kind(String(cur_def().get("kind", "")))
+	if on_melee and Input.is_action_pressed("melee_heavy"):
+		_heavy_hold_t += delta
+	elif _heavy_hold_t > 0.0:
+		var charged := _heavy_hold_t >= 0.30
+		_heavy_hold_t = 0.0
+		if charged and _fire_cd <= 0.0 and _reload_t <= 0.0 and _swap_t <= 0.0:
+			_swing(true)
+			_fire_cd = _interval()
 	if _invuln_t > 0.0:
 		sprite.visible = fmod(_invuln_t, 0.2) > 0.1
 	else:
